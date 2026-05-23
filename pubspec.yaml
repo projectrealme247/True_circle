@@ -1,0 +1,35 @@
+name: true_circle
+description: CircleKey — Where trust meets home.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # Backend & auth
+  supabase_flutter: ^2.12.4
+  # Device security (Face ID, fingerprint, device PIN)
+  local_auth: ^3.0.1
+  # GPS / location for circle proximity features
+  geolocator: ^14.0.2
+  geocoding: ^4.0.0
+  file_picker: ^11.0.2
+  ai_barcode_scanner: ^7.1.0
+  go_router: ^17.1.0
+  google_fonts: ^6.2.1
+  shared_preferences: ^2.5.4
+  web: ^1.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
