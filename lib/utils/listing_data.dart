@@ -80,6 +80,15 @@ abstract final class ListingData {
     return raw.contains('/') ? raw : '$raw/day';
   }
 
+  /// Parses numeric amount from price strings like `22000/month` or `₹25,000/month`.
+  static int? listingPriceAmount(Map<String, dynamic> item) {
+    final raw = text(item['price']);
+    if (raw.isEmpty) return null;
+    final digits = raw.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.isEmpty) return null;
+    return int.tryParse(digits);
+  }
+
   static String location(Map<String, dynamic> item) {
     final loc = text(item['location']);
     if (loc.isNotEmpty) return loc;

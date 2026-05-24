@@ -66,12 +66,41 @@ abstract final class MarketplaceListingPipeline {
         ? ListingSearchIntent.normalizeQuery(searchQuery)
         : filters.toPipelineQuery();
 
-    return run(
+    final result = run(
       allListings: allListings,
       towerPropertyType: towerPropertyType,
       searchQuery: normalized,
       userSession: userSession,
       searchIntent: filters.toSearchIntent(mergeQuery: normalized),
+    );
+
+    if (filters.budgetMin == null && filters.budgetMax == null) {
+      return result;
+    }
+
+    final budgetFiltered = [
+      for (final item in result.afterFilters)
+        if (filters.matchesListing(item)) item,
+    ];
+
+    final ranked = ListingMatchEngine.rank(
+      budgetFiltered,
+      userSession,
+      searchIntent: result.requestedIntent.hasStructuredFilters
+          ? result.requestedIntent
+          : null,
+      appliedSearchIntent: result.appliedIntent,
+      filtersWereRelaxed: result.filtersWereRelaxed,
+    );
+
+    return MarketplaceListingPipelineResult(
+      requestedIntent: result.requestedIntent,
+      appliedIntent: result.appliedIntent,
+      afterTower: result.afterTower,
+      afterFilters: budgetFiltered,
+      ranked: ranked,
+      relaxedConstraints: result.relaxedConstraints,
+      usedClosestMatchFallback: result.usedClosestMatchFallback,
     );
   }
 

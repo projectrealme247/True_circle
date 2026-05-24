@@ -19,6 +19,7 @@ import '../widgets/listing_occupant_badges.dart';
 import '../widgets/home_tower_tabs.dart';
 import '../widgets/listing_property_type_badge.dart';
 import '../widgets/circlekey_logo.dart';
+import '../widgets/filter_chip_bar.dart';
 import '../theme/app_scroll_behavior.dart';
 import '../theme/app_typography.dart';
 import '../theme/home_marketplace_theme.dart';
@@ -202,6 +203,25 @@ class _HomeScreenState extends State<HomeScreen> {
       _pipelineResult = _runDefaultPipeline();
     });
     _removeSearchDropdownOverlay();
+  }
+
+  void _clearAllFilters() {
+    _searchController.clear();
+    _clearSearch();
+  }
+
+  void _onChipFiltersChanged(ListingSearchFilters filters) {
+    if (filters.isEmpty && _searchController.text.trim().isEmpty) {
+      _clearSearch();
+      return;
+    }
+    final searchText = _searchController.text.trim();
+    _runSearchWithFilters(
+      filters,
+      pipelineQuery: searchText.isNotEmpty
+          ? searchText
+          : filters.toPipelineQuery(),
+    );
   }
 
   @override
@@ -699,6 +719,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
               _buildSearchBarAnchor(),
+              const SizedBox(height: 16),
+              MarketplaceFilterBar(
+                towerPropertyType: _selectedPropertyType,
+                activeFilters: _activeFilters,
+                onFiltersChanged: _onChipFiltersChanged,
+                onClearAll: _clearAllFilters,
+              ),
             ],
           ),
         ),

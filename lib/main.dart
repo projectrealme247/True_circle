@@ -8,17 +8,24 @@ import 'theme/app_scroll_behavior.dart';
 import 'theme/app_typography.dart';
 import 'theme/home_marketplace_theme.dart';
 
-const _kSupabaseUrl = 'https://wyygechmyrevaidmmyyo.supabase.co';
-const _kSupabaseAnonKey =
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5eWdlY2hteXJldmFpZG1teXlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzMyMjksImV4cCI6MjA5NDUwOTIyOX0.uPocM3WTeR2EDJzJJzWta9ahImsJ3C4FqRK-5PSYKA8';
+const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
 
+  if (_supabaseUrl.isEmpty || _supabaseAnonKey.isEmpty) {
+    throw StateError(
+      'Missing Supabase config. Run with:\n'
+      '  flutter run --dart-define=SUPABASE_URL=<url> '
+      '--dart-define=SUPABASE_ANON_KEY=<key>',
+    );
+  }
+
   await Supabase.initialize(
-    url: _kSupabaseUrl,
-    anonKey: _kSupabaseAnonKey,
+    url: _supabaseUrl,
+    anonKey: _supabaseAnonKey,
   );
 
   runApp(const CircleKeyApp());

@@ -110,6 +110,16 @@ class SearchFilterOutcome {
       relaxedConstraints.isNotEmpty || usedClosestMatchFallback;
 }
 
+const _filterUnset = Object();
+
+/// One active filter shown in the applied-pills row.
+class AppliedFilterPill {
+  const AppliedFilterPill({required this.id, required this.label});
+
+  final String id;
+  final String label;
+}
+
 /// Explicit marketplace search filters (passed directly into search, not via delayed state).
 class ListingSearchFilters {
   const ListingSearchFilters({
@@ -117,6 +127,8 @@ class ListingSearchFilters {
     this.city,
     this.occupantType,
     this.genderPreference,
+    this.budgetMin,
+    this.budgetMax,
     this.keywords = const [],
   });
 
@@ -124,6 +136,8 @@ class ListingSearchFilters {
   final String? city;
   final String? occupantType;
   final String? genderPreference;
+  final int? budgetMin;
+  final int? budgetMax;
 
   /// Free-text tokens (e.g. `2bhk`, `furnished`) from the search box.
   final List<String> keywords;
@@ -133,22 +147,125 @@ class ListingSearchFilters {
       city == null &&
       occupantType == null &&
       genderPreference == null &&
+      budgetMin == null &&
+      budgetMax == null &&
       keywords.isEmpty;
 
   ListingSearchFilters copyWith({
-    String? foodPreference,
-    String? city,
-    String? occupantType,
-    String? genderPreference,
+    Object? foodPreference = _filterUnset,
+    Object? city = _filterUnset,
+    Object? occupantType = _filterUnset,
+    Object? genderPreference = _filterUnset,
+    Object? budgetMin = _filterUnset,
+    Object? budgetMax = _filterUnset,
     List<String>? keywords,
   }) {
     return ListingSearchFilters(
-      foodPreference: foodPreference ?? this.foodPreference,
-      city: city ?? this.city,
-      occupantType: occupantType ?? this.occupantType,
-      genderPreference: genderPreference ?? this.genderPreference,
+      foodPreference: identical(foodPreference, _filterUnset)
+          ? this.foodPreference
+          : foodPreference as String?,
+      city: identical(city, _filterUnset) ? this.city : city as String?,
+      occupantType: identical(occupantType, _filterUnset)
+          ? this.occupantType
+          : occupantType as String?,
+      genderPreference: identical(genderPreference, _filterUnset)
+          ? this.genderPreference
+          : genderPreference as String?,
+      budgetMin:
+          identical(budgetMin, _filterUnset) ? this.budgetMin : budgetMin as int?,
+      budgetMax:
+          identical(budgetMax, _filterUnset) ? this.budgetMax : budgetMax as int?,
       keywords: keywords ?? this.keywords,
     );
+  }
+
+  /// Human-readable active filters for the chip bar pills row.
+  List<AppliedFilterPill> appliedPills() {
+    final pills = <AppliedFilterPill>[];
+    if (city != null) {
+      pills.add(AppliedFilterPill(
+        id: 'city',
+        label: ListingSearchIntent.cityDisplayName(city!),
+      ));
+    }
+    if (foodPreference != null) {
+      pills.add(AppliedFilterPill(
+        id: 'food',
+        label: foodPreference == 'veg' ? 'Veg' : 'Non-veg',
+      ));
+    }
+    if (occupantType != null) {
+      pills.add(AppliedFilterPill(id: 'occupant', label: occupantType!));
+    }
+    if (genderPreference != null) {
+      pills.add(AppliedFilterPill(
+        id: 'gender',
+        label: genderPreference == 'girls' ? 'Girls only' : 'Boys only',
+      ));
+    }
+    if (budgetMin != null || budgetMax != null) {
+      pills.add(AppliedFilterPill(
+        id: 'budget',
+        label: _budgetLabel(),
+      ));
+    }
+    for (final keyword in keywords) {
+      final bhk = RegExp(r'^(\d)bhk$').firstMatch(keyword);
+      if (bhk != null) {
+        pills.add(AppliedFilterPill(
+          id: 'bhk:$keyword',
+          label: '${bhk.group(1)} BHK',
+        ));
+        continue;
+      }
+      final locality = ListingSearchIntent.localityDisplayName(keyword);
+      if (locality != null) {
+        pills.add(AppliedFilterPill(id: 'kw:$keyword', label: locality));
+        continue;
+      }
+      pills.add(AppliedFilterPill(
+        id: 'kw:$keyword',
+        label: _titleCaseKeyword(keyword),
+      ));
+    }
+    return pills;
+  }
+
+  ListingSearchFilters withoutPill(String pillId) {
+    if (pillId == 'city') return copyWith(city: null);
+    if (pillId == 'food') return copyWith(foodPreference: null);
+    if (pillId == 'occupant') return copyWith(occupantType: null);
+    if (pillId == 'gender') return copyWith(genderPreference: null);
+    if (pillId == 'budget') {
+      return copyWith(budgetMin: null, budgetMax: null);
+    }
+    if (pillId.startsWith('bhk:') || pillId.startsWith('kw:')) {
+      final token = pillId.contains(':') ? pillId.split(':').last : pillId;
+      return copyWith(
+        keywords: keywords.where((k) => k != token).toList(),
+      );
+    }
+    return this;
+  }
+
+  String _budgetLabel() {
+    if (budgetMin != null && budgetMax != null) {
+      return '₹${_formatInr(budgetMin!)} – ₹${_formatInr(budgetMax!)}';
+    }
+    if (budgetMax != null) return 'Under ₹${_formatInr(budgetMax!)}';
+    if (budgetMin != null) return 'Above ₹${_formatInr(budgetMin!)}';
+    return 'Budget';
+  }
+
+  static String _formatInr(int value) {
+    if (value >= 100000) return '${(value / 100000).toStringAsFixed(1)}L';
+    if (value >= 1000) return '${(value / 1000).round()}k';
+    return value.toString();
+  }
+
+  static String _titleCaseKeyword(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
   }
 
   factory ListingSearchFilters.fromIntent(SearchIntent intent) {
@@ -235,6 +352,12 @@ class ListingSearchFilters {
           genderPreference!,
         )) {
       return false;
+    }
+    if (budgetMin != null || budgetMax != null) {
+      final amount = ListingData.listingPriceAmount(listing);
+      if (amount == null) return false;
+      if (budgetMin != null && amount < budgetMin!) return false;
+      if (budgetMax != null && amount > budgetMax!) return false;
     }
     if (keywords.isNotEmpty &&
         !ListingSearchIntent.matchesKeywords(listing, keywords)) {
