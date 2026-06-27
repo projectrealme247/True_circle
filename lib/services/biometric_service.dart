@@ -2,14 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
-/// Wraps [LocalAuthentication] for CircleKey device identity checks.
+/// Wraps [LocalAuthentication] for TrueCircle device identity checks.
 class BiometricService {
   BiometricService({LocalAuthentication? localAuth})
       : _localAuth = localAuth ?? LocalAuthentication();
 
   final LocalAuthentication _localAuth;
 
-  static const _authReason = 'Please authenticate to access CircleKey';
+  static const _authReason = 'Please authenticate to access TrueCircle';
 
   /// Returns whether this device can use biometric security (Face ID, fingerprint, etc.).
   Future<bool> checkBiometricsSupported() async {

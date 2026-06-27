@@ -3,7 +3,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../config/market/market_config.dart';
 import '../services/trust_service.dart';
+import 'dublin_light_trust_screen.dart';
 
 /// Placeholder parser mimicking UIDAI secure QR signature decryption.
 Map<String, String> processAadhaarData(String rawData) {
@@ -244,7 +246,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Your CircleKey account is now KYC verified.',
+                        'Your TrueCircle account is now KYC verified.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 13,
@@ -265,6 +267,11 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (MarketConfig.current.trustVerificationKind ==
+        TrustVerificationKind.lightTrust) {
+      return const DublinLightTrustScreen();
+    }
+
     const maxContentWidth = kIsWeb ? 720.0 : double.infinity;
 
     return Scaffold(
@@ -488,7 +495,7 @@ class _HeroHeader extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'CircleKey KYC',
+                  'TrueCircle KYC',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
@@ -779,7 +786,7 @@ abstract final class _VerifyPalette {
   static const deepSea = Color(0xFF0E1628);
   static const slate = Color(0xFF152238);
   static const ring = Color(0xFF3BE8C5);
-  static const glow = Color(0xFF5B8CFF);
+  static const glow = Color(0xFFFF5A5F);
   static const mist = Color(0xFFB8C4D9);
   static const success = Color(0xFF4ADE80);
 }

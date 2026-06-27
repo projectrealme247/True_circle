@@ -4,6 +4,11 @@ import 'listing_data.dart';
 import 'listing_search_intent.dart';
 import 'viewer_profile.dart';
 
+import '../services/commute_scoring_service.dart';
+import 'commute_profile.dart';
+import 'profile_data.dart';
+import 'student_track_preference.dart';
+
 enum MatchTower { rent, buy, share }
 
 /// Result of tower-specific match scoring for one listing.
@@ -18,6 +23,7 @@ class ListingMatchResult {
     required this.tower,
     this.trustStage = TrustStage.casual,
     this.inCircle = false,
+    this.preArrivalBadge = false,
   });
 
   final int score;
@@ -29,6 +35,7 @@ class ListingMatchResult {
   final MatchTower tower;
   final TrustStage trustStage;
   final bool inCircle;
+  final bool preArrivalBadge;
 
   static const noProfile = ListingMatchResult(
     score: 0,
@@ -47,6 +54,14 @@ class ScoredListing {
   final Map<String, dynamic> listing;
   final ListingMatchResult match;
 }
+class ListingRankOutcome {
+  const ListingRankOutcome({
+    required this.ranked,
+    this.isCommuteDivergent = false,
+  });
+  final List<ScoredListing> ranked;
+  final bool isCommuteDivergent;
+}
 
 /// Hard filters + tower scoring + trust multiplier + circle ranking.
 ///
@@ -56,9 +71,20 @@ abstract final class ListingMatchEngine {
   static const buyMaxScore = 175;
   static const shareMaxScore = 235;
 
-  // ── Public API ──────────────────────────────────────────────────
+  /// Minimum compatibility (0.0–1.0) required to surface the In Your Circle badge.
+  static const inCircleMinMatchFraction = 0.75;
 
-  static List<ScoredListing> rank(
+  static bool qualifiesForInCircle({
+    required bool networkConnected,
+    required double matchPercentage,
+  }) {
+    final matchScore = matchPercentage / 100.0;
+    return networkConnected && matchScore >= inCircleMinMatchFraction;
+  }
+
+  // ΓöÇΓöÇ Public API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+  static ListingRankOutcome rank(
     List<Map<String, dynamic>> listings,
     Map<String, dynamic>? viewerSession, {
     SearchIntent? searchIntent,
@@ -72,6 +98,7 @@ abstract final class ListingMatchEngine {
       final match = evaluate(
         listing,
         viewer,
+        viewerSession: viewerSession,
         searchIntent: searchIntent,
         appliedSearchIntent: appliedSearchIntent,
         filtersWereRelaxed: filtersWereRelaxed,
@@ -83,27 +110,26 @@ abstract final class ListingMatchEngine {
 
     if (scored.isEmpty && listings.isNotEmpty) {
       for (final listing in listings) {
-        scored.add(
-          ScoredListing(
-            listing: listing,
-            match: evaluate(
-              listing,
-              viewer,
-              searchIntent: searchIntent,
-              appliedSearchIntent: appliedSearchIntent,
-              filtersWereRelaxed: filtersWereRelaxed,
-              skipProfileHardFilters: true,
-            ),
-          ),
+        final match = evaluate(
+          listing,
+          viewer,
+          viewerSession: viewerSession,
+          searchIntent: searchIntent,
+          appliedSearchIntent: appliedSearchIntent,
+          filtersWereRelaxed: filtersWereRelaxed,
+          skipProfileHardFilters: true,
         );
+        if (!match.excluded) {
+          scored.add(ScoredListing(listing: listing, match: match));
+        }
       }
     }
 
     // Priority ranking:
-    // 1. Circle listings → highest quality first
-    // 2. High-match (>= 50%) → sorted by score descending
-    // 3. Medium-match (25-49%) → sorted by score descending
-    // 4. Low-match (< 25%) → pushed to end
+    // 1. Circle listings ΓåÆ highest quality first
+    // 2. High-match (>= 50%) ΓåÆ sorted by score descending
+    // 3. Medium-match (25-49%) ΓåÆ sorted by score descending
+    // 4. Low-match (< 25%) ΓåÆ pushed to end
     scored.sort((a, b) {
       final aCircle = a.match.inCircle ? 1 : 0;
       final bCircle = b.match.inCircle ? 1 : 0;
@@ -116,7 +142,18 @@ abstract final class ListingMatchEngine {
       return b.match.score.compareTo(a.match.score);
     });
 
-    return scored;
+    return ListingRankOutcome(
+      ranked: scored,
+      isCommuteDivergent: _isCommuteDivergent(viewerSession),
+    );
+  }
+
+  static bool _isCommuteDivergent(Map<String, dynamic>? viewerSession) {
+    if (viewerSession == null) return false;
+    final budget = ProfileData.maximumCommuteBudgetMinutes(viewerSession);
+    if (budget == null) return false;
+    final profiles = CommuteProfileRegistry.fromSession(viewerSession);
+    return CommuteProfileRegistry.hubsAreDivergent(profiles);
   }
 
   static int _qualityTier(ListingMatchResult m) {
@@ -132,10 +169,24 @@ abstract final class ListingMatchEngine {
     SearchIntent? appliedSearchIntent,
     bool filtersWereRelaxed = false,
     bool skipProfileHardFilters = false,
+    Map<String, dynamic>? viewerSession,
   }) {
     final tower = _towerFor(listing);
     final hasSearch = searchIntent != null && searchIntent.hasStructuredFilters;
     final skipHard = skipProfileHardFilters || hasSearch;
+
+    if (viewer != null && _studentTrackConflict(viewer, listing)) {
+      return ListingMatchResult(
+        score: 0,
+        maxScore: _maxFor(tower),
+        percentage: 0,
+        label: '⚠️ Less relevant',
+        reasons: const [],
+        excluded: true,
+        tower: tower,
+      );
+    }
+
 
     if (viewer != null &&
         !skipHard &&
@@ -165,7 +216,7 @@ abstract final class ListingMatchEngine {
 
     final weights = _ScoringWeights.fromSearchIntent(searchIntent);
     final compatibilityScore = switch (tower) {
-      MatchTower.rent => _scoreRent(flags, viewer, listing, searchFlags, weights),
+      MatchTower.rent => _scoreRent(flags, viewer, listing, searchFlags, weights, viewerSession),
       MatchTower.buy => _scoreBuy(flags, viewer, listing, searchFlags, weights),
       MatchTower.share => _scoreShare(flags, viewer, listing, searchFlags, weights),
     };
@@ -173,14 +224,20 @@ abstract final class ListingMatchEngine {
     // Trust multiplier: Final Score = TrustMultiplier x CompatibilityScore
     final hostTrust = TrustStage.fromLevel(ListingData.hostTrustStage(listing));
     final trustMult = hostTrust.multiplier;
-    final finalScore = (trustMult * compatibilityScore).round();
+    final afterTrust = (trustMult * compatibilityScore).round();
+    final finalScore =
+        (afterTrust * _preArrivalScoreMultiplier(viewer, listing)).round();
 
     final max = hasSearch && viewer == null
         ? _searchOnlyMax(tower)
         : _maxFor(tower);
     final pct = max > 0 ? ((finalScore / max) * 100).clamp(0, 100) : 0.0;
 
-    final inCircle = viewer?.isInCircle(listing) ?? false;
+    final networkInCircle = viewer?.isInCircle(listing) ?? false;
+    final inCircle = qualifiesForInCircle(
+      networkConnected: networkInCircle,
+      matchPercentage: pct.toDouble(),
+    );
 
     final reasons = _combinedReasons(
       flags,
@@ -204,7 +261,7 @@ abstract final class ListingMatchEngine {
     );
   }
 
-  // ── Debug logging ───────────────────────────────────────────────
+  // ΓöÇΓöÇ Debug logging ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   static int _searchOnlyMax(MatchTower tower) => switch (tower) {
         MatchTower.rent => 120,
@@ -218,7 +275,7 @@ abstract final class ListingMatchEngine {
   ) {
     debugPrint('--- Listing match ranking ---');
     if (viewer == null) {
-      debugPrint('No viewer profile — original order, no scoring.');
+      debugPrint('No viewer profile ΓÇö original order, no scoring.');
       debugPrint('--- end ranking ---');
       return;
     }
@@ -227,17 +284,17 @@ abstract final class ListingMatchEngine {
       final title = ListingData.title(s.listing);
       final m = s.match;
       debugPrint(
-        '#${i + 1} $title → ${m.score}/${m.maxScore} '
+        '#${i + 1} $title ΓåÆ ${m.score}/${m.maxScore} '
         '(${m.percentage.round()}%) ${m.label} '
         'trust: ${m.trustStage.label} '
         'circle: ${m.inCircle} '
-        'reasons: ${m.reasons.join(' • ')}',
+        'reasons: ${m.reasons.join(' ΓÇó ')}',
       );
     }
     debugPrint('--- end ranking ---');
   }
 
-  // ── Tower classification ────────────────────────────────────────
+  // ΓöÇΓöÇ Tower classification ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   static MatchTower _towerFor(Map<String, dynamic> listing) {
     return switch (ListingData.propertyType(listing)) {
@@ -254,13 +311,13 @@ abstract final class ListingMatchEngine {
       };
 
   static String _labelFor(double percentage) {
-    if (percentage >= 80) return '🔥 Perfect match';
-    if (percentage >= 60) return '✅ Strong match';
-    if (percentage >= 40) return '👍 Good match';
-    return '⚠️ Less relevant';
+    if (percentage >= 80) return '≡ƒöÑ Perfect match';
+    if (percentage >= 60) return 'Γ£à Strong match';
+    if (percentage >= 40) return '≡ƒæì Good match';
+    return 'ΓÜá∩╕Å Less relevant';
   }
 
-  // ── Hard filters ────────────────────────────────────────────────
+  // ΓöÇΓöÇ Hard filters ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   static bool _failsHardFilter(
     Map<String, dynamic> listing,
@@ -299,12 +356,67 @@ abstract final class ListingMatchEngine {
   }
 
   static bool _shareHardFilter(Map<String, dynamic> listing, ViewerProfile viewer) {
+    if (_lifestyleFlagConflict(viewer, listing)) return true;
     if (_genderMismatch(viewer.genderPreference, ListingData.bachelorPreference(listing))) {
       return true;
     }
     if (_lifestyleConflict(viewer, listing)) return true;
     if (_smokingDrinkingConflict(viewer, listing)) return true;
     return false;
+  }
+  static bool _studentTrackConflict(
+    ViewerProfile viewer,
+    Map<String, dynamic> listing,
+  ) {
+    if (!viewer.isPreArrivalSeeker) return false;
+    return ListingData.tenantTrackPreference(listing) ==
+        StudentTrackPreference.onCampusOnly;
+  }
+
+  static double _preArrivalScoreMultiplier(
+    ViewerProfile? viewer,
+    Map<String, dynamic> listing,
+  ) {
+    if (viewer == null || !viewer.isPreArrivalSeeker) return 1.0;
+    if (ListingData.tenantTrackPreference(listing) ==
+        StudentTrackPreference.allStudents) {
+      return 0.9;
+    }
+    return 1.0;
+  }
+
+  static int _commuteOverBudgetPenalty(
+    Map<String, dynamic>? viewerSession,
+    Map<String, dynamic> listing,
+  ) {
+    final property = ListingData.listingCoordinates(listing);
+    if (property == null) return 0;
+
+    final profiles = CommuteProfileRegistry.fromSession(viewerSession);
+    if (profiles.length >= 2) {
+      final payload = CommuteScoringService.calculateMultiCommuteMinutes(
+        propertyLoc: property,
+        profiles: profiles,
+        parkingAvailable: ListingData.parkingAvailable(listing),
+        dualCommutePriority: ListingData.dualCommutePriority(viewerSession),
+        budgetForProfile: (profile, index) =>
+            ListingData.commuteBudgetMinutesForProfile(profile, viewerSession),
+      );
+      final combined = payload.combinedCompatibilityScore;
+      if (combined != null) {
+        return (100.0 - combined).round().clamp(0, 100);
+      }
+    }
+
+    final budget = ProfileData.maximumCommuteBudgetMinutes(viewerSession);
+    if (budget == null) return 0;
+    final minutes =
+        ProfileData.commuteMinutesFromListing(viewerSession, property);
+    if (minutes == null) return 0;
+    return CommuteScoringService.overBudgetScorePenalty(
+      doorToDoorMinutes: minutes,
+      budgetMinutes: budget,
+    );
   }
 
   static bool _occupantMismatch(String viewerOccupant, String listingOccupant) {
@@ -347,6 +459,29 @@ abstract final class ListingMatchEngine {
     return false;
   }
 
+
+  static bool _lifestyleFlagConflict(
+    ViewerProfile viewer,
+    Map<String, dynamic> listing,
+  ) {
+    final flags = ListingData.lifestyleFlags(listing);
+    if (flags.contains('no_smoking') && viewer.smokingOk) return true;
+    if (flags.contains('no_pets') && viewer.householdHasPets) return true;
+    if (flags.contains('vegetarian_household')) {
+      final viewerFood = _normFood(viewer.foodPreference);
+      if (viewerFood == 'non-veg') return true;
+    }
+    return false;
+  }
+
+  static bool _quietHoursAligned(ViewerProfile? viewer, Map<String, dynamic> listing) {
+    if (viewer == null) return false;
+    final flags = ListingData.lifestyleFlags(listing);
+    if (!flags.contains('quiet_hours_preferred')) return false;
+    final schedule = viewer.scheduleType.toLowerCase();
+    if (schedule.isEmpty || schedule == 'flexible') return true;
+    return schedule.contains('day');
+  }
   static bool _smokingDrinkingConflict(ViewerProfile viewer, Map<String, dynamic> listing) {
     final viewerFood = _normFood(viewer.foodPreference);
     if (viewerFood == 'veg') {
@@ -356,7 +491,7 @@ abstract final class ListingMatchEngine {
     return false;
   }
 
-  // ── Scoring per tower (REFINED WEIGHTS, no company/profile-completeness) ──
+  // ΓöÇΓöÇ Scoring per tower (REFINED WEIGHTS, no company/profile-completeness) ΓöÇΓöÇ
 
   static int _scoreRent(
     _MatchFlags f,
@@ -364,6 +499,7 @@ abstract final class ListingMatchEngine {
     Map<String, dynamic> listing,
     _SearchMatchFlags search,
     _ScoringWeights w,
+    Map<String, dynamic>? viewerSession,
   ) {
     var score = 0;
     if (f.foodMatch || search.foodExact) score += w.food;
@@ -377,7 +513,8 @@ abstract final class ListingMatchEngine {
     if (f.bhkMatch) score += 15;
     if (f.furnishingMatch) score += 10;
     if (viewer != null && _mutualMatchRent(viewer, listing)) score += 15;
-    return score;
+    score -= _commuteOverBudgetPenalty(viewerSession, listing);
+    return score.clamp(0, rentMaxScore);
   }
 
   static int _scoreBuy(
@@ -418,10 +555,11 @@ abstract final class ListingMatchEngine {
     if (f.priceFit) score += 10;
     if (f.locationMatch || search.cityExact) score += w.city;
     if (_scheduleCompatible(viewer, listing)) score += 10;
+    if (_quietHoursAligned(viewer, listing)) score += 5;
     return score;
   }
 
-  // ── Mutual matching ─────────────────────────────────────────────
+  // ΓöÇΓöÇ Mutual matching ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   static bool _mutualMatchRent(ViewerProfile viewer, Map<String, dynamic> listing) {
     final prefOccupant = ListingData.preferredTenantOccupant(listing);
@@ -458,7 +596,7 @@ abstract final class ListingMatchEngine {
     return viewerSchedule == listingSchedule;
   }
 
-  // ── Reasons ─────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Reasons ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   static List<String> _combinedReasons(
     _MatchFlags f,
@@ -470,12 +608,12 @@ abstract final class ListingMatchEngine {
   }) {
     final all = <String>[];
 
-    if (inCircle) all.add('🤝 In your circle');
+    if (inCircle) all.add('≡ƒñ¥ In your circle');
 
     if (hostTrust == TrustStage.idVerified) {
-      all.add('🛡️ ID Verified');
+      all.add('≡ƒ¢í∩╕Å ID Verified');
     } else if (hostTrust == TrustStage.socialVerified) {
-      all.add('💼 Socially verified');
+      all.add('≡ƒÆ╝ Socially verified');
     }
 
     _appendExactSearchReasons(all, search);
@@ -483,53 +621,53 @@ abstract final class ListingMatchEngine {
     switch (tower) {
       case MatchTower.rent:
         if (!search.foodExact && f.foodMatch) {
-          all.add('✅ Same food preference');
+          all.add('Γ£à Same food preference');
         }
         if (!search.cityExact && f.locationMatch) {
-          all.add('✅ Same city');
+          all.add('Γ£à Same city');
         }
         if (!search.occupantExact && f.occupantMatch) {
-          all.add('✅ Matches your living preference');
+          all.add('Γ£à Matches your living preference');
         }
         if (!search.genderExact && f.genderMatch) {
-          all.add('✅ Gender preference aligned');
+          all.add('Γ£à Gender preference aligned');
         }
-        if (f.languageMatch) all.add('✅ Speaks your language');
-        if (f.nativityMatch) all.add('✅ Same native region');
-        if (f.bhkMatch) all.add('✅ BHK fits your need');
-        if (f.furnishingMatch) all.add('✅ Furnished');
-        if (f.studentMatch) all.add('✅ Student background fits');
-        if (f.priceFit) all.add('✅ Price in your range');
+        if (f.languageMatch) all.add('Γ£à Speaks your language');
+        if (f.nativityMatch) all.add('Γ£à Same native region');
+        if (f.bhkMatch) all.add('Γ£à BHK fits your need');
+        if (f.furnishingMatch) all.add('Γ£à Furnished');
+        if (f.studentMatch) all.add('Γ£à Student background fits');
+        if (f.priceFit) all.add('Γ£à Price in your range');
       case MatchTower.buy:
         if (!search.foodExact && f.foodMatch) {
-          all.add('✅ Same food preference');
+          all.add('Γ£à Same food preference');
         }
         if (!search.cityExact && f.locationMatch) {
-          all.add('✅ Same city/region');
+          all.add('Γ£à Same city/region');
         }
-        if (f.priceAlignment) all.add('✅ Price aligns with budget');
-        if (f.budgetCompatible) all.add('✅ Within your budget');
-        if (f.categoryMatch) all.add('✅ Property category fits');
-        if (f.possessionMatch) all.add('✅ Ready to move');
-        if (f.languageMatch) all.add('✅ Speaks your language');
-        if (f.nativityMatch) all.add('✅ Same native region');
+        if (f.priceAlignment) all.add('Γ£à Price aligns with budget');
+        if (f.budgetCompatible) all.add('Γ£à Within your budget');
+        if (f.categoryMatch) all.add('Γ£à Property category fits');
+        if (f.possessionMatch) all.add('Γ£à Ready to move');
+        if (f.languageMatch) all.add('Γ£à Speaks your language');
+        if (f.nativityMatch) all.add('Γ£à Same native region');
       case MatchTower.share:
         if (!search.foodExact && f.foodMatch) {
-          all.add('✅ Same food preference');
+          all.add('Γ£à Same food preference');
         }
         if (!search.cityExact && f.locationMatch) {
-          all.add('✅ Same city');
+          all.add('Γ£à Same city');
         }
         if (!search.genderExact && f.genderMatch) {
-          all.add('✅ Gender preference aligned');
+          all.add('Γ£à Gender preference aligned');
         }
         if (!search.occupantExact && f.roommateTypeMatch) {
-          all.add('✅ Roommate type fits');
+          all.add('Γ£à Roommate type fits');
         }
-        if (f.roomTypeMatch) all.add('✅ Room type available');
-        if (f.lifestyleCompatible) all.add('✅ Lifestyle compatible');
-        if (f.languageMatch) all.add('✅ Speaks your language');
-        if (f.nativityMatch) all.add('✅ Same native region');
+        if (f.roomTypeMatch) all.add('Γ£à Room type available');
+        if (f.lifestyleCompatible) all.add('Γ£à Lifestyle compatible');
+        if (f.languageMatch) all.add('Γ£à Speaks your language');
+        if (f.nativityMatch) all.add('Γ£à Same native region');
     }
     return all.take(maxReasons).toList();
   }
@@ -539,23 +677,23 @@ abstract final class ListingMatchEngine {
     _SearchMatchFlags search,
   ) {
     if (search.foodExact && search.foodLabel.isNotEmpty) {
-      all.add('🔍 Matches search: ${search.foodLabel}');
+      all.add('≡ƒöì Matches search: ${search.foodLabel}');
     }
     if (search.cityExact && search.cityLabel.isNotEmpty) {
-      all.add('🔍 Matches search: ${search.cityLabel}');
+      all.add('≡ƒöì Matches search: ${search.cityLabel}');
     }
     if (search.occupantExact && search.occupantLabel.isNotEmpty) {
-      all.add('🔍 Matches search: ${search.occupantLabel}');
+      all.add('≡ƒöì Matches search: ${search.occupantLabel}');
     }
     if (search.genderExact && search.genderLabel.isNotEmpty) {
-      all.add('🔍 Matches search: ${search.genderLabel}');
+      all.add('≡ƒöì Matches search: ${search.genderLabel}');
     }
     if (search.showRelated) {
-      all.add('🔍 Related to your search');
+      all.add('≡ƒöì Related to your search');
     }
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   static int? _parsePrice(String price) {
     final match = RegExp(r'[\d,]+').firstMatch(price);
@@ -573,7 +711,7 @@ abstract final class ListingMatchEngine {
   static String _norm(String value) => value.trim().toLowerCase();
 }
 
-// ── Match flags ───────────────────────────────────────────────────
+// ΓöÇΓöÇ Match flags ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class _MatchFlags {
   const _MatchFlags({
@@ -794,6 +932,7 @@ class _MatchFlags {
   ) {
     if (foodMatch) return true;
     if (ListingMatchEngine._lifestyleConflict(viewer, listing)) return false;
+    if (ListingMatchEngine._lifestyleFlagConflict(viewer, listing)) return false;
     final lifestyle = ListingData.lifestylePreferences(listing);
     if (lifestyle.isEmpty) return viewer.foodPreference.isEmpty;
     final viewerFood = ListingMatchEngine._normFood(viewer.foodPreference);
@@ -919,3 +1058,7 @@ class _ScoringWeights {
     );
   }
 }
+
+
+
+

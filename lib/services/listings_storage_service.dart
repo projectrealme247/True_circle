@@ -1,31 +1,39 @@
-import '../data/sample_listings_seed.dart';
+import '../config/market/market_config.dart';
+import '../data/market_listings_seed.dart';
 import '../utils/listing_data.dart';
+import '../utils/profile_data.dart';
 import 'listings_storage_platform.dart'
     if (dart.library.html) 'listings_storage_platform_web.dart' as platform;
 
 /// Persists marketplace listings as a JSON array (localStorage on web).
 abstract final class ListingsStorageService {
-  static const storageKey = 'circlekey_listings';
-  static const _seedVersionKey = 'circlekey_seed_version';
-  static const _currentSeedVersion = 3;
+  static String get storageKey =>
+      'circlekey_listings_${MarketConfig.current.id.name}';
+
+  static const _seedVersionKeyPrefix = 'circlekey_seed_version_';
+
+  static String get _seedVersionKey =>
+      '$_seedVersionKeyPrefix${MarketConfig.current.id.name}';
+
+  static int get _currentSeedVersion => MarketConfig.current.seedVersion;
 
   static Future<List<Map<String, dynamic>>> load() async {
-    var raw = await platform.loadListings();
+    var raw = await platform.loadListings(storageKey);
     final storedVersion = await platform.loadSeedVersion(_seedVersionKey);
     if (raw.isEmpty || storedVersion < _currentSeedVersion) {
-      raw = SampleListingsSeed.items;
+      raw = MarketListingsSeed.items;
       await platform.saveSeedVersion(_seedVersionKey, _currentSeedVersion);
     }
     final normalized = ListingData.normalizeList(raw);
     if (raw.isNotEmpty) {
-      await platform.saveListings(normalized);
+      await platform.saveListings(storageKey, normalized);
     }
     return normalized;
   }
 
   static Future<void> save(List<Map<String, dynamic>> listings) async {
     final normalized = ListingData.normalizeList(listings);
-    await platform.saveListings(normalized);
+    await platform.saveListings(storageKey, normalized);
   }
 
   /// Saves a listing and returns the stored object. Skips duplicate id/content.
@@ -49,8 +57,43 @@ abstract final class ListingsStorageService {
     }
 
     final next = List<Map<String, dynamic>>.from(listings)..add(payload);
-    await platform.saveListings(next);
+    await platform.saveListings(storageKey, next);
     return payload;
+  }
+
+  /// Listings created by the signed-in user (user id or host name match).
+  static Future<List<Map<String, dynamic>>> ownedByCurrentUser(
+    Map<String, dynamic>? session,
+  ) async {
+    if (session == null || session.isEmpty) return const [];
+
+    final userId = ProfileData.text(session['supabase_user_id']);
+    final fullName = ProfileData.text(session['full_name']).toLowerCase();
+    final listings = await load();
+
+    return [
+      for (final item in listings)
+        if (_isOwnedListing(item, userId: userId, fullName: fullName)) item,
+    ];
+  }
+
+  static bool _isOwnedListing(
+    Map<String, dynamic> item, {
+    required String userId,
+    required String fullName,
+  }) {
+    for (final key in ['owner_user_id', 'user_id']) {
+      final ownerId = ProfileData.text(item[key]);
+      if (userId.isNotEmpty && ownerId.isNotEmpty && ownerId == userId) {
+        return true;
+      }
+    }
+
+    final host = ListingData.hostName(item).trim().toLowerCase();
+    if (fullName.isNotEmpty && host.isNotEmpty && host == fullName) {
+      return true;
+    }
+    return false;
   }
 
   static Future<Map<String, dynamic>?> getById(String id) async {

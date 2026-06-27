@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
+
 /// shadcn/ui-inspired select trigger + popover menu (Flutter-native).
 class ShadcnSelect extends StatefulWidget {
   const ShadcnSelect({
@@ -84,10 +86,10 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
                 ),
                 backgroundColor: WidgetStateProperty.resolveWith((states) {
                   if (states.contains(WidgetState.hovered)) {
-                    return ShadcnSelectTheme.primary.withValues(alpha: 0.06);
+                    return const Color(0xFFFDF0ED);
                   }
                   if (selected) {
-                    return ShadcnSelectTheme.primary.withValues(alpha: 0.1);
+                    return const Color(0xFFF7F7F7);
                   }
                   return Colors.transparent;
                 }),
@@ -126,15 +128,16 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
                   onTap: () => _toggleMenu(controller),
                   borderRadius:
                       BorderRadius.circular(ShadcnSelectTheme.radiusXl),
-                  splashColor:
-                      ShadcnSelectTheme.primary.withValues(alpha: 0.08),
-                  highlightColor:
-                      ShadcnSelectTheme.primary.withValues(alpha: 0.04),
+                  splashColor: const Color(0x33E76F51),
+                  highlightColor: const Color(0x1AE76F51),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     curve: Curves.easeOutCubic,
                     height: ShadcnSelectTheme.controlHeight,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
                       color: ShadcnSelectTheme.surface,
                       borderRadius:
@@ -143,18 +146,7 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
                         color: borderColor,
                         width: _focused ? 1.5 : 1,
                       ),
-                      boxShadow: _focused
-                          ? [
-                              BoxShadow(
-                                color: ShadcnSelectTheme.primary
-                                    .withValues(alpha: 0.2),
-                                blurRadius: 0,
-                                spreadRadius: 3,
-                              ),
-                            ]
-                          : _hovering
-                              ? ShadcnSelectTheme.shadowSm
-                              : null,
+                      boxShadow: _hovering ? ShadcnSelectTheme.shadowSm : null,
                     ),
                     child: Row(
                       children: [
@@ -168,19 +160,14 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
                             ),
                           ),
                         ),
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Icon(
-                            controller.isOpen
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                            size: 20,
-                            color: _hovering || _focused
-                                ? ShadcnSelectTheme.primary
-                                    .withValues(alpha: 0.75)
-                                : ShadcnSelectTheme.gray400,
-                          ),
+                        Icon(
+                          controller.isOpen
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 22,
+                          color: _hovering || _focused
+                              ? ShadcnSelectTheme.primary.withValues(alpha: 0.75)
+                              : ShadcnSelectTheme.gray400,
                         ),
                       ],
                     ),
@@ -196,10 +183,10 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
 }
 
 abstract final class ShadcnSelectTheme {
-  static const primary = Color(0xFF0EA5E9);
+  static const primary = AppColors.accent;
   static const surface = Color(0xFFFFFFFF);
-  static const textPrimary = Color(0xFF1C1E21);
-  static const gray400 = Color(0xFF9CA3AF);
+  static const textPrimary = Color(0xFF111111);
+  static const gray400 = Color(0xFF94A3B8);
   static const gray500 = Color(0xFF6B7280);
   static const borderSoft = Color(0xFFE5E7EB);
   static const radiusXl = 12.0;

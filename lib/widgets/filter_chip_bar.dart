@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../config/market/market_config.dart';
 import '../theme/app_typography.dart';
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_search_intent.dart';
+import '../utils/target_search_areas.dart';
 
 /// Tower-specific filter chips + applied filter pills for the marketplace home.
 class MarketplaceFilterBar extends StatelessWidget {
@@ -19,20 +21,11 @@ class MarketplaceFilterBar extends StatelessWidget {
   final ValueChanged<ListingSearchFilters> onFiltersChanged;
   final VoidCallback onClearAll;
 
-  static const _cityOptions = [
-    ('hyderabad', 'Hyderabad'),
-    ('bangalore', 'Bangalore'),
-    ('chennai', 'Chennai'),
-    ('mumbai', 'Mumbai'),
-    ('delhi', 'Delhi'),
-  ];
+  static List<(String, String)> get _cityOptions =>
+      MarketConfig.current.areaOptions;
 
-  static const _bhkOptions = [
-    ('1bhk', '1 BHK'),
-    ('2bhk', '2 BHK'),
-    ('3bhk', '3 BHK'),
-    ('4bhk', '4 BHK'),
-  ];
+  static List<(String, String)> get _dwellingOptions =>
+      MarketConfig.current.dwellingFilterOptions;
 
   static const _foodOptions = [
     ('veg', 'Veg'),
@@ -51,26 +44,23 @@ class MarketplaceFilterBar extends StatelessWidget {
     ('boys', 'Boys only'),
   ];
 
-  static const _rentBudgetOptions = [
-    (null, 10000, 'Under ₹10k'),
-    (10000, 20000, '₹10k – ₹20k'),
-    (20000, 40000, '₹20k – ₹40k'),
-    (40000, null, 'Above ₹40k'),
-  ];
+  static List<(int?, int?, String)> get _rentBudgetOptions {
+    return MarketConfig.current.rentBudgetBands
+        .map((b) => (b.$1, b.$2, b.$3))
+        .toList();
+  }
 
-  static const _buyBudgetOptions = [
-    (null, 5000000, 'Under ₹50L'),
-    (5000000, 10000000, '₹50L – ₹1Cr'),
-    (10000000, 20000000, '₹1Cr – ₹2Cr'),
-    (20000000, null, 'Above ₹2Cr'),
-  ];
+  static List<(int?, int?, String)> get _buyBudgetOptions {
+    return MarketConfig.current.buyBudgetBands
+        .map((b) => (b.$1, b.$2, b.$3))
+        .toList();
+  }
 
-  static const _shareBudgetOptions = [
-    (null, 8000, 'Under ₹8k'),
-    (8000, 15000, '₹8k – ₹15k'),
-    (15000, 25000, '₹15k – ₹25k'),
-    (25000, null, 'Above ₹25k'),
-  ];
+  static List<(int?, int?, String)> get _shareBudgetOptions {
+    return MarketConfig.current.shareBudgetBands
+        .map((b) => (b.$1, b.$2, b.$3))
+        .toList();
+  }
 
   static const _propertyTypeKeywords = [
     ('apartment', 'Apartment'),
@@ -128,13 +118,15 @@ class MarketplaceFilterBar extends StatelessWidget {
     return switch (towerPropertyType) {
       'Buy' => [
         _FilterChipConfig.city(),
-        _FilterChipConfig.budget(),
+        if (MarketConfig.current.buyBudgetBands.isNotEmpty)
+          _FilterChipConfig.budget(),
         _FilterChipConfig.propertyType(),
-        _FilterChipConfig.bhk(),
+        _FilterChipConfig.bedroom(),
         _FilterChipConfig.possession(),
       ],
       'Share' => [
         _FilterChipConfig.city(),
+        _FilterChipConfig.layout(towerPropertyType),
         _FilterChipConfig.gender(),
         _FilterChipConfig.food(),
         _FilterChipConfig.smoking(),
@@ -142,7 +134,9 @@ class MarketplaceFilterBar extends StatelessWidget {
       ],
       _ => [
         _FilterChipConfig.city(),
-        _FilterChipConfig.bhk(),
+        _FilterChipConfig.layout(towerPropertyType),
+        if (MarketConfig.current.dwellingFilterOptions.isNotEmpty)
+          _FilterChipConfig.dwelling(),
         _FilterChipConfig.budget(),
         _FilterChipConfig.food(),
         _FilterChipConfig.occupant(),
@@ -167,7 +161,7 @@ class _FilterChipDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final options = chip.optionsFor(towerPropertyType);
-    final selectedId = chip.selectedId(activeFilters);
+    final selectedId = chip.selectedId(activeFilters, towerPropertyType);
 
     return MenuAnchor(
       alignmentOffset: const Offset(0, 6),
@@ -217,8 +211,8 @@ class _FilterChipDropdown extends StatelessWidget {
       builder: (context, controller, child) {
         return _FilterChipButton(
           label: chip.label,
-          valueLabel: chip.valueLabel(activeFilters),
-          isActive: chip.isActive(activeFilters),
+          valueLabel: chip.valueLabel(activeFilters, towerPropertyType),
+          isActive: chip.isActive(activeFilters, towerPropertyType),
           isOpen: controller.isOpen,
           onTap: () {
             if (controller.isOpen) {
@@ -263,8 +257,8 @@ class _AppliedFilterPillsRow extends StatelessWidget {
             label: Text(pill.label, style: AppTypography.detail()),
             deleteIcon: const Icon(Icons.close_rounded, size: 16),
             onDeleted: () => onRemove(pill.id),
-            backgroundColor: HomeMarketplaceTheme.primarySurface,
-            side: BorderSide(color: HomeMarketplaceTheme.primary.withValues(alpha: 0.25)),
+            backgroundColor: HomeMarketplaceTheme.surface,
+            side: BorderSide(color: HomeMarketplaceTheme.border),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
           ),
@@ -309,7 +303,7 @@ class _FilterChipButton extends StatelessWidget {
 
     return Material(
       color: isActive || isOpen
-          ? HomeMarketplaceTheme.primarySurface
+          ? HomeMarketplaceTheme.surface
           : HomeMarketplaceTheme.searchSurface,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
@@ -359,7 +353,8 @@ class _FilterChipButton extends StatelessWidget {
 
 enum _FilterChipKind {
   city,
-  bhk,
+  layout,
+  dwelling,
   budget,
   food,
   occupant,
@@ -383,10 +378,20 @@ class _FilterChipConfig {
   final String label;
 
   factory _FilterChipConfig.city() =>
-      const _FilterChipConfig(_FilterChipKind.city, 'City');
+      const _FilterChipConfig(_FilterChipKind.city, 'Area');
 
-  factory _FilterChipConfig.bhk() =>
-      const _FilterChipConfig(_FilterChipKind.bhk, 'BHK');
+  factory _FilterChipConfig.layout(String tower) => _FilterChipConfig(
+        _FilterChipKind.layout,
+        MarketConfig.current.layoutFilterLabelFor(tower),
+      );
+
+  factory _FilterChipConfig.dwelling() =>
+      const _FilterChipConfig(_FilterChipKind.dwelling, 'Home type');
+
+  factory _FilterChipConfig.bedroom() => _FilterChipConfig(
+        _FilterChipKind.layout,
+        MarketConfig.current.bedroomFilterLabel,
+      );
 
   factory _FilterChipConfig.budget() =>
       const _FilterChipConfig(_FilterChipKind.budget, 'Budget');
@@ -409,14 +414,19 @@ class _FilterChipConfig {
   factory _FilterChipConfig.smoking() =>
       const _FilterChipConfig(_FilterChipKind.smoking, 'Smoking');
 
-  bool isActive(ListingSearchFilters filters) => valueLabel(filters) != null;
+  bool isActive(ListingSearchFilters filters, String tower) =>
+      valueLabel(filters, tower) != null;
 
-  String? valueLabel(ListingSearchFilters filters) {
+  String? valueLabel(ListingSearchFilters filters, String tower) {
     return switch (kind) {
-      _FilterChipKind.city => filters.city != null
-          ? ListingSearchIntent.cityDisplayName(filters.city!)
+      _FilterChipKind.city => filters.effectiveAreaTokens.isNotEmpty
+          ? ListingSearchFilters.areaChipLabel(filters.effectiveAreaTokens)
           : null,
-      _FilterChipKind.bhk => _activeBhkLabel(filters.keywords),
+      _FilterChipKind.layout => _activeLayoutLabel(filters.keywords, tower),
+      _FilterChipKind.dwelling => _activeKeywordLabel(
+          filters.keywords,
+          MarketplaceFilterBar._dwellingOptions,
+        ),
       _FilterChipKind.budget => _budgetChipLabel(filters),
       _FilterChipKind.food => filters.foodPreference != null
           ? (filters.foodPreference == 'veg' ? 'Veg' : 'Non-veg')
@@ -434,10 +444,16 @@ class _FilterChipConfig {
     };
   }
 
-  String? selectedId(ListingSearchFilters filters) {
+  String? selectedId(ListingSearchFilters filters, String tower) {
     return switch (kind) {
-      _FilterChipKind.city => filters.city,
-      _FilterChipKind.bhk => _activeBhkKeyword(filters.keywords),
+      _FilterChipKind.city => filters.effectiveAreaTokens.isNotEmpty
+          ? filters.effectiveAreaTokens.first
+          : null,
+      _FilterChipKind.layout => _activeLayoutKeyword(filters.keywords, tower),
+      _FilterChipKind.dwelling => _activeKeywordId(
+          filters.keywords,
+          MarketplaceFilterBar._dwellingOptions,
+        ),
       _FilterChipKind.budget => _budgetSelectionId(filters),
       _FilterChipKind.food => filters.foodPreference,
       _FilterChipKind.occupant => filters.occupantType,
@@ -454,19 +470,24 @@ class _FilterChipConfig {
   List<_FilterOption> optionsFor(String tower) {
     return switch (kind) {
       _FilterChipKind.city => [
+          _FilterOption(
+            id: TargetSearchAreas.allDublinToken,
+            label: '✨ All of Dublin',
+          ),
           for (final entry in MarketplaceFilterBar._cityOptions)
             _FilterOption(id: entry.$1, label: entry.$2),
         ],
-      _FilterChipKind.bhk => [
-          for (final entry in MarketplaceFilterBar._bhkOptions)
-            _FilterOption(id: entry.$1, label: entry.$2),
-        ],
+      _FilterChipKind.layout => _layoutOptionsForTower(tower),
       _FilterChipKind.budget => [
           for (final entry in _budgetOptionsForTower(tower))
             _FilterOption(
               id: '${entry.$1 ?? ''}-${entry.$2 ?? ''}',
               label: entry.$3,
             ),
+        ],
+      _FilterChipKind.dwelling => [
+          for (final entry in MarketplaceFilterBar._dwellingOptions)
+            _FilterOption(id: entry.$1, label: entry.$2),
         ],
       _FilterChipKind.food => [
           for (final entry in MarketplaceFilterBar._foodOptions)
@@ -501,9 +522,23 @@ class _FilterChipConfig {
     String label,
   ) {
     return switch (kind) {
-      _FilterChipKind.city => filters.copyWith(city: id),
-      _FilterChipKind.bhk => filters.copyWith(
-          keywords: [..._keywordsWithoutBhk(filters.keywords), id],
+      _FilterChipKind.city => id == TargetSearchAreas.allDublinToken
+          ? filters.withAllDublinArea()
+          : filters.copyWith(
+              city: null,
+              targetSearchAreas: [id],
+            ),
+      _FilterChipKind.layout => filters.copyWith(
+          keywords: [..._keywordsWithoutLayout(filters.keywords), id],
+        ),
+      _FilterChipKind.dwelling => filters.copyWith(
+          keywords: [
+            ..._keywordsWithoutSet(
+              filters.keywords,
+              MarketplaceFilterBar._dwellingOptions.map((e) => e.$1),
+            ),
+            id,
+          ],
         ),
       _FilterChipKind.budget => _applyBudget(filters, id),
       _FilterChipKind.food => filters.copyWith(foodPreference: id),
@@ -541,8 +576,16 @@ class _FilterChipConfig {
 
   ListingSearchFilters clearFrom(ListingSearchFilters filters) {
     return switch (kind) {
-      _FilterChipKind.city => filters.copyWith(city: null),
-      _FilterChipKind.bhk => filters.copyWith(keywords: _keywordsWithoutBhk(filters.keywords)),
+      _FilterChipKind.city =>
+        filters.copyWith(city: null, targetSearchAreas: const []),
+      _FilterChipKind.layout =>
+        filters.copyWith(keywords: _keywordsWithoutLayout(filters.keywords)),
+      _FilterChipKind.dwelling => filters.copyWith(
+          keywords: _keywordsWithoutSet(
+            filters.keywords,
+            MarketplaceFilterBar._dwellingOptions.map((e) => e.$1),
+          ),
+        ),
       _FilterChipKind.budget => filters.copyWith(budgetMin: null, budgetMax: null),
       _FilterChipKind.food => filters.copyWith(foodPreference: null),
       _FilterChipKind.occupant => filters.copyWith(occupantType: null),
@@ -600,19 +643,68 @@ class _FilterChipConfig {
     return 'Budget';
   }
 
-  static String? _activeBhkKeyword(List<String> keywords) {
+  static List<_FilterOption> _layoutOptionsForTower(String tower) {
+    final layout = MarketConfig.current.layoutFilterOptionsFor(tower);
+    final entries = layout.isNotEmpty
+        ? layout
+        : MarketConfig.current.bedroomFilterOptions;
+    return [
+      for (final entry in entries)
+        _FilterOption(id: entry.$1, label: entry.$2),
+    ];
+  }
+
+  static Set<String> _layoutKeywordIds(String tower) {
+    final ids = MarketConfig.current.layoutFilterOptionsFor(tower)
+        .map((e) => e.$1)
+        .toSet();
+    if (ids.isEmpty) {
+      for (final entry in MarketConfig.current.bedroomFilterOptions) {
+        ids.add(entry.$1);
+      }
+    }
+    return ids;
+  }
+
+  static String? _activeLayoutKeyword(List<String> keywords, String tower) {
+    final layoutIds = _layoutKeywordIds(tower);
     for (final k in keywords) {
+      if (layoutIds.contains(k)) return k;
       if (RegExp(r'^\d+bhk$').hasMatch(k)) return k;
+      if (RegExp(r'^\d+bed\d+bath$').hasMatch(k)) return k;
     }
     return null;
   }
 
-  static String? _activeBhkLabel(List<String> keywords) {
-    final token = _activeBhkKeyword(keywords);
+  static String? _activeLayoutLabel(List<String> keywords, String tower) {
+    final token = _activeLayoutKeyword(keywords, tower);
     if (token == null) return null;
-    final match = RegExp(r'^(\d)bhk$').firstMatch(token);
-    if (match == null) return token;
-    return '${match.group(1)} BHK';
+    for (final entry in MarketConfig.current.layoutFilterOptionsFor(tower)) {
+      if (entry.$1 == token) return entry.$2;
+    }
+    for (final entry in MarketConfig.current.bedroomFilterOptions) {
+      if (entry.$1 == token) return entry.$2;
+    }
+    final bhk = RegExp(r'^(\d+)bhk$').firstMatch(token);
+    if (bhk != null) return '${bhk.group(1)} BHK';
+    return token;
+  }
+
+  static List<String> _keywordsWithoutLayout(List<String> keywords) {
+    return keywords
+        .where(
+          (k) =>
+              !RegExp(r'^\d+bhk$').hasMatch(k) &&
+              !RegExp(r'^\d+bed\d+bath$').hasMatch(k) &&
+              !const {
+                'ensuite',
+                'private_bath',
+                'bed_shared',
+                'student_room',
+                'double_ensuite',
+              }.contains(k),
+        )
+        .toList();
   }
 
   static String? _activeKeywordId(
@@ -637,9 +729,6 @@ class _FilterChipConfig {
     }
     return id;
   }
-
-  static List<String> _keywordsWithoutBhk(List<String> keywords) =>
-      keywords.where((k) => !RegExp(r'^\d+bhk$').hasMatch(k)).toList();
 
   static List<String> _keywordsWithoutSet(
     List<String> keywords,

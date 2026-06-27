@@ -1,4 +1,5 @@
-import 'profile_data.dart';
+﻿import 'profile_data.dart';
+import 'target_search_areas.dart';
 
 /// Trust verification stages for the progressive trust funnel.
 enum TrustStage {
@@ -20,6 +21,17 @@ enum TrustStage {
         3 => TrustStage.idVerified,
         _ => TrustStage.anonymous,
       };
+}
+
+/// Primary seeker persona for trust gates and contact flows.
+enum SeekerCohort {
+  student,
+  workingProfessional,
+  arrivingFamily;
+
+  bool get needsJitSocialGate =>
+      this == SeekerCohort.workingProfessional ||
+      this == SeekerCohort.arrivingFamily;
 }
 
 /// Normalized viewer profile used for tower-specific matching.
@@ -48,12 +60,15 @@ class ViewerProfile {
     this.aadhaarVerified = false,
     this.passkeyBound = false,
     this.smokingOk = false,
+    this.householdHasPets = false,
     this.drinkingOk = false,
     this.scheduleType = '',
     this.familyAdults = 0,
     this.familyChildren = 0,
     this.childrenAges = const [],
     this.groupSize = 1,
+    this.targetSearchAreas = const [],
+    this.isPreArrivalSeeker = false,
   });
 
   final String city;
@@ -80,12 +95,15 @@ class ViewerProfile {
   final bool aadhaarVerified;
   final bool passkeyBound;
   final bool smokingOk;
+  final bool householdHasPets;
   final bool drinkingOk;
   final String scheduleType;
   final int familyAdults;
   final int familyChildren;
   final List<String> childrenAges;
   final int groupSize;
+  final List<String> targetSearchAreas;
+  final bool isPreArrivalSeeker;
 
   static double trustMultiplierForStage(int stage) =>
       TrustStage.fromLevel(stage).multiplier;
@@ -153,13 +171,33 @@ class ViewerProfile {
       aadhaarVerified: raw['is_aadhaar_verified'] == true,
       passkeyBound: ProfileData.text(raw['passkey_public_key']).isNotEmpty,
       smokingOk: raw['smoking_ok'] == true,
+      householdHasPets: raw['household_has_pets'] == true || raw['has_pets'] == true,
       drinkingOk: raw['drinking_ok'] == true,
       scheduleType: ProfileData.text(raw['schedule_type']),
       familyAdults: (raw['family_adults'] is int) ? raw['family_adults'] as int : 0,
       familyChildren: (raw['family_children'] is int) ? raw['family_children'] as int : 0,
       childrenAges: _parseChildrenAges(raw),
       groupSize: (raw['group_size'] is int) ? raw['group_size'] as int : 1,
+      targetSearchAreas: TargetSearchAreas.hydrateFromSession(raw),
+      isPreArrivalSeeker: raw['pre_arrival_contact_ready'] == true &&
+          ProfileData.text(raw['verified_university_email']).isEmpty,
     );
+  }
+
+  static SeekerCohort seekerCohortFromSession(Map<String, dynamic>? session) {
+    if (session == null) return SeekerCohort.student;
+    final occupant = ProfileData.text(session['occupant_type']).toLowerCase();
+    if (occupant.contains('family') ||
+        (session['family_children'] is int &&
+            (session['family_children'] as int) > 0)) {
+      return SeekerCohort.arrivingFamily;
+    }
+    if (occupant.contains('professional') ||
+        occupant.contains('working') ||
+        ProfileData.text(session['company']).isNotEmpty) {
+      return SeekerCohort.workingProfessional;
+    }
+    return SeekerCohort.student;
   }
 
   static List<String> _parseChildrenAges(Map<String, dynamic> raw) {
@@ -288,3 +326,4 @@ class ViewerProfile {
     return ((filled / keys.length) * 100).round();
   }
 }
+

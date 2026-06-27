@@ -1,7 +1,13 @@
 import 'package:flutter/foundation.dart';
 
+import 'city_area_match.dart';
+import 'commute_profile.dart';
+import 'geo_math.dart';
 import 'listing_sample_images.dart';
 import 'profile_data.dart';
+import '../services/commute_scoring_service.dart';
+import 'student_track_preference.dart';
+import 'target_search_areas.dart';
 import 'viewer_profile.dart';
 
 /// Compatibility between viewer profile and a listing host.
@@ -131,6 +137,12 @@ abstract final class ListingData {
     return text(item['owner_mother_tongue']);
   }
 
+  static String hostNativePlace(Map<String, dynamic> item) {
+    final native = text(item['hostNativePlace']);
+    if (native.isNotEmpty) return native;
+    return text(item['host_native_place']);
+  }
+
   static String hostFoodPreference(Map<String, dynamic> item) {
     final food = text(item['hostFoodPreference']);
     if (food.isNotEmpty) return food;
@@ -148,59 +160,14 @@ abstract final class ListingData {
     return '';
   }
 
-  /// Canonical city keys → lowercase terms matched via location/hostCity [String.contains].
-  static const cityFilterAliases = <String, List<String>>{
-    'hyderabad': [
-      'hyderabad',
-      'hyd',
-      'secunderabad',
-      'hitech',
-      'hitec',
-      'gachibowli',
-    ],
-    'bangalore': [
-      'bangalore',
-      'bengaluru',
-      'blr',
-      'bang',
-      'koramangala',
-      'whitefield',
-    ],
-    'chennai': ['chennai', 'madras', 'chn', 'omr', 'velachery'],
-    'mumbai': ['mumbai', 'bombay', 'andheri', 'bandra', 'powai', 'navi mumbai'],
-    'delhi': ['delhi', 'ncr', 'dwarka', 'noida', 'gurgaon', 'gurugram'],
-  };
-
-  static Set<String> _cityFilterTerms(String filterCity) {
-    final needle = filterCity.trim().toLowerCase();
-    final terms = <String>{needle};
-    if (needle.isEmpty) return terms;
-
-    final direct = cityFilterAliases[needle];
-    if (direct != null) terms.addAll(direct);
-
-    for (final entry in cityFilterAliases.entries) {
-      if (entry.value.any((alias) => alias == needle)) {
-        terms.add(entry.key);
-        terms.addAll(entry.value);
-      }
-    }
-    return terms;
-  }
-
-  /// Flexible city match: case-insensitive substring on location / host city.
+  /// Boundary-safe city match on location + host city text.
   static bool matchesCityFilter(Map<String, dynamic> item, String filterCity) {
-    final terms = _cityFilterTerms(filterCity);
-    if (terms.every((t) => t.isEmpty)) return true;
+    final key = filterCity.trim().toLowerCase();
+    if (key.isEmpty) return true;
 
-    final loc = location(item).toLowerCase();
-    final host = hostCity(item).toLowerCase();
-
-    for (final term in terms) {
-      if (term.isEmpty) continue;
-      if (loc.contains(term) || host.contains(term)) return true;
-    }
-    return false;
+    final blob =
+        '${location(item)} ${hostCity(item)}'.toLowerCase();
+    return CityAreaMatch.blobMatchesFilter(blob, key);
   }
 
   /// Flexible food match: case-insensitive equality on stored preference + tokens.
@@ -296,8 +263,14 @@ abstract final class ListingData {
       type(item),
       bhk(item),
       bhk(item).replaceAll(' ', ''),
-      furnishing(item),
+      bedrooms(item),
+      bedrooms(item).replaceAll(' ', ''),
+      bathrooms(item),
+      bathrooms(item).replaceAll(' ', ''),
+      layoutSearchToken(item),
+      shareRoomKind(item),
       propertyCategory(item),
+      furnishing(item),
       possessionStatus(item),
       roomType(item),
       hostName(item),
@@ -468,12 +441,878 @@ abstract final class ListingData {
   static const possessionStatusOptions = ['Ready to move', 'Under construction'];
   static const roomTypeOptions = ['Private room', 'Shared room'];
 
+  static const commuteDestinationOptions = [
+    'City Centre',
+    'UCD',
+    'TCD',
+    'DCU',
+    'Sandyford / Central Park',
+    'Grand Canal Dock',
+    'Other',
+  ];
+
+  /// Household weighting for dual-applicant commute scoring.
+  static DualCommutePriority dualCommutePriority(Map<String, dynamic>? session) {
+    if (session == null) return DualCommutePriority.balanced;
+    final raw = text(session['dual_commute_priority']).toLowerCase();
+    return switch (raw) {
+      'person_b' || 'personb' => DualCommutePriority.personB,
+      'balanced' => DualCommutePriority.balanced,
+      'person_a' || 'persona' || _ => DualCommutePriority.personA,
+    };
+  }
+
+  /// Per-commuter budget used when deriving scoreA / scoreB compatibility.
+  static int commuteBudgetMinutesForProfile(
+    CommuteProfileEntry profile,
+    Map<String, dynamic>? session,
+  ) {
+    final fallback =
+        ProfileData.maximumCommuteBudgetMinutes(session) ?? 45;
+
+    final profilesRaw = session?['commute_profiles'];
+    if (profilesRaw is List) {
+      for (final entry in profilesRaw) {
+        if (entry is! Map) continue;
+        final map = Map<String, dynamic>.from(entry);
+        if (text(map['id']) != profile.id) continue;
+        final max = map['max_commute_minutes'];
+        if (max is int) return max;
+        final parsed = int.tryParse(text(max));
+        if (parsed != null) return parsed;
+      }
+    }
+
+    final perProfile = session?['commute_profile_max_minutes'];
+    if (perProfile is Map) {
+      final value = perProfile[profile.id];
+      if (value is int) return value;
+      final parsed = int.tryParse(text(value));
+      if (parsed != null) return parsed;
+    }
+
+    return profile.maxCommuteMinutes ?? fallback;
+  }
+
+  static const kitchenUsageTimingOptions = [
+    'Flexible',
+    'Morning (6am–10am)',
+    'Midday (11am–2pm)',
+    'Evening (5pm–9pm)',
+    'Late night (after 9pm)',
+  ];
+
+  static String kitchenUsageTiming(Map<String, dynamic> item) =>
+      text(item['kitchen_usage_timing']);
+
+  /// Maps legacy profile/listing keys to a valid timing option, or '' when unset.
+  static String hydrateKitchenUsageTiming(Map<String, dynamic> raw) {
+    final timing = text(raw['kitchen_usage_timing']);
+    if (timing.isNotEmpty && kitchenUsageTimingOptions.contains(timing)) {
+      return timing;
+    }
+    final legacy = text(raw['kitchen_utility_preference']);
+    if (legacy.isNotEmpty && kitchenUsageTimingOptions.contains(legacy)) {
+      return legacy;
+    }
+    return '';
+  }
+
   static String bhk(Map<String, dynamic> item) => text(item['bhk']);
+  static String bedrooms(Map<String, dynamic> item) => text(item['bedrooms']);
+  static String bathrooms(Map<String, dynamic> item) => text(item['bathrooms']);
+  static String shareRoomKind(Map<String, dynamic> item) =>
+      text(item['share_room_kind']);
+
+  static String layoutSearchToken(Map<String, dynamic> item) {
+    final stored = text(item['layout_token']);
+    if (stored.isNotEmpty) return stored;
+
+    final bedMatch = RegExp(r'(\d+)').firstMatch(bedrooms(item));
+    final bathMatch = RegExp(r'(\d+)').firstMatch(bathrooms(item));
+    if (bedMatch == null || bathMatch == null) return '';
+    return '${bedMatch.group(1)}bed${bathMatch.group(1)}bath';
+  }
+
   static String furnishing(Map<String, dynamic> item) => text(item['furnishing']);
   static String propertyCategory(Map<String, dynamic> item) => text(item['property_category']);
   static String possessionStatus(Map<String, dynamic> item) => text(item['possession_status']);
   static String roomType(Map<String, dynamic> item) => text(item['room_type']);
   static int currentOccupants(Map<String, dynamic> item) => (item['current_occupants'] is int) ? item['current_occupants'] as int : 0;
+
+  /// Bed count for card info lines (from [bedrooms], [bhk], or title).
+  static int? bedCount(Map<String, dynamic> item) {
+    for (final raw in [bedrooms(item), bhk(item)]) {
+      if (raw.isEmpty) continue;
+      final match = RegExp(r'(\d+)').firstMatch(raw);
+      if (match != null) return int.tryParse(match.group(1)!);
+    }
+    final titleMatch = RegExp(
+      r'(\d+)\s*bed(?:room)?s?',
+      caseSensitive: false,
+    ).firstMatch(title(item));
+    if (titleMatch != null) {
+      return int.tryParse(titleMatch.group(1)!);
+    }
+    return null;
+  }
+
+  /// Neighborhood label for cards — omits postal districts (e.g. "Dublin 18").
+  static String cardAreaName(Map<String, dynamic> item) {
+    final host = hostCity(item);
+    if (host.isNotEmpty && !_isPostalDistrictLabel(host)) {
+      return _titleCaseWords(host);
+    }
+
+    final loc = location(item);
+    if (loc.isEmpty) return '';
+
+    for (final part in loc.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty)) {
+      if (!_isPostalDistrictLabel(part)) return _titleCaseWords(part);
+    }
+    return '';
+  }
+
+  static bool _isPostalDistrictLabel(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return true;
+    if (RegExp(r'^dublin\s+\d', caseSensitive: false).hasMatch(t)) return true;
+    if (RegExp(r'^co\.?\s*dublin', caseSensitive: false).hasMatch(t)) return true;
+    if (t.toLowerCase() == 'dublin') return true;
+    if (RegExp(r'^county\s+', caseSensitive: false).hasMatch(t)) return true;
+    return false;
+  }
+
+  static String _titleCaseWords(String value) {
+    return value
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w.length == 1 ? w.toUpperCase() : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+        .join(' ');
+  }
+
+  /// Card-friendly property kind — Apartment, House, etc.
+  static String cardPropertyKind(Map<String, dynamic> item) {
+    final cat = propertyCategory(item).trim();
+    if (cat.isNotEmpty) return _titleCaseWords(cat);
+
+    final blob = '${title(item)} ${description(item)}'.toLowerCase();
+    if (blob.contains('house') || blob.contains('cottage')) return 'House';
+    if (blob.contains('villa')) return 'Villa';
+    return 'Apartment';
+  }
+
+  /// Card-friendly room label for Share listings.
+  static String cardRoomTypeLabel(Map<String, dynamic> item) {
+    final raw = roomType(item).trim();
+    if (raw.isNotEmpty) {
+      final lower = raw.toLowerCase();
+      if (lower.contains('ensuite')) return 'Ensuite Room';
+      if (lower.contains('private')) return 'Private Room';
+      if (lower.contains('shared') || lower.contains('bed in')) return 'Shared Room';
+      return _titleCaseWords(raw);
+    }
+
+    return switch (shareRoomKind(item)) {
+      'ensuite' || 'double_ensuite' => 'Ensuite Room',
+      'private_bath' => 'Private Room',
+      'bed_shared' => 'Shared Room',
+      'student_room' => 'Student Room',
+      _ => 'Room',
+    };
+  }
+
+  /// Short transit hint parsed from listing text, e.g. "5-min to Luas".
+  static String cardTransitHint(Map<String, dynamic> item) {
+    final blob = '${title(item)} ${description(item)} ${location(item)}';
+    final match = RegExp(
+      r'(?:luas|green\s*line)[^\d]{0,24}(\d+)\s*min|(\d+)\s*min(?:ute)?s?[^\d]{0,24}(?:luas|green\s*line|rialto\s+luas|green\s+luas)',
+      caseSensitive: false,
+    ).firstMatch(blob);
+    if (match == null) return '';
+    final mins = match.group(1) ?? match.group(2);
+    if (mins == null || mins.isEmpty) return '';
+    return '$mins-min to Luas';
+  }
+
+  /// Supabase `listing_type` when present, else legacy `type`.
+  static String listingType(Map<String, dynamic> item) {
+    final explicit = text(item['listing_type']);
+    if (explicit.isNotEmpty && propertyTypes.contains(explicit)) return explicit;
+    return propertyType(item);
+  }
+
+  static bool isIndependentRental(Map<String, dynamic> item) =>
+      listingType(item) == 'Rent';
+
+  static bool isRoomShare(Map<String, dynamic> item) => listingType(item) == 'Share';
+
+  static String parkingType(Map<String, dynamic> item) => text(item['parking_type']);
+
+  /// True when the host explicitly provides parking (not no_parking / false flag).
+  static bool parkingAvailable(Map<String, dynamic> item) {
+    if (item['parking_available'] == false) return false;
+    final type = parkingType(item).toLowerCase();
+    if (type == 'no_parking') return false;
+    if (type.contains('free') || type.contains('paid')) return true;
+    return item['parking_available'] == true;
+  }
+
+  static String parkingDisplayLabel(Map<String, dynamic> item) {
+    return switch (parkingType(item)) {
+      'free_dedicated_parking' => 'Free Dedicated Parking',
+      'paid_on_street_parking' => 'Paid / On-Street Parking',
+      'no_parking' => 'No Parking',
+      _ => '',
+    };
+  }
+
+  /// Short parking label for listing-detail anatomy row.
+  static String parkingHighlightLabel(Map<String, dynamic> item) {
+    return switch (parkingType(item)) {
+      'free_dedicated_parking' => 'Parking Included',
+      'paid_on_street_parking' => 'Paid Parking',
+      'no_parking' => 'No Parking',
+      _ => 'Parking',
+    };
+  }
+
+  /// Bed count label for listing-detail anatomy row (e.g. "2 Beds").
+  static String bedsHighlightLabel(Map<String, dynamic> item) {
+    final count = bedCount(item);
+    if (count != null) return count == 1 ? '1 Bed' : '$count Beds';
+    final raw = bedrooms(item).trim();
+    if (raw.isNotEmpty) {
+      if (RegExp(r'bed', caseSensitive: false).hasMatch(raw)) {
+        return _titleCaseWords(raw);
+      }
+      return '${_titleCaseWords(raw)} Beds';
+    }
+    return 'Bedroom Count Not Listed';
+  }
+
+  /// Whether the listing copy indicates RTB registration.
+  static bool isRtbRegistered(Map<String, dynamic> item) {
+    if (item['rtb_registered'] == true) return true;
+    final blob = '${description(item)} ${title(item)}'.toLowerCase();
+    return blob.contains('rtb registered') || blob.contains('rtb-registered');
+  }
+
+  /// Security deposit line for detail header (null when unknown).
+  static String? securityDepositLabel(Map<String, dynamic> item) {
+    final explicit = text(item['security_deposit']);
+    if (explicit.isNotEmpty) return explicit;
+
+    final desc = description(item);
+    final lower = desc.toLowerCase();
+
+    if (lower.contains('no deposit')) return 'No security deposit';
+
+    final amountMatch = RegExp(
+      r'deposit[:\s]+([€₹$]?\s?[\d,]+)',
+      caseSensitive: false,
+    ).firstMatch(desc);
+    if (amountMatch != null) {
+      final value = amountMatch.group(1)?.trim();
+      if (value != null && value.isNotEmpty) {
+        return 'Security deposit $value';
+      }
+    }
+
+    if (lower.contains('deposit equals rent') ||
+        lower.contains('deposit matches rent')) {
+      return 'Security deposit equals one month\'s rent';
+    }
+
+    return null;
+  }
+
+  /// Full parking label for detail feature matrix.
+  static String parkingMatrixLabel(Map<String, dynamic> item) {
+    final label = parkingDisplayLabel(item);
+    if (label.isNotEmpty) return label;
+    return 'Secure Bike Storage Available';
+  }
+
+  /// RTB status copy for entire-place detail matrix.
+  static String rtbMatrixLabel(Map<String, dynamic> item) =>
+      isRtbRegistered(item)
+          ? 'RTB Registered Landlord'
+          : 'RTB Registered Tenant Vetted';
+
+  /// Walk/transit profile parsed from listing copy when proximity data is absent.
+  static ({int minutes, String destination})? detailTransitWalkProfile(
+    Map<String, dynamic> item,
+  ) {
+    final walkMinutes = transitWalkMinutes(item);
+    final transitType = transitTypeLabel(item);
+    if (walkMinutes != null && transitType.isNotEmpty) {
+      return (minutes: walkMinutes, destination: transitType);
+    }
+
+    final hint = cardTransitHint(item);
+    if (hint.isNotEmpty) {
+      final mins = RegExp(r'(\d+)').firstMatch(hint)?.group(1);
+      final parsed = mins != null ? int.tryParse(mins) : null;
+      if (parsed != null) {
+        return (minutes: parsed, destination: 'Luas');
+      }
+    }
+
+    final blob = '${description(item)} ${location(item)}';
+    final walkPattern = RegExp(
+      r'([A-Za-z][\w\s-]{2,50}?)\s+(\d+)\s*min(?:ute)?s?\s+walk',
+      caseSensitive: false,
+    );
+    final walkMatches = walkPattern.allMatches(blob);
+    if (walkMatches.isNotEmpty) {
+      final match = walkMatches.last;
+      final destination = match.group(1)!.trim();
+      final minutes = int.tryParse(match.group(2)!);
+      if (minutes != null && destination.isNotEmpty) {
+        return (minutes: minutes, destination: destination);
+      }
+    }
+
+    final forward = RegExp(
+      r'(\d+)\s*min(?:ute)?s?\s+walk(?:\s+to\s+)?(.+?)(?:\.|,|;|$)',
+      caseSensitive: false,
+    ).firstMatch(blob);
+    if (forward != null) {
+      final minutes = int.tryParse(forward.group(1)!);
+      var destination = forward.group(2)?.trim() ?? '';
+      destination = destination.replaceAll(RegExp(r'\s+'), ' ');
+      if (minutes != null && destination.isNotEmpty) {
+        return (minutes: minutes, destination: destination);
+      }
+    }
+
+    return null;
+  }
+
+  /// Share listing room + bath label for detail matrix.
+  static String shareRoomMatrixLabel(Map<String, dynamic> item) {
+    final kind = shareRoomKind(item);
+    return switch (kind) {
+      'ensuite' || 'double_ensuite' => 'Ensuite Room - Private Bath',
+      'private_bath' => 'Private Room - Private Bath',
+      'bed_shared' => 'Double Room - Shared Bath',
+      'student_room' => 'Student Room - Shared Bath',
+      _ => () {
+        final room = cardRoomTypeLabel(item).toLowerCase();
+        if (room.contains('ensuite')) return 'Ensuite Room - Private Bath';
+        if (room.contains('shared') || room.contains('bed in')) {
+          return 'Double Room - Shared Bath';
+        }
+        return '${cardRoomTypeLabel(item)} - Private Bath';
+      }(),
+    };
+  }
+
+  /// Household culture / occupant preference for share detail matrix.
+  static String householdCultureMatrixLabel(Map<String, dynamic> item) {
+    final preferred = text(item['preferred_tenant_occupant']);
+    if (preferred.isNotEmpty) {
+      final lower = preferred.toLowerCase();
+      if (lower.contains('professional')) return 'Professionals Preferred';
+      if (lower.contains('student')) return 'Student Friendly';
+      if (lower.contains('family')) return 'Family Friendly';
+      return '$preferred Preferred';
+    }
+
+    return switch (occupantType(item)) {
+      'Students' => 'Student Friendly',
+      'Working Professionals' => 'Professionals Preferred',
+      'Family' => 'Family Friendly',
+      'Bachelors' => () {
+        final label = bachelorPreferenceBadgeLabel(bachelorPreference(item));
+        return label.isNotEmpty ? label : 'Bachelors Preferred';
+      }(),
+      _ => 'Open Household',
+    };
+  }
+
+  /// Dietary / kitchen rules for share detail matrix.
+  static String dietaryKitchenMatrixLabel(Map<String, dynamic> item) {
+    final token = foodPreferenceToken(item);
+    final lifestyle = lifestylePreferences(item);
+    final hasVegOnly = lifestyle.any((l) => l.toLowerCase() == 'veg') &&
+        !lifestyle.any((l) => l.toLowerCase().contains('non'));
+
+    return switch (token) {
+      'veg' => hasVegOnly ? 'Strict Veg Only' : 'Veg-Friendly Kitchen',
+      'non-veg' => 'Non-Veg Friendly Kitchen',
+      _ => 'Open Kitchen',
+    };
+  }
+
+  /// Primary languages spoken in the house for share detail matrix.
+  static String houseLanguagesMatrixLabel(Map<String, dynamic> item) {
+    final langs = languagesSpokenInHouse(item);
+    if (langs.isNotEmpty) return langs.join(', ');
+    final host = hostLanguage(item);
+    if (host.isNotEmpty) return host;
+    final mother = hostMotherTongue(item);
+    return mother.isNotEmpty ? mother : 'Languages not listed';
+  }
+
+  /// Detail-page infrastructure rows (parking, culture, languages, transit).
+  static List<MapEntry<String, String>> infrastructureDetailRows(
+    Map<String, dynamic> item,
+  ) {
+    final rows = <MapEntry<String, String>>[];
+
+    final parking = parkingDisplayLabel(item);
+    if (parking.isNotEmpty) rows.add(MapEntry('Parking', parking));
+
+    if (isRoomShare(item)) {
+      final langs = languagesSpokenInHouse(item);
+      if (langs.isNotEmpty) {
+        rows.add(MapEntry('Languages in house', langs.join(', ')));
+      }
+
+      final culture = cultureChipLabels(item);
+      if (culture.isNotEmpty) {
+        rows.add(MapEntry('Household culture', culture.join(', ')));
+      }
+    }
+
+    // Transit is rendered dynamically on the detail card via [CommuteScoreBadge].
+
+    return rows;
+  }
+
+  static List<String> languagesSpokenInHouse(Map<String, dynamic> item) {
+    final raw = item['languages_spoken'];
+    if (raw is List) {
+      return raw.map((e) => text(e)).where((s) => s.isNotEmpty).toList();
+    }
+    return const [];
+  }
+
+  static List<String> lifestyleFlags(Map<String, dynamic> item) {
+    final seen = <String>{};
+    final out = <String>[];
+
+    void add(String flag) {
+      final key = flag.trim();
+      if (key.isEmpty || seen.contains(key)) return;
+      seen.add(key);
+      out.add(key);
+    }
+
+    final raw = item['lifestyle_flags'];
+    if (raw is List) {
+      for (final entry in raw) {
+        add(text(entry));
+      }
+    }
+
+    for (final pref in lifestylePreferences(item)) {
+      add(switch (pref.trim().toLowerCase()) {
+        'veg' => 'vegetarian_household',
+        'non-veg' => 'non_veg_allowed',
+        'no pets' => 'no_pets',
+        _ => pref.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '_'),
+      });
+    }
+
+    return out;
+  }
+
+  static const _cultureFlagChipLabels = {
+    'vegetarian_household': 'Veg',
+    'non_veg_allowed': 'Non-veg',
+    'no_pets': 'No Pets',
+    'no_smoking': 'No Smoking',
+    'quiet_hours_preferred': 'Quiet Hours',
+  };
+
+  /// Culture / diet chips shown on the card (deduped).
+  static List<String> cultureChipLabels(Map<String, dynamic> item) {
+    final chips = <String>[];
+    final food = foodPreferenceLabel(item);
+
+    for (final flag in lifestyleFlags(item)) {
+      final label = _cultureFlagChipLabels[flag] ?? '';
+      if (label.isEmpty) continue;
+      if (!chips.contains(label)) chips.add(label);
+    }
+
+    if (food.isNotEmpty) {
+      chips.remove(food);
+      chips.insert(0, food);
+    }
+
+    return chips;
+  }
+
+  /// Normalized labels for chips already rendered on the card.
+  static Set<String> cardChipLabels(Map<String, dynamic> item) {
+    final labels = <String>{};
+
+    final furnish = furnishing(item);
+    if (furnish.isNotEmpty) labels.add(furnish.toLowerCase());
+
+    if (currentOccupants(item) > 0) labels.add('living');
+
+    for (final chip in cultureChipLabels(item)) {
+      labels.add(chip.toLowerCase());
+    }
+
+    final occupant = occupantType(item);
+    if (occupant.isNotEmpty) labels.add(occupant.toLowerCase());
+
+    final sub = occupantSubBadgeLabel(item);
+    if (sub != null && sub.isNotEmpty) labels.add(sub.toLowerCase());
+
+    return labels;
+  }
+
+  static String _parkingSubtextSegment(Map<String, dynamic> item) {
+    return switch (parkingType(item)) {
+      'free_dedicated_parking' => '🅿️ Free Parking',
+      'paid_on_street_parking' => '🅿️ Paid Parking',
+      _ => '',
+    };
+  }
+
+  /// Path B proximity payload persisted on listings after transit extraction.
+  static Map<String, dynamic>? proximityData(Map<String, dynamic> item) {
+    final raw = item['proximity_data'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
+  static String transitTypeLabel(Map<String, dynamic> item) {
+    final proximity = proximityData(item);
+    if (proximity == null) return '';
+    final typed = text(proximity['transit_type']);
+    if (typed.isNotEmpty) return typed;
+    return text(proximity['luas_line']);
+  }
+
+  static int? transitWalkMinutes(Map<String, dynamic> item) {
+    final proximity = proximityData(item);
+    if (proximity == null) return null;
+    for (final key in [
+      'walk_minutes',
+      'nearest_transit_minutes',
+      'luas_minutes',
+      'minutes',
+    ]) {
+      final value = proximity[key];
+      if (value is num) return value.round();
+      final parsed = int.tryParse(text(value));
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  static bool hasTransitMacroTag(Map<String, dynamic> item) =>
+      transitTypeLabel(item).isNotEmpty && transitWalkMinutes(item) != null;
+
+  static LatLng? listingCoordinates(Map<String, dynamic> item) {
+    final lat = item['latitude'];
+    final lon = item['longitude'];
+    if (lat is num && lon is num) {
+      return LatLng(lat.toDouble(), lon.toDouble());
+    }
+    return null;
+  }
+
+  static String _transitSubtextSegment(Map<String, dynamic> item) {
+    final proximity = proximityData(item);
+    if (proximity != null) {
+      final walkMinutes = transitWalkMinutes(item);
+      final transitType = transitTypeLabel(item);
+      if (walkMinutes != null && transitType.isNotEmpty) {
+        return '🚇 $walkMinutes-min walk · $transitType';
+      }
+
+      final headline = text(
+        proximity['transit_headline'] ?? proximity['commute_headline'],
+      );
+      if (headline.isNotEmpty) {
+        return headline.startsWith('🚇') ? headline : '🚇 $headline';
+      }
+
+      final name = text(
+        proximity['nearest_stop_name'] ??
+            proximity['nearest_transit_name'] ??
+            proximity['transit_name'] ??
+            'Luas',
+      );
+      if (walkMinutes != null) {
+        return '🚇 $walkMinutes-min to ${name.isEmpty ? 'Luas' : name}';
+      }
+    }
+
+    final hint = cardTransitHint(item);
+    if (hint.isEmpty) return '';
+    return '🚇 $hint';
+  }
+
+  static String _viewerCommuteDestination(Map<String, dynamic>? viewerProfile) {
+    if (viewerProfile == null) return '';
+    return ProfileData.text(
+      viewerProfile['commute_destination'] ??
+          viewerProfile['primary_commute_destination'],
+    );
+  }
+
+  static Set<String> _viewerLanguageTokens(Map<String, dynamic>? viewerProfile) {
+    if (viewerProfile == null) return const {};
+
+    final tokens = <String>{};
+    for (final lang in ProfileData.languageList(
+      viewerProfile['preferred_spoken_languages'],
+    )) {
+      final token = lang.trim().toLowerCase();
+      if (token.isNotEmpty) tokens.add(token);
+    }
+
+    final mother = ProfileData.text(viewerProfile['mother_tongue']).trim().toLowerCase();
+    if (mother.isNotEmpty) tokens.add(mother);
+
+    return tokens;
+  }
+
+  static Iterable<String> _houseLanguageCandidates(Map<String, dynamic> item) sync* {
+    for (final lang in languagesSpokenInHouse(item)) {
+      if (lang.isNotEmpty) yield lang;
+    }
+
+    final mother = hostMotherTongue(item);
+    if (mother.isNotEmpty) yield mother;
+
+    for (final part in hostLanguage(item).split(RegExp(r'[,;]'))) {
+      final trimmed = part.trim();
+      if (trimmed.isNotEmpty) yield trimmed;
+    }
+  }
+
+  static bool _locationHintsCommuteDestination(
+    Map<String, dynamic> item,
+    String destination,
+  ) {
+    final dest = destination.trim().toLowerCase();
+    if (dest.isEmpty) return false;
+
+    final blob =
+        '${location(item)} ${title(item)} ${description(item)}'.toLowerCase();
+    final tokens = dest
+        .split(RegExp(r'[/,\s]+'))
+        .map((t) => t.trim())
+        .where((t) => t.length > 3)
+        .toList();
+    if (tokens.isEmpty) return blob.contains(dest);
+    return tokens.any(blob.contains);
+  }
+
+  /// Share-specific commute line, e.g. "Direct Luas to Citywest".
+  static String _shareCommuteSubtextSegment(
+    Map<String, dynamic> item,
+    Map<String, dynamic>? viewerProfile,
+  ) {
+    final viewerDestination = _viewerCommuteDestination(viewerProfile);
+    final proximity = item['proximity_data'];
+
+    if (proximity is Map) {
+      final preset = text(
+        proximity['transit_headline'] ??
+            proximity['commute_headline'] ??
+            proximity['direct_commute_label'],
+      );
+      if (preset.isNotEmpty) {
+        return preset.startsWith('🚇') ? preset : '🚇 $preset';
+      }
+
+      final line = text(proximity['luas_line'] ?? 'Luas');
+      final directDest = text(
+        proximity['direct_destination'] ??
+            proximity['luas_destination'] ??
+            proximity['commute_destination_label'],
+      );
+      if (directDest.isNotEmpty) {
+        return '🚇 Direct $line to $directDest';
+      }
+
+      if (viewerDestination.isNotEmpty) {
+        final destinations = proximity['destinations'];
+        if (destinations is Map) {
+          for (final entry in destinations.entries) {
+            final key = text(entry.key).toLowerCase();
+            if (!_commuteKeysAlign(key, viewerDestination)) continue;
+
+            final value = entry.value;
+            if (value is String && value.trim().isNotEmpty) {
+              final label = value.trim();
+              return label.startsWith('🚇') ? label : '🚇 $label';
+            }
+            if (value is Map) {
+              final label = text(value['label'] ?? value['summary']);
+              if (label.isNotEmpty) {
+                return label.startsWith('🚇') ? label : '🚇 $label';
+              }
+              final destLabel = text(value['destination'] ?? value['name']);
+              if (destLabel.isNotEmpty) {
+                return '🚇 Direct $line to $destLabel';
+              }
+            }
+          }
+        }
+
+        if (proximity['has_direct_luas'] == true ||
+            proximity['direct_luas'] == true) {
+          return '🚇 Direct $line to $viewerDestination';
+        }
+      }
+    }
+
+    final blob =
+        '${title(item)} ${description(item)} ${location(item)}'.toLowerCase();
+    final hasLuas =
+        blob.contains('luas') || blob.contains('green line') || blob.contains('dart');
+
+    if (viewerDestination.isNotEmpty && hasLuas) {
+      final destLower = viewerDestination.toLowerCase();
+      final directPhrase = RegExp(
+        r'direct\s+(?:\w+\s+){0,3}(?:luas|green\s*line|dart)',
+        caseSensitive: false,
+      ).hasMatch(blob);
+      if (directPhrase || _locationHintsCommuteDestination(item, viewerDestination)) {
+        return '🚇 Direct Luas to $viewerDestination';
+      }
+      if (destLower.contains('citywest') &&
+          (blob.contains('citywest') || blob.contains('city west'))) {
+        return '🚇 Direct Luas to Citywest';
+      }
+    }
+
+    return _transitSubtextSegment(item);
+  }
+
+  static bool _commuteKeysAlign(String proximityKey, String viewerDestination) {
+    final key = proximityKey.trim().toLowerCase();
+    final dest = viewerDestination.trim().toLowerCase();
+    if (key.isEmpty || dest.isEmpty) return false;
+    if (key == dest) return true;
+    if (key.contains(dest) || dest.contains(key)) return true;
+
+    final destTokens = dest
+        .split(RegExp(r'[/,\s]+'))
+        .map((t) => t.trim())
+        .where((t) => t.length > 3);
+    return destTokens.any((token) => key.contains(token));
+  }
+
+  static String? _matchedHouseLanguage(
+    Map<String, dynamic> item,
+    Map<String, dynamic>? viewerProfile,
+  ) {
+    final viewerLangs = _viewerLanguageTokens(viewerProfile);
+    if (viewerLangs.isEmpty) return null;
+
+    for (final houseLang in _houseLanguageCandidates(item)) {
+      if (viewerLangs.contains(houseLang.trim().toLowerCase())) {
+        return houseLang.trim();
+      }
+    }
+    return null;
+  }
+
+  static bool _segmentDuplicatesCircleBanner(String segment, bool inCircle) {
+    if (!inCircle) return false;
+    final lower = segment.toLowerCase();
+    return lower.contains('in your circle');
+  }
+
+  static bool _segmentRedundantWithChips(String segment, Set<String> chipLabels) {
+    final lower = segment.toLowerCase();
+
+    const keywordGroups = [
+      ['veg', 'vegetarian'],
+      ['non-veg', 'non veg'],
+      ['no pets', 'pets'],
+      ['no smoking', 'smoking'],
+      ['quiet hours', 'quiet'],
+    ];
+
+    for (final group in keywordGroups) {
+      if (group.any((key) => lower.contains(key)) &&
+          chipLabels.any((chip) => group.any((key) => chip.contains(key)))) {
+        return true;
+      }
+    }
+
+    for (final chip in chipLabels) {
+      if (chip.length >= 4 && lower.contains(chip)) return true;
+    }
+    return false;
+  }
+
+  /// Bottom-of-card intelligence line (joined with ·).
+  static String cardDynamicSubtext(
+    Map<String, dynamic> item, {
+    bool inCircle = false,
+    Map<String, dynamic>? viewerProfile,
+    Set<String>? excludeChipLabels,
+  }) {
+    final chipLabels = excludeChipLabels ?? cardChipLabels(item);
+    final segments = <String>[];
+
+    if (isIndependentRental(item)) {
+      final parking = _parkingSubtextSegment(item);
+      if (parking.isNotEmpty && !_segmentRedundantWithChips(parking, chipLabels)) {
+        segments.add(parking);
+      }
+      final transit = _transitSubtextSegment(item);
+      if (transit.isNotEmpty && !_segmentRedundantWithChips(transit, chipLabels)) {
+        segments.add(transit);
+      }
+    } else if (isRoomShare(item)) {
+      void addSegment(String segment) {
+        if (segment.isEmpty) return;
+        if (_segmentDuplicatesCircleBanner(segment, inCircle)) return;
+        if (_segmentRedundantWithChips(segment, chipLabels)) return;
+        segments.add(segment);
+      }
+
+      final language = _matchedHouseLanguage(item, viewerProfile);
+      if (language != null) {
+        addSegment('🗣️ Speaks $language');
+      }
+
+      final commute = _shareCommuteSubtextSegment(item, viewerProfile);
+      addSegment(commute);
+    }
+
+    return segments.join(' · ');
+  }
+
+  /// Scannable descriptor line for listing cards (title area — no transit/parking).
+  static String cardInfoLine(Map<String, dynamic> item) {
+    final area = cardAreaName(item);
+    final beds = bedCount(item);
+    final kind = cardPropertyKind(item);
+    final isShare = isRoomShare(item);
+
+    final String core;
+    if (isShare) {
+      final room = cardRoomTypeLabel(item);
+      final bedPart = beds != null ? '$beds Bed ' : '';
+      core = '$room in a $bedPart$kind';
+    } else {
+      final bedPart = beds != null ? '$beds Bed ' : '';
+      core = '$bedPart$kind';
+    }
+
+    var line = core;
+    if (area.isNotEmpty) line = '$line • $area';
+
+    return line;
+  }
 
   // ── Trust & mutual matching fields ─────────────────────────────
 
@@ -497,11 +1336,21 @@ abstract final class ListingData {
   static bool hostVerifiedBadge(Map<String, dynamic> item) =>
       item['host_verified_badge'] == true;
 
+  static bool hostPreArrivalBadge(Map<String, dynamic> item) =>
+      item['host_pre_arrival_badge'] == true;
+
   static String preferredTenantOccupant(Map<String, dynamic> item) =>
       text(item['preferred_tenant_occupant']);
 
   static String preferredTenantFood(Map<String, dynamic> item) =>
       text(item['preferred_tenant_food']);
+
+  /// Landlord student verification track preference (defaults to all students).
+  static StudentTrackPreference tenantTrackPreference(Map<String, dynamic> item) =>
+      StudentTrackPreference.fromMap(item);
+
+  static String tenantTrackPreferenceLabel(Map<String, dynamic> item) =>
+      tenantTrackPreference(item).uiLabel;
 
   static bool smokingAllowed(Map<String, dynamic> item) =>
       item['smoking_allowed'] == true;
@@ -529,6 +1378,7 @@ abstract final class ListingData {
         'hostCity': '',
         'hostLanguage': '',
         'hostMotherTongue': '',
+        'hostNativePlace': '',
         'hostFoodPreference': '',
       };
     }
@@ -536,6 +1386,7 @@ abstract final class ListingData {
     final name = ProfileData.text(profile['full_name']);
     final city = ProfileData.text(profile['detected_city']);
     final mother = ProfileData.text(profile['mother_tongue']);
+    final nativePlace = ProfileData.text(profile['native_place']);
     final food = ProfileData.text(profile['food_preference']);
     final spoken = ProfileData.languageList(profile['spoken_languages']);
     final language = spoken.isNotEmpty ? spoken.join(', ') : mother;
@@ -545,6 +1396,7 @@ abstract final class ListingData {
       'hostCity': city,
       'hostLanguage': language,
       'hostMotherTongue': mother,
+      'hostNativePlace': nativePlace,
       'hostFoodPreference': food,
     };
   }
@@ -561,13 +1413,9 @@ abstract final class ListingData {
       return const ListingProfileMatch();
     }
 
-    final viewerCity = _normalizeToken(ProfileData.text(viewerProfile['detected_city']));
-    final listingCity = _normalizeToken(location(listing));
-    final hostCityValue = _normalizeToken(hostCity(listing));
-
-    final sameLocality = viewerCity.isNotEmpty &&
-        (viewerCity == listingCity ||
-            (hostCityValue.isNotEmpty && viewerCity == hostCityValue));
+    final targetTokens = TargetSearchAreas.hydrateFromSession(viewerProfile);
+    final sameLocality = targetTokens.isNotEmpty &&
+        TargetSearchAreas.listingMatchesTargets(targetTokens, listing);
 
     final viewerMother =
         _normalizeToken(ProfileData.text(viewerProfile['mother_tongue']));
@@ -668,6 +1516,13 @@ abstract final class ListingData {
     final resolved = resolvePropertyAndOccupant(raw);
     final images = imageDataUris(raw);
     final lifestyle = lifestylePreferences(raw);
+    final flags = lifestyleFlags(raw);
+    final houseLanguages = languagesSpokenInHouse(raw);
+    final parking = parkingType(raw);
+    final resolvedListingType = listingType({
+      ...raw,
+      'type': resolved['type']!,
+    });
     final tenant = preferredTenantType(raw);
     final occupant = resolved['occupantType']!;
     final bachelor = bachelorPreference(raw);
@@ -696,11 +1551,14 @@ abstract final class ListingData {
       'price': price(raw),
       'location': location(raw),
       'type': resolved['type']!,
+      'listing_type': resolvedListingType,
       'description': description(raw),
       'hostName': hostName(raw),
       'hostCity': hostCity(raw),
       'hostLanguage': hostLanguage(raw),
       'hostMotherTongue': hostMotherTongue(raw),
+      if (hostNativePlace(raw).isNotEmpty)
+        'hostNativePlace': hostNativePlace(raw),
       if (canonicalFood.isNotEmpty) ...{
         'hostFoodPreference': canonicalFood,
         'foodPreference': canonicalFood,
@@ -718,12 +1576,19 @@ abstract final class ListingData {
       if (occupant == 'Students' && student.isNotEmpty) 'studentType': student,
       if (openLang.isNotEmpty) 'openToSameLanguage': openLang,
       if (lifestyle.isNotEmpty) 'lifestylePreferences': lifestyle,
+      if (flags.isNotEmpty) 'lifestyle_flags': flags,
+      if (houseLanguages.isNotEmpty) 'languages_spoken': houseLanguages,
+      if (parking.isNotEmpty) 'parking_type': parking,
+      if (raw['latitude'] is num) 'latitude': (raw['latitude'] as num).toDouble(),
+      if (raw['longitude'] is num) 'longitude': (raw['longitude'] as num).toDouble(),
+      if (raw['proximity_data'] != null) 'proximity_data': raw['proximity_data'],
       if (bhk(raw).isNotEmpty) 'bhk': bhk(raw),
       if (furnishing(raw).isNotEmpty) 'furnishing': furnishing(raw),
       if (propertyCategory(raw).isNotEmpty) 'property_category': propertyCategory(raw),
       if (possessionStatus(raw).isNotEmpty) 'possession_status': possessionStatus(raw),
       if (roomType(raw).isNotEmpty) 'room_type': roomType(raw),
       if (currentOccupants(raw) > 0) 'current_occupants': currentOccupants(raw),
+      'tenant_track_preference': tenantTrackPreference(raw).dbValue,
     };
   }
 

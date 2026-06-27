@@ -1,79 +1,63 @@
 import 'package:flutter/material.dart';
 
-/// CircleKey marketplace design: warm neutrals, sky blue + orange accent
-/// for trust and community, generous spacing, clean typography.
+import '../core/theme/app_theme.dart';
+
+/// Legacy token layer — maps to [AppColors] for existing screens.
 abstract final class HomeMarketplaceTheme {
-  static const canvas = Color(0xFFF7F8F8);
-  static const surface = Color(0xFFFFFFFF);
-  static const searchSurface = Color(0xFFF0F2F2);
-  static const border = Color(0xFFD9E0E0);
-  static const borderStrong = Color(0xFFAAB8B8);
+  static const canvas = AppColors.background;
+  static const surface = AppColors.surface;
+  static const searchSurface = AppColors.background;
+  static const border = AppColors.divider;
+  static const borderStrong = AppColors.disabled;
 
-  static const primary = Color(0xFF0EA5E9);
-  static const primaryHover = Color(0xFF0284C7);
-  static const primarySurface = Color(0xFFE0F2FE);
+  static const primary = AppColors.accent;
+  static const primaryHover = AppColors.accentDark;
+  static const primarySurface = AppColors.background;
 
-  static const accent = Color(0xFFF97316);
-  static const accentHover = Color(0xFFEA580C);
-  static const accentSurface = Color(0xFFFFF7ED);
+  static const accent = AppColors.accent;
+  static const accentHover = AppColors.accentDark;
+  static const accentSurface = AppColors.accentLight;
 
-  static const textPrimary = Color(0xFF1A1A1A);
-  static const textSecondary = Color(0xFF64748B);
-  static const textMuted = Color(0xFF94A3B8);
-  static const gray500 = Color(0xFF64748B);
+  static const textPrimary = AppColors.primaryText;
+  static const textSecondary = AppColors.secondaryText;
+  static const textMuted = AppColors.secondaryText;
+  static const gray500 = AppColors.secondaryText;
 
-  static const cta = accent;
+  static const cta = primary;
+  static const onPrimary = AppColors.surface;
 
-  static const cardRadius = 16.0;
+  static const cardRadius = AppRadius.lg;
 
   static const listingCardImageAspectRatio = 4 / 3;
 
-  static List<BoxShadow> get cardShadowRest => const [
-        BoxShadow(
-          color: Color(0x0A000000),
-          blurRadius: 12,
-          offset: Offset(0, 2),
-          spreadRadius: 0,
-        ),
-      ];
+  static List<BoxShadow> get cardShadowRest => AppShadows.card;
 
-  static List<BoxShadow> get cardShadowHover => const [
-        BoxShadow(
-          color: Color(0x18000000),
-          blurRadius: 20,
-          offset: Offset(0, 8),
-          spreadRadius: -2,
-        ),
-      ];
+  static List<BoxShadow> get cardShadowHover => AppShadows.elevated;
 
-  static List<BoxShadow> get searchShadowSm => const [
-        BoxShadow(
-          color: Color(0x0D000000),
-          blurRadius: 6,
-          offset: Offset(0, 1),
-          spreadRadius: 0,
-        ),
-      ];
+  static List<BoxShadow> get searchShadowSm => AppShadows.card;
 
   static const searchBlockMaxWidth = 896.0;
-  static const searchBlockRadius = 16.0;
+  static const searchBlockRadius = AppRadius.lg;
 
-  static ListingTagTone tagToneFor(String propertyType) => switch (propertyType) {
+  static const brandTagline = 'Matched by lifestyle, connected by trust';
+
+  static BoxDecoration cardDecoration({bool elevated = true}) =>
+      AppTheme.cardDecoration(elevated: elevated);
+
+  static ListingTagTone tagToneFor(String propertyType) =>
+      switch (propertyType) {
         'Buy' => ListingTagTone.buy,
         'Share' => ListingTagTone.share,
         _ => ListingTagTone.rent,
       };
 
-  // ── Trust stripe colors ────────────────────────────────────────
-
-  static const trustCircle = Color(0xFF0EA5E9);
-  static const trustIdVerified = Color(0xFF008A05);
-  static const trustSocialVerified = Color(0xFF7C3AED);
-  static const trustCasual = Color(0xFFDDDDDD);
-  static const trustAnonymous = Color(0xFFE8E8E8);
+  static const trustCircle = AppColors.accent;
+  static const trustIdVerified = AppColors.success;
+  static const trustSocialVerified = AppColors.trustMuted;
+  static const trustCasual = AppColors.divider;
+  static const trustAnonymous = AppColors.background;
 }
 
-/// Soft tag colors — not used for tabs, buttons, or card chrome.
 final class ListingTagTone {
   const ListingTagTone({
     required this.surface,
@@ -86,9 +70,9 @@ final class ListingTagTone {
   final Color text;
 
   static const rent = ListingTagTone(
-    surface: Color(0xFFECFDF5),
+    surface: Color(0xFFE6F7F5),
     border: Color(0xFFBCE8DB),
-    text: Color(0xFF0D7A70),
+    text: Color(0xFF008A7A),
   );
 
   static const buy = ListingTagTone(

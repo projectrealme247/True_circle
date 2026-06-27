@@ -1,28 +1,35 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
-import '../services/profile_storage_service.dart';
+import '../config/market/market_config.dart';
+import '../core/theme/app_theme.dart';
+import '../data/dublin_mock_data.dart';
+import '../navigation/space_gateway_navigation.dart';
+import '../services/auth_service.dart';
+import '../services/demo_auth_service.dart';
+import '../services/user_session_store.dart';
+import '../utils/listing_data.dart';
+import '../models/spoken_language_entry.dart';
 import '../utils/profile_data.dart';
-import '../widgets/circlekey_logo.dart';
+import '../utils/spoken_language_profile_codec.dart';
+import '../widgets/truecircle_logo.dart';
 import '../widgets/language_pill_chips.dart';
 import '../widgets/shadcn_select.dart';
+import 'profile_edit_screen.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({
-    super.key,
-    this.isEditMode = false,
-    this.initialProfile,
-  });
+  const AuthScreen({super.key});
 
-  /// When true, shows the profile edit form (pre-filled from storage).
-  final bool isEditMode;
+  static Map<String, dynamic>? get currentUserSession =>
+      UserSessionStore.current;
 
-  /// Optional profile map; otherwise loaded from localStorage on open.
-  final Map<String, dynamic>? initialProfile;
-
-  static Map<String, dynamic>? currentUserSession;
+  static set currentUserSession(Map<String, dynamic>? value) {
+    UserSessionStore.current = value;
+  }
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -32,8 +39,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isLoginMode = true;
   int _signUpStep = 1;
   bool _showAddMore = false;
-  bool _editHydrating = false;
-  Map<String, dynamic>? _editBaselineProfile;
+  bool _authLoading = false;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -42,158 +48,96 @@ class _AuthScreenState extends State<AuthScreen> {
   final _locationController = TextEditingController();
 
   String _selectedFoodPref = 'Pure Veg';
-  String _selectedMotherTongue = 'Telugu';
-  final List<String> _selectedLanguages = ['Telugu'];
+  String _selectedMotherTongue = 'English';
+  final _commuteDestinationController = TextEditingController();
+  String _commuteMethod = ProfileCommuteOptions.methodLabels.first;
+  double? _destinationLatitude;
+  double? _destinationLongitude;
+  bool _fetchingCommuteDestination = false;
+  final List<String> _selectedLanguages = [];
+  final Map<String, bool> _languageNativeFlags = {};
+  String? _selectedAreaKey;
   String? _selectedOccupantType;
   String? _selectedGenderPref;
   String? _selectedStudentType;
+  String preferredArrangement =
+      ProfileSeekerPreferences.arrangementOptions.first;
+  String? preferredLayout;
   int _familyAdults = 2;
   int _familyChildren = 0;
   List<String> _childrenAges = [];
   int _groupSize = 1;
 
-  final List<String> _foodOptions = ['Pure Veg', 'Non-Veg'];
-  final List<String> _languageOptions = [
-    'Telugu',
-    'English',
-    'Hindi',
-    'Tamil',
-    'Kannada',
-  ];
-  static const _occupantOptions = ['Family', 'Working Professionals', 'Students'];
-  static const _genderPrefOptions = ['Boys and Girls', 'Boys only', 'Girls only'];
-  static const _studentFundingOptions = [
-    'Family supported',
-    'Education loan (bank financed)',
-  ];
   static const _childrenAgeOptions = ['Below 5', '5 - 12', '13 - 18'];
   bool _smokingOk = false;
   bool _drinkingOk = false;
   String? _scheduleType;
+  String _kitchenUsageTiming = ListingData.kitchenUsageTimingOptions.first;
   bool _detectingLocation = false;
   final _budgetMinController = TextEditingController();
   final _budgetMaxController = TextEditingController();
 
+  List<String> get _foodOptions => MarketConfig.current.profileFoodOptions;
+  List<String> get _languageOptions =>
+      MarketConfig.current.profileLanguageOptions;
+
+  List<String> get _otherLanguageOptions =>
+      _languageOptions.where((l) => l != _selectedMotherTongue).toList();
+  List<String> get _occupantOptions =>
+      MarketConfig.current.profileOccupantOptions;
+  List<String> get _genderPrefOptions =>
+      MarketConfig.current.profileGenderPrefOptions;
+  List<String> get _studentFundingOptions =>
+      MarketConfig.current.profileStudentFundingOptions;
+
   @override
   void initState() {
     super.initState();
-    if (widget.isEditMode) {
-      _editHydrating = true;
-      _bootstrapEditMode();
+    _applyMarketDefaults();
+    if (MarketConfig.current.profileExpandOptionalOnSignup) {
+      _showAddMore = true;
     }
   }
 
-  Future<void> _bootstrapEditMode() async {
-    final profile =
-        widget.initialProfile ?? await ProfileStorageService.load();
-
-    if (!mounted) return;
-
-    if (profile != null) {
-      _editBaselineProfile = Map<String, dynamic>.from(profile);
-      _hydrateFromProfile(profile);
-    }
-
-    setState(() => _editHydrating = false);
-  }
-
-  void _hydrateFromProfile(Map<String, dynamic> profile) {
-    _isLoginMode = false;
-    _signUpStep = 2;
-
-    _emailController.text = ProfileData.text(profile['email']);
-    _nameController.text = ProfileData.text(profile['full_name']);
-    _locationController.text = ProfileData.text(profile['detected_city']);
-    _nativePlaceController.text = ProfileData.text(profile['native_place']);
-
-    final mother = ProfileData.text(profile['mother_tongue']);
-    if (mother.isNotEmpty && _languageOptions.contains(mother)) {
-      _selectedMotherTongue = mother;
-    }
-
-    final food = ProfileData.text(profile['food_preference']);
-    if (food.isNotEmpty && _foodOptions.contains(food)) {
-      _selectedFoodPref = food;
-    }
-
+  void _applyMarketDefaults() {
+    final market = MarketConfig.current;
+    _selectedMotherTongue = market.defaultMotherTongue;
+    _selectedFoodPref = market.defaultFoodPreference;
     _selectedLanguages
       ..clear()
-      ..addAll(ProfileData.languageList(profile['spoken_languages']));
-    if (_selectedLanguages.isEmpty) {
-      _selectedLanguages.add(_languageOptions.first);
+      ..add(market.defaultMotherTongue);
+    _languageNativeFlags
+      ..clear()
+      ..[market.defaultMotherTongue] = true;
+    _selectedOccupantType = market.defaultOccupantType;
+    if (market.profileUseAreaPicker) {
+      _selectedAreaKey = market.defaultAreaKey;
+      _locationController.text = market.defaultAreaDisplayName;
     }
-
-    final occupant = ProfileData.text(profile['occupant_type']);
-    if (occupant.isNotEmpty && _occupantOptions.contains(occupant)) {
-      _selectedOccupantType = occupant;
-    }
-
-    final genderPref = ProfileData.text(profile['gender_preference']);
-    if (genderPref.isNotEmpty && _genderPrefOptions.contains(genderPref)) {
-      _selectedGenderPref = genderPref;
-    }
-
-    final student = ProfileData.text(profile['student_type']);
-    if (student.isNotEmpty && _studentFundingOptions.contains(student)) {
-      _selectedStudentType = student;
-    }
-
-    final adults = profile['family_adults'];
-    if (adults is int) _familyAdults = adults;
-    final children = profile['family_children'];
-    if (children is int) _familyChildren = children;
-
-    final rawAges = profile['children_ages'];
-    if (rawAges is List) {
-      _childrenAges = rawAges.map((e) => e.toString()).toList();
-    } else {
-      final legacyAge = ProfileData.text(profile['children_age_range']);
-      _childrenAges = List.generate(
-        _familyChildren,
-        (_) => legacyAge.isNotEmpty ? legacyAge : _childrenAgeOptions.first,
-      );
-    }
-
-    final group = profile['group_size'];
-    if (group is int) _groupSize = group;
-
-    _smokingOk = profile['smoking_ok'] == true;
-    _drinkingOk = profile['drinking_ok'] == true;
-    final schedule = ProfileData.text(profile['schedule_type']);
-    if (schedule.isNotEmpty) _scheduleType = schedule;
-
-    final budgetMin = profile['budget_min'];
-    if (budgetMin != null) _budgetMinController.text = budgetMin.toString();
-    final budgetMax = profile['budget_max'];
-    if (budgetMax != null) _budgetMaxController.text = budgetMax.toString();
-
-    final native = ProfileData.text(profile['native_place']);
-    final foodPref = ProfileData.text(profile['food_preference']);
-    _showAddMore = native.isNotEmpty || foodPref.isNotEmpty ||
-        occupant.isNotEmpty || genderPref.isNotEmpty;
   }
 
   Map<String, dynamic> _buildProfilePayload() {
-    final baseline = widget.isEditMode
-        ? (_editBaselineProfile ?? <String, dynamic>{})
-        : <String, dynamic>{
-            'linkedin_connected': false,
-            'facebook_connected': false,
-            'social_trust_score': 0,
-            'is_aadhaar_verified': false,
-            'passkey_public_key': null,
-            'identity_trust_tier': 'Casual_Browser',
-          };
+    const baseline = <String, dynamic>{
+      'linkedin_connected': false,
+      'facebook_connected': false,
+      'social_trust_score': 0,
+      'is_aadhaar_verified': false,
+      'passkey_public_key': null,
+      'identity_trust_tier': 'Casual_Browser',
+    };
 
-    return {
+    final payload = {
       ...baseline,
       'email': _emailController.text.trim(),
       'full_name': _nameController.text.trim(),
-      'detected_city': _locationController.text.trim(),
-      'food_preference': _selectedFoodPref,
+      'detected_city': _resolvedCity(),
       'native_place': _nativePlaceController.text.trim(),
-      'mother_tongue': _selectedMotherTongue,
-      'spoken_languages': List<String>.from(_selectedLanguages),
+      ..._commutePayloadFields(),
+      ..._spokenLanguageSessionFields(),
+      ...ProfileSeekerPreferences.persistFields(
+        preferredArrangement: preferredArrangement,
+        preferredLayout: _resolvedPreferredLayout,
+      ),
       if (_selectedOccupantType != null) 'occupant_type': _selectedOccupantType,
       if (_selectedGenderPref != null) 'gender_preference': _selectedGenderPref,
       if (_selectedStudentType != null) 'student_type': _selectedStudentType,
@@ -206,45 +150,173 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_selectedOccupantType == 'Working Professionals' ||
           _selectedOccupantType == 'Students')
         'group_size': _groupSize,
-      'smoking_ok': _smokingOk,
-      'drinking_ok': _drinkingOk,
-      if (_scheduleType != null) 'schedule_type': _scheduleType,
+      if (ProfileSeekerPreferences.isSharedRoom(preferredArrangement)) ...{
+        'food_preference':
+            ProfileSeekerPreferences.sharedFoodToBackend(_selectedFoodPref),
+        'smoking_ok': _smokingOk,
+        'drinking_ok': _drinkingOk,
+        if (_scheduleType != null) 'schedule_type': _scheduleType,
+        'kitchen_usage_timing': _kitchenUsageTiming,
+      } else ...{
+        'smoking_ok': false,
+        'drinking_ok': false,
+      },
       if (_budgetMinController.text.trim().isNotEmpty)
         'budget_min': int.tryParse(_budgetMinController.text.trim()),
       if (_budgetMaxController.text.trim().isNotEmpty)
         'budget_max': int.tryParse(_budgetMaxController.text.trim()),
-      'trust_stage': 1,
+      'trust_stage': ProfileData.isMatchingReady({
+        'full_name': _nameController.text.trim(),
+        'detected_city': _resolvedCity(),
+        'mother_tongue': _selectedMotherTongue,
+        'spoken_languages': _selectedLanguages,
+      })
+          ? 1
+          : 0,
       'identity_trust_tier': 'Casual_Browser',
     };
+
+    if (!ProfileSeekerPreferences.isSharedRoom(preferredArrangement)) {
+      payload
+        ..remove('kitchen_usage_timing')
+        ..remove('food_preference')
+        ..remove('schedule_type')
+        ..remove('preferred_spoken_languages')
+        ..remove('preferred_spoken_languages_csv');
+    }
+    return payload;
   }
 
-  bool _validateProfileFields() {
-    if (_emailController.text.trim().isEmpty) {
-      _showNotification('Please enter your email.');
-      return false;
+  String _resolvedCity() {
+    if (MarketConfig.current.profileUseAreaPicker && _selectedAreaKey != null) {
+      for (final (key, label) in MarketConfig.current.areaOptions) {
+        if (key == _selectedAreaKey) return label;
+      }
     }
-    if (_nameController.text.trim().isEmpty ||
-        _locationController.text.trim().isEmpty) {
-      _showNotification('Please fill in your name and city.');
+    return _locationController.text.trim();
+  }
+
+  String get _resolvedPreferredLayout => ProfileSeekerPreferences.resolveLayout(
+        preferredArrangement,
+        preferredLayout,
+      );
+
+  bool _validateProfileFields() {
+    if (_nameController.text.trim().isEmpty || _resolvedCity().isEmpty) {
+      _showNotification('Please fill in your name and area.');
       return false;
     }
     if (_selectedLanguages.isEmpty) {
       _showNotification('Select at least one language.');
       return false;
     }
+    if (!_foodOptions.contains(_selectedFoodPref)) {
+      _showNotification('Select your food preference.');
+      return false;
+    }
     return true;
   }
 
-  Future<void> _saveProfileUpdate() async {
-    if (!_validateProfileFields()) return;
+  Map<String, dynamic> _commutePayloadFields() {
+    final method =
+        ProfileCommuteOptions.methodToBackend[_commuteMethod] ?? _commuteMethod;
+    final destination = _commuteDestinationController.text.trim();
 
-    final payload = _buildProfilePayload();
-    AuthScreen.currentUserSession = payload;
-    await ProfileStorageService.save(payload);
+    return {
+      'commute_method': method,
+      if (destination.isNotEmpty) ...{
+        'commute_destination': destination,
+        'primary_commute_destination': destination,
+      },
+      if (_destinationLatitude != null)
+        'destination_latitude': _destinationLatitude,
+      if (_destinationLongitude != null)
+        'destination_longitude': _destinationLongitude,
+    };
+  }
 
-    if (!mounted) return;
-    _showNotification('Profile updated.');
-    context.go('/profile');
+  Future<void> _resolveCommuteDestinationCoordinates() async {
+    if (_fetchingCommuteDestination) return;
+    setState(() => _fetchingCommuteDestination = true);
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showNotification(
+            'Turn on location services to set a commute destination.');
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _showNotification('Location permission is required.');
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (!mounted) return;
+
+      final parts = <String>[];
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        for (final part in [
+          p.street,
+          p.locality,
+          p.subAdministrativeArea,
+          p.administrativeArea,
+        ]) {
+          if (part != null &&
+              part.trim().isNotEmpty &&
+              !parts.contains(part.trim())) {
+            parts.add(part.trim());
+          }
+        }
+      }
+
+      setState(() {
+        _destinationLatitude = position.latitude;
+        _destinationLongitude = position.longitude;
+        _commuteDestinationController.text = parts.isNotEmpty
+            ? parts.join(', ')
+            : '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+      });
+    } catch (_) {
+      _showNotification('Could not resolve commute destination. Try again.');
+    } finally {
+      if (mounted) setState(() => _fetchingCommuteDestination = false);
+    }
+  }
+
+  Future<void> _geocodeCommuteDestination() async {
+    final query = _commuteDestinationController.text.trim();
+    if (query.isEmpty) return;
+
+    try {
+      final results = await locationFromAddress(query);
+      if (!mounted || results.isEmpty) return;
+      final loc = results.first;
+      setState(() {
+        _destinationLatitude = loc.latitude;
+        _destinationLongitude = loc.longitude;
+      });
+    } catch (_) {
+      _showNotification('Could not find coordinates for that address.');
+    }
   }
 
   @override
@@ -256,6 +328,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _locationController.dispose();
     _budgetMinController.dispose();
     _budgetMaxController.dispose();
+    _commuteDestinationController.dispose();
     super.dispose();
   }
 
@@ -273,7 +346,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _autoDetectWebLocation() async {
-    if (_detectingLocation) return;
+    if (_detectingLocation || MarketConfig.current.profileUseAreaPicker) return;
     setState(() => _detectingLocation = true);
 
     try {
@@ -284,21 +357,23 @@ class _AuthScreenState extends State<AuthScreen> {
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         if (!mounted) return;
-        _showNotification('Location permission is required. You can type it manually.');
+        _showNotification(
+          'Location permission denied. Pick your area from the list instead.',
+        );
         return;
       }
 
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 12),
+          timeLimit: Duration(seconds: 10),
         ),
-      );
+      ).timeout(const Duration(seconds: 12));
 
       final placemarks = await placemarkFromCoordinates(
         position.latitude,
         position.longitude,
-      );
+      ).timeout(const Duration(seconds: 8));
 
       if (!mounted) return;
 
@@ -324,55 +399,152 @@ class _AuthScreenState extends State<AuthScreen> {
             : '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
       });
       _showNotification('Location detected. You can edit it anytime.');
+    } on TimeoutException {
+      if (!mounted) return;
+      _showNotification(
+        'Location detection timed out. Pick your area from the list instead.',
+      );
     } catch (_) {
       if (!mounted) return;
-      _showNotification('Could not detect location. Please type it manually.');
+      _showNotification(
+        'Could not detect location. Pick your area from the list instead.',
+      );
     } finally {
       if (mounted) setState(() => _detectingLocation = false);
     }
   }
 
-  Future<void> _executeDemoSignIn() async {
-    final session = {
-      'email': _emailController.text.isNotEmpty
-          ? _emailController.text
-          : 'demo@circlekey.com',
-      'full_name': 'Srinivas Kumar',
-      'detected_city': 'Hyderabad, Telangana',
-      'food_preference': 'Pure Veg',
-      'native_place': 'Vijayawada',
-      'mother_tongue': 'Telugu',
-      'spoken_languages': ['Telugu', 'English'],
-      'occupant_type': 'Family',
-      'family_adults': 2,
-      'family_children': 1,
-      'children_ages': ['Below 5'],
-      'trust_stage': 1,
-      'identity_trust_tier': 'Casual_Browser',
-      'is_aadhaar_verified': false,
-      'linkedin_verified': false,
-    };
-    AuthScreen.currentUserSession = session;
-    await ProfileStorageService.save(session);
-    if (!mounted) return;
-    _showNotification('Signed in successfully.');
-    if (context.canPop()) {
-      context.pop(true);
-    } else {
-      context.go('/');
+  Future<void> _executeSignIn() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      _showNotification('Enter your email and password.');
+      return;
+    }
+
+    setState(() => _authLoading = true);
+    try {
+      await AuthService.signInWithEmail(email: email, password: password);
+      if (!mounted) return;
+      _showNotification('Signed in successfully.');
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        await navigateAfterAuth(context);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showNotification(AuthService.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _authLoading = false);
+    }
+  }
+
+  Future<void> _enterAsDemoLandlord() async {
+    if (_authLoading) return;
+    setState(() => _authLoading = true);
+    try {
+      await DemoAuthService.enterAsDemoLandlord();
+      if (!mounted) return;
+      if (context.canPop()) {
+        context.pop(true);
+      }
+      if (!mounted) return;
+      context.go('/listing/${DublinMockData.listingId}/manage');
+    } catch (e) {
+      if (!mounted) return;
+      _showNotification('Could not enter demo landlord mode: $e');
+    } finally {
+      if (mounted) setState(() => _authLoading = false);
+    }
+  }
+
+  Future<void> _enterAsDemoSeeker() async {
+    if (_authLoading) return;
+    setState(() => _authLoading = true);
+    try {
+      await DemoAuthService.enterAsDemoSeeker();
+      if (!mounted) return;
+      if (context.canPop()) {
+        context.pop(true);
+      }
+      if (!mounted) return;
+      await navigateAfterAuth(context);
+    } catch (e) {
+      if (!mounted) return;
+      _showNotification('Could not enter demo seeker mode: $e');
+    } finally {
+      if (mounted) setState(() => _authLoading = false);
+    }
+  }
+
+  Future<void> _executeSignUpAccountStep() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      _showNotification('Enter your email and password to continue.');
+      return;
+    }
+
+    setState(() => _authLoading = true);
+    try {
+      final hasSession = await AuthService.signUpWithEmail(
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+      if (hasSession) {
+        setState(() => _signUpStep = 2);
+        if (!MarketConfig.current.profileUseAreaPicker) {
+          _autoDetectWebLocation();
+        }
+      } else {
+        _showNotification(
+          'Account created. Check your email to confirm, then sign in.',
+        );
+        setState(() => _isLoginMode = true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showNotification(AuthService.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _authLoading = false);
     }
   }
 
   Future<void> _executeFinalSignUpRegistration() async {
     if (!_validateProfileFields()) return;
 
-    final userProfilePayload = _buildProfilePayload();
-    AuthScreen.currentUserSession = userProfilePayload;
-    await ProfileStorageService.save(userProfilePayload);
+    setState(() => _authLoading = true);
+    try {
+      if (!AuthService.isAuthenticated) {
+        final hasSession = await AuthService.signUpWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (!hasSession) {
+          if (!mounted) return;
+          _showNotification(
+            'Confirm your email, then sign in to finish your profile.',
+          );
+          setState(() => _isLoginMode = true);
+          return;
+        }
+      }
 
-    if (!mounted) return;
-    _showNotification('Profile created. Welcome to CircleKey.');
-    context.go('/profile');
+      await _geocodeCommuteDestination();
+      final userProfilePayload = _buildProfilePayload();
+      await AuthService.saveProfile(userProfilePayload);
+
+      if (!mounted) return;
+      _showNotification('Profile created. Welcome to TrueCircle.');
+      context.go('/profile');
+    } catch (e) {
+      if (!mounted) return;
+      _showNotification(AuthService.friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _authLoading = false);
+    }
   }
 
   void _showNotification(String message) {
@@ -386,14 +558,15 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
           backgroundColor: _AuthPalette.primary,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
   }
 
   @override
   Widget build(BuildContext context) {
-    final canGoBack = Navigator.of(context).canPop() && !widget.isEditMode;
+    final canGoBack = Navigator.of(context).canPop();
 
     return Scaffold(
       backgroundColor: _AuthPalette.canvas,
@@ -426,7 +599,8 @@ class _AuthScreenState extends State<AuthScreen> {
                             padding: const EdgeInsets.only(bottom: 12),
                             child: TextButton.icon(
                               onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                              icon: const Icon(Icons.arrow_back_rounded,
+                                  size: 18),
                               label: const Text('Back to listings'),
                               style: TextButton.styleFrom(
                                 foregroundColor: _AuthPalette.textSecondary,
@@ -438,39 +612,28 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                         DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius:
-                            BorderRadius.circular(_AuthPalette.radius2xl),
-                        boxShadow: _AuthPalette.cardShadow,
-                      ),
-                      child: Card(
-                        elevation: 0,
-                        margin: EdgeInsets.zero,
-                        color: _AuthPalette.surface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(_AuthPalette.radius2xl),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(cardPad),
-                          child: widget.isEditMode
-                              ? (_editHydrating
-                                  ? const Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 48),
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          color: _AuthPalette.primary,
-                                        ),
-                                      ),
-                                    )
-                                  : _buildEditProfileLayout())
-                              : (_isLoginMode
+                          decoration: BoxDecoration(
+                            borderRadius:
+                                BorderRadius.circular(_AuthPalette.radius2xl),
+                            boxShadow: _AuthPalette.cardShadow,
+                          ),
+                          child: Card(
+                            elevation: 0,
+                            margin: EdgeInsets.zero,
+                            color: _AuthPalette.surface,
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(_AuthPalette.radius2xl),
+                            ),
+                            child: Padding(
+                              padding: EdgeInsets.all(cardPad),
+                              child: _isLoginMode
                                   ? _buildLoginLayout()
-                                  : _buildSignUpWizardLayout()),
+                                  : _buildSignUpWizardLayout(),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+                      ],
                     ),
                   ),
                 ),
@@ -486,9 +649,9 @@ class _AuthScreenState extends State<AuthScreen> {
     return _spacedColumn(
       gap: _AuthLayout.spaceY4,
       children: [
-        const CircleKeyLogo(size: 56),
+        const TrueCircleLogo(height: 96, width: null),
         const Text(
-          'Sign in to CircleKey',
+          'Sign in to TrueCircle',
           textAlign: TextAlign.center,
           style: _AuthPalette.pageTitle,
         ),
@@ -504,12 +667,13 @@ class _AuthScreenState extends State<AuthScreen> {
           hint: 'Enter your password',
           isObscured: true,
           textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _executeDemoSignIn(),
+          onSubmitted: (_) => _executeSignIn(),
         ),
         _buildPrimaryButton(
-          label: 'Sign in',
-          onPressed: _executeDemoSignIn,
+          label: _authLoading ? 'Signing in…' : 'Sign in',
+          onPressed: _authLoading ? null : _executeSignIn,
         ),
+        if (DemoAuthService.isEnabled) _buildDemoBypassCard(),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -547,15 +711,75 @@ class _AuthScreenState extends State<AuthScreen> {
         _ => '',
       };
 
+  Map<String, dynamic> _spokenLanguageSessionFields() {
+    final entries = [
+      for (final language in _selectedLanguages)
+        SpokenLanguageEntry(
+          language: language,
+          isNative: language == _selectedMotherTongue ||
+              (_languageNativeFlags[language] ?? false),
+        ),
+    ];
+
+    return SpokenLanguageProfileCodec.toSessionFields(
+      entries: entries,
+      motherTongue: _selectedMotherTongue,
+    );
+  }
+
+  void _syncMotherTongueInLanguages(String previousMotherTongue) {
+    if (!_selectedLanguages.contains(_selectedMotherTongue)) {
+      _selectedLanguages.add(_selectedMotherTongue);
+    }
+    if (previousMotherTongue != _selectedMotherTongue &&
+        _selectedLanguages.contains(previousMotherTongue)) {
+      _selectedLanguages.remove(previousMotherTongue);
+    }
+    if (previousMotherTongue != _selectedMotherTongue) {
+      _languageNativeFlags.remove(previousMotherTongue);
+    }
+    _languageNativeFlags[_selectedMotherTongue] = true;
+  }
+
+  void _onMotherTongueChanged(String value) {
+    setState(() {
+      final previous = _selectedMotherTongue;
+      _selectedMotherTongue = value;
+      _syncMotherTongueInLanguages(previous);
+    });
+  }
+
+  void _clearSharedRoomFilters() {
+    _kitchenUsageTiming = ListingData.kitchenUsageTimingOptions.first;
+    _smokingOk = false;
+    _drinkingOk = false;
+    _scheduleType = null;
+  }
+
+  void _selectKitchenUsageTiming(String timing) {
+    setState(() => _kitchenUsageTiming = timing);
+  }
+
   void _toggleLanguage(String lang) {
+    if (lang == _selectedMotherTongue) return;
     setState(() {
       if (_selectedLanguages.contains(lang)) {
         if (_selectedLanguages.length > 1) {
           _selectedLanguages.remove(lang);
+          _languageNativeFlags.remove(lang);
         }
       } else {
         _selectedLanguages.add(lang);
       }
+    });
+  }
+
+  void _toggleLanguageNative(String lang) {
+    if (lang == _selectedMotherTongue || !_selectedLanguages.contains(lang)) {
+      return;
+    }
+    setState(() {
+      _languageNativeFlags[lang] = !(_languageNativeFlags[lang] ?? false);
     });
   }
 
@@ -572,9 +796,9 @@ class _AuthScreenState extends State<AuthScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: _AuthPalette.primary.withValues(alpha: 0.1),
+                color: _AuthPalette.surfaceMuted,
                 borderRadius: BorderRadius.circular(_AuthPalette.radiusXl),
-                boxShadow: _AuthPalette.shadowSm,
+                border: Border.all(color: _AuthPalette.borderSoft),
               ),
               child: Text(
                 'Step $_signUpStep of ${_AuthLayout.signUpTotalSteps}',
@@ -703,7 +927,8 @@ class _AuthScreenState extends State<AuthScreen> {
           border: Border.all(
             color: _AuthPalette.accent.withValues(alpha: 0.18),
           ),
-          boxShadow: prominent ? _AuthPalette.ctaPanelShadow : _AuthPalette.shadowSm,
+          boxShadow:
+              prominent ? _AuthPalette.ctaPanelShadow : _AuthPalette.shadowSm,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -742,7 +967,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 Expanded(
                   child: _buildPrimaryButton(
                     label: primaryLabel,
-                    backgroundColor: primaryColor ?? _AuthPalette.primary,
+                    backgroundColor: primaryColor ?? _AuthPalette.accent,
                     onPressed: onPrimary,
                     height: height,
                     prominent: prominent,
@@ -781,17 +1006,10 @@ class _AuthScreenState extends State<AuthScreen> {
           ],
         ),
         _buildPrimaryButton(
-          label: 'Continue',
-          onPressed: () {
-            if (_emailController.text.isEmpty ||
-                _passwordController.text.isEmpty) {
-              _showNotification('Enter your email and password to continue.');
-              return;
-            }
-            setState(() => _signUpStep = 2);
-            _autoDetectWebLocation();
-          },
+          label: _authLoading ? 'Creating account…' : 'Continue',
+          onPressed: _authLoading ? null : _executeSignUpAccountStep,
         ),
+        if (DemoAuthService.isEnabled) _buildDemoBypassCard(),
         Center(
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -799,7 +1017,8 @@ class _AuthScreenState extends State<AuthScreen> {
               onTap: () => setState(() => _isLoginMode = true),
               child: const Text(
                 'Already have an account? Sign in',
-                style: TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
+                style:
+                    TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
               ),
             ),
           ),
@@ -808,23 +1027,69 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildEditProfileLayout() {
-    return _spacedColumn(
-      gap: _AuthLayout.spaceY6,
-      children: [
-        _buildStepHeading(
-          title: 'Edit your profile',
-          subtitle: 'Update your details for better matching.',
-        ),
-        ..._buildProfileFormSections(includeEmail: true),
-        _buildSignUpCta(
-          onBack: () => context.go('/profile'),
-          primaryLabel: 'Save changes',
-          trustMessage: 'Used only for matching • never shared publicly',
-          prominent: true,
-          onPrimary: _saveProfileUpdate,
-        ),
-      ],
+  Widget _buildDemoBypassCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _AuthPalette.demoBannerBackground,
+        borderRadius: BorderRadius.circular(_AuthPalette.radius2xl),
+        border: Border.all(color: _AuthPalette.demoBannerBorder),
+      ),
+      child: _spacedColumn(
+        gap: 10,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded,
+                  color: _AuthPalette.demoBannerText),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Demo bypass enabled',
+                  style: TextStyle(
+                    color: _AuthPalette.demoBannerText,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Text(
+            'Use one-click demo sessions for staging validation without Supabase auth.',
+            style: TextStyle(
+              color: _AuthPalette.demoBannerText,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPrimaryButton(
+                  label: 'Enter as Demo Landlord',
+                  onPressed: _authLoading ? null : _enterAsDemoLandlord,
+                  backgroundColor: _AuthPalette.demoLandlord,
+                  height: 46,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPrimaryButton(
+                  label: 'Enter as Demo Seeker',
+                  onPressed: _authLoading ? null : _enterAsDemoSeeker,
+                  backgroundColor: _AuthPalette.demoSeeker,
+                  height: 46,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -845,55 +1110,128 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       _buildFieldGroupCard(
         title: 'Essentials',
-        subtitle: 'Required for matching.',
+        subtitle: 'Required for tailored matching.',
         fields: [
-          _buildInput(_nameController, label: 'Full name', hint: 'As on your ID'),
-          _buildInput(
-            _locationController,
-            label: 'Current city',
-            hint: 'e.g. Hyderabad, Telangana',
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 4),
-            child: Row(
-              children: [
-                _detectingLocation
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.my_location_outlined,
-                        size: 16, color: _AuthPalette.primary),
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: _detectingLocation ? null : _autoDetectWebLocation,
-                  child: Text(
-                    _detectingLocation
-                        ? 'Detecting your location…'
-                        : 'Auto-detect my location',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _AuthPalette.primary,
+          _buildInput(_nameController,
+              label: 'Full name', hint: 'As on your ID'),
+          if (MarketConfig.current.profileUseAreaPicker)
+            ShadcnSelect(
+              label: MarketConfig.current.profileCityLabel,
+              value: _selectedAreaKey ?? MarketConfig.current.defaultAreaKey,
+              options:
+                  MarketConfig.current.areaOptions.map((e) => e.$2).toList(),
+              onChanged: (label) {
+                setState(() {
+                  for (final (key, areaLabel)
+                      in MarketConfig.current.areaOptions) {
+                    if (areaLabel == label) {
+                      _selectedAreaKey = key;
+                      _locationController.text = areaLabel;
+                      break;
+                    }
+                  }
+                });
+              },
+            )
+          else ...[
+            _buildInput(
+              _locationController,
+              label: MarketConfig.current.profileCityLabel,
+              hint: 'e.g. ${MarketConfig.current.defaultProfileLocation}',
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: Row(
+                children: [
+                  _detectingLocation
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location_outlined,
+                          size: 16, color: _AuthPalette.primary),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: _detectingLocation ? null : _autoDetectWebLocation,
+                    child: Text(
+                      _detectingLocation
+                          ? 'Detecting your location…'
+                          : 'Auto-detect my location',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _AuthPalette.primary,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+          ],
+          ShadcnSelect(
+            label: 'Food preference',
+            value: _selectedFoodPref,
+            options: _foodOptions,
+            onChanged: (val) => setState(() => _selectedFoodPref = val),
           ),
           ShadcnSelect(
             label: 'Mother tongue',
             value: _selectedMotherTongue,
             options: _languageOptions,
-            onChanged: (val) => setState(() => _selectedMotherTongue = val),
+            onChanged: _onMotherTongueChanged,
           ),
+          ShadcnSelect(
+            label: 'Commute Method',
+            value: _commuteMethod,
+            options: ProfileCommuteOptions.methodLabels,
+            onChanged: (val) => setState(() => _commuteMethod = val),
+          ),
+          _buildInput(
+            _commuteDestinationController,
+            label: 'Commute Destination',
+            hint: 'e.g. Trinity College, Dublin 2',
+            onChanged: (_) => setState(() {
+              _destinationLatitude = null;
+              _destinationLongitude = null;
+            }),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _fetchingCommuteDestination
+                  ? null
+                  : _resolveCommuteDestinationCoordinates,
+              icon: _fetchingCommuteDestination
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.place_outlined, size: 18),
+              label: Text(
+                _fetchingCommuteDestination
+                    ? 'Resolving…'
+                    : 'Use current location as destination',
+              ),
+            ),
+          ),
+          if (_destinationLatitude != null && _destinationLongitude != null)
+            Text(
+              'Coordinates: ${_destinationLatitude!.toStringAsFixed(5)}, '
+              '${_destinationLongitude!.toStringAsFixed(5)}',
+              style: const TextStyle(fontSize: 12, color: _AuthPalette.primary),
+            ),
           _buildLabeledField(
             label: 'Other languages',
             child: LanguagePillChips(
-              options: _languageOptions,
-              selected: _selectedLanguages,
+              options: _otherLanguageOptions,
+              selected: _selectedLanguages
+                  .where((l) => l != _selectedMotherTongue)
+                  .toList(),
               onToggle: _toggleLanguage,
+              nativeByLanguage: _languageNativeFlags,
+              onToggleNative: _toggleLanguageNative,
               spacing: 8,
               runSpacing: 8,
             ),
@@ -925,39 +1263,45 @@ class _AuthScreenState extends State<AuthScreen> {
           fields: [
             _buildInput(
               _nativePlaceController,
-              label: 'Native place',
-              hint: 'e.g. Vijayawada',
-            ),
-            ShadcnSelect(
-              label: 'Food preference',
-              value: _selectedFoodPref,
-              options: _foodOptions,
-              onChanged: (val) => setState(() => _selectedFoodPref = val),
+              label: 'Native place (India)',
+              hint: MarketConfig.current.profileNativePlaceHint,
             ),
           ],
         ),
         _buildFieldGroupCard(
           title: 'Budget range',
-          subtitle: 'Monthly rent or purchase budget (INR).',
+          subtitle: MarketConfig.current.profileBudgetSubtitle,
           fields: [
             _buildInput(
               _budgetMinController,
-              label: 'Minimum budget',
-              hint: 'e.g. 8000',
+              label: 'Minimum budget (${MarketConfig.current.currencySymbol})',
+              hint: MarketConfig.current.profileBudgetMinHint,
               keyboardType: TextInputType.number,
             ),
             _buildInput(
               _budgetMaxController,
-              label: 'Maximum budget',
-              hint: 'e.g. 25000',
+              label: 'Maximum budget (${MarketConfig.current.currencySymbol})',
+              hint: MarketConfig.current.profileBudgetMaxHint,
               keyboardType: TextInputType.number,
             ),
           ],
         ),
         _buildFieldGroupCard(
           title: 'I am looking for',
-          subtitle: 'Type of accommodation you need.',
+          subtitle: 'Entire place or a room in a shared flat — pick one.',
           fields: [
+            ProfileLookingForFields(
+              preferredArrangement: preferredArrangement,
+              preferredLayout: preferredLayout,
+              onArrangementChanged: (val) => setState(() {
+                preferredArrangement = val;
+                preferredLayout = null;
+                if (ProfileSeekerPreferences.isEntirePlace(val)) {
+                  _clearSharedRoomFilters();
+                }
+              }),
+              onLayoutChanged: (val) => setState(() => preferredLayout = val),
+            ),
             ShadcnSelect(
               label: 'Occupant type',
               value: _selectedOccupantType ?? _occupantOptions.first,
@@ -1031,8 +1375,9 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
           ],
         ),
-        if (_selectedOccupantType == 'Working Professionals' ||
-            _selectedOccupantType == 'Students')
+        if (ProfileSeekerPreferences.isSharedRoom(preferredArrangement) &&
+            (_selectedOccupantType == 'Working Professionals' ||
+                _selectedOccupantType == 'Students'))
           _buildFieldGroupCard(
             title: 'Shared living preferences',
             subtitle: 'For shared/roommate matching.',
@@ -1055,6 +1400,16 @@ class _AuthScreenState extends State<AuthScreen> {
                   _scheduleType = val == 'Flexible' ? null : val;
                 }),
               ),
+              _buildLabeledField(
+                label: 'Preferred kitchen usage times',
+                child: LanguagePillChips(
+                  options: ListingData.kitchenUsageTimingOptions,
+                  selected: [_kitchenUsageTiming],
+                  onToggle: _selectKitchenUsageTiming,
+                  spacing: 8,
+                  runSpacing: 8,
+                ),
+              ),
             ],
           ),
       ],
@@ -1067,7 +1422,9 @@ class _AuthScreenState extends State<AuthScreen> {
       children: [
         _buildStepHeading(
           title: 'Personalize your profile',
-          subtitle: 'Name, city, and languages.',
+          subtitle: MarketConfig.current.id == MarketId.dublin
+              ? 'Tell us where in Dublin you want to live and how you eat — we rank homes for you.'
+              : 'Name, city, and languages.',
         ),
         ..._buildProfileFormSections(includeEmail: false),
         _buildSignUpCta(
@@ -1139,7 +1496,7 @@ class _AuthScreenState extends State<AuthScreen> {
             Switch(
               value: value,
               onChanged: onChanged,
-              activeColor: _AuthPalette.primary,
+              activeThumbColor: _AuthPalette.primary,
             ),
           ],
         ),
@@ -1203,6 +1560,7 @@ class _AuthScreenState extends State<AuthScreen> {
     TextInputType? keyboardType,
     TextInputAction? textInputAction,
     ValueChanged<String>? onSubmitted,
+    ValueChanged<String>? onChanged,
   }) {
     return _buildLabeledField(
       label: label,
@@ -1212,30 +1570,39 @@ class _AuthScreenState extends State<AuthScreen> {
         isObscured: isObscured,
         suffix: suffix,
         keyboardType: keyboardType ??
-            (label == 'Email' ? TextInputType.emailAddress : TextInputType.text),
+            (label == 'Email'
+                ? TextInputType.emailAddress
+                : TextInputType.text),
         textInputAction: textInputAction,
         onSubmitted: onSubmitted,
+        onChanged: onChanged,
       ),
     );
   }
 
   Widget _buildPrimaryButton({
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     Color backgroundColor = _AuthPalette.accent,
     double height = _AuthLayout.buttonHeight,
     bool prominent = false,
   }) {
     Color resolvePressed(Set<WidgetState> states) {
+      final isSuccess = backgroundColor == _AuthPalette.success;
+      final isAccent = backgroundColor == _AuthPalette.accent;
+      final isPrimary = backgroundColor == _AuthPalette.primary;
+
       if (states.contains(WidgetState.pressed)) {
-        return backgroundColor == _AuthPalette.success
-            ? const Color(0xFF36A420)
-            : _AuthPalette.accentActive;
+        if (isSuccess) return const Color(0xFF36A420);
+        if (isAccent) return _AuthPalette.accentActive;
+        if (isPrimary) return _AuthPalette.primaryActive;
+        return backgroundColor;
       }
       if (states.contains(WidgetState.hovered)) {
-        return backgroundColor == _AuthPalette.success
-            ? const Color(0xFF3BB82E)
-            : _AuthPalette.accentHover;
+        if (isSuccess) return const Color(0xFF3BB82E);
+        if (isAccent) return _AuthPalette.accentHover;
+        if (isPrimary) return _AuthPalette.primaryHover;
+        return backgroundColor;
       }
       return backgroundColor;
     }
@@ -1303,21 +1670,26 @@ abstract final class _AuthLayout {
 }
 
 abstract final class _AuthPalette {
-  static const primary = Color(0xFF0EA5E9);
-  static const primaryHover = Color(0xFF0284C7);
-  static const primaryActive = Color(0xFF0369A1);
-  static const accent = Color(0xFFF97316);
-  static const accentHover = Color(0xFFEA580C);
-  static const accentActive = Color(0xFFC2410C);
-  static const success = Color(0xFF42B72A);
+  static const primary = Color(0xFF2B4C7E);
+  static const primaryHover = Color(0xFF233F6A);
+  static const primaryActive = Color(0xFF1C3458);
+  static const accent = AppColors.accent;
+  static const accentHover = AppColors.accentDark;
+  static const accentActive = Color(0xFFC9474B);
+  static const success = Color(0xFF15803D);
+  static const demoLandlord = Color(0xFFF06449);
+  static const demoSeeker = Color(0xFF2563EB);
+  static const demoBannerBackground = Color(0xFFFFF7ED);
+  static const demoBannerBorder = Color(0xFFFAC9A8);
+  static const demoBannerText = Color(0xFF7C2D12);
 
-  static const canvas = Color(0xFFF3F4F6);
+  static const canvas = Color(0xFFF7F7F7);
   static const surface = Color(0xFFFFFFFF);
-  static const surfaceMuted = Color(0xFFF9FAFB);
+  static const surfaceMuted = Color(0xFFF7F7F7);
   static const border = Color(0xFFE5E7EB);
   static const borderSoft = Color(0xFFE5E7EB);
-  static const textPrimary = Color(0xFF1C1E21);
-  static const textSecondary = Color(0xFF606770);
+  static const textPrimary = Color(0xFF111111);
+  static const textSecondary = Color(0xFF6B7280);
   static const gray400 = Color(0xFF9CA3AF);
   static const gray500 = Color(0xFF6B7280);
   static const inputSurface = Color(0xFFFFFFFF);
@@ -1411,6 +1783,7 @@ class _PremiumAuthField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.textInputAction,
     this.onSubmitted,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -1420,6 +1793,7 @@ class _PremiumAuthField extends StatefulWidget {
   final TextInputType keyboardType;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
+  final ValueChanged<String>? onChanged;
 
   @override
   State<_PremiumAuthField> createState() => _PremiumAuthFieldState();
@@ -1461,6 +1835,7 @@ class _PremiumAuthFieldState extends State<_PremiumAuthField> {
           keyboardType: widget.keyboardType,
           textInputAction: widget.textInputAction,
           onSubmitted: widget.onSubmitted,
+          onChanged: widget.onChanged,
           cursorColor: _AuthPalette.primary,
           style: _AuthPalette.inputText,
           decoration: _decorationForState(),

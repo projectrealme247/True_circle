@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
 import '../utils/listing_data.dart';
 import '../utils/listing_media.dart';
 import 'listing_image_placeholder.dart';
@@ -115,7 +116,7 @@ class _ListingCoverImageState extends State<ListingCoverImage> {
       child: const SizedBox(
         width: 22,
         height: 22,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0EA5E9)),
+        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
       ),
     );
   }

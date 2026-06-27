@@ -1,11 +1,11 @@
 {
-    "name": "CircleKey",
-    "short_name": "CircleKey",
+    "name": "TrueCircle",
+    "short_name": "TrueCircle",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0EA5E9",
-    "theme_color": "#0EA5E9",
-    "description": "CircleKey — Where trust meets home. A trust-weighted property marketplace for renting, sharing, and buying homes in India.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FF5A5F",
+    "description": "TrueCircle — Matched by lifestyle. Connected by trust. A trust-weighted property marketplace.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

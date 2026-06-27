@@ -2,15 +2,16 @@ import 'dart:convert';
 
 import 'package:web/web.dart' as web;
 
-const listingsStorageKey = 'circlekey_listings';
-
-Future<void> saveListings(List<Map<String, dynamic>> listings) async {
-  web.window.localStorage.setItem(listingsStorageKey, jsonEncode(listings));
+Future<void> saveListings(
+  String storageKey,
+  List<Map<String, dynamic>> listings,
+) async {
+  web.window.localStorage.setItem(storageKey, jsonEncode(listings));
 }
 
-Future<List<Map<String, dynamic>>> loadListings() async {
+Future<List<Map<String, dynamic>>> loadListings(String storageKey) async {
   try {
-    final raw = web.window.localStorage.getItem(listingsStorageKey);
+    final raw = web.window.localStorage.getItem(storageKey);
     return _decodeListings(raw);
   } catch (_) {
     return [];

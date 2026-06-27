@@ -1,36 +1,61 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../navigation/home_explore_reset_notifier.dart';
+import '../router/app_routes.dart';
+import '../router/app_router.dart';
+
+import '../navigation/space_gateway_navigation.dart';
+import '../data/dublin_mock_data.dart';
+import '../services/auth_service.dart';
+import '../services/application_service.dart';
 import '../services/listings_storage_service.dart';
-import '../services/profile_storage_service.dart';
+import '../services/marketplace_context_notifier.dart';
+import '../services/profile_state_notifier.dart';
+import '../models/listing_application.dart';
+import '../models/marketplace_space.dart';
 import '../utils/listing_data.dart';
 import '../utils/listing_match_engine.dart';
 import '../utils/listing_search_intent.dart';
 import '../utils/listing_search_suggestions.dart';
 import '../utils/marketplace_listing_pipeline.dart';
+import '../utils/numeric_bounds.dart';
+import '../config/market/market_config.dart';
+import '../utils/profile_data.dart';
+import 'profile_edit_screen.dart';
+import '../utils/dublin_macro_search.dart';
 import '../utils/viewer_profile.dart';
-import '../widgets/hoverable_listing_card.dart';
-import '../widgets/listing_food_badge.dart';
-import '../widgets/listing_cover_image.dart';
-import '../widgets/listing_match_banner.dart';
-import '../widgets/listing_occupant_badges.dart';
-import '../widgets/home_tower_tabs.dart';
-import '../widgets/listing_property_type_badge.dart';
-import '../widgets/circlekey_logo.dart';
+import '../widgets/property_card.dart';
+import '../widgets/space_switcher.dart';
+import '../widgets/truecircle_logo.dart';
+import '../widgets/trust_tier_legend_scale.dart';
 import '../widgets/filter_chip_bar.dart';
 import '../theme/app_scroll_behavior.dart';
 import '../theme/app_typography.dart';
+import '../core/theme/app_theme.dart' show AppButtonStyles, AppColors;
 import '../theme/home_marketplace_theme.dart';
 import 'auth_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.authRequired = false,
+    this.authRedirectPath,
+  });
+
+  /// Set when router redirects an unauthenticated user from a protected route.
+  final bool authRequired;
+  final String? authRedirectPath;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
+
+enum _HomeTab { explore, saved, applications, listings }
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _listings = [];
@@ -44,7 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Active filters applied to the current pipeline.
   ListingSearchFilters _activeFilters = const ListingSearchFilters();
 
-  String _selectedPropertyType = 'Rent';
+  /// Active Dublin space maps to tower property type (Rent / Share).
+  MarketplaceSpace get _activeSpace => marketplaceContextNotifier.activeSpace;
+  String get _selectedPropertyType => _activeSpace.towerPropertyType;
+
   bool _showSuggestions = false;
   int _highlightedSuggestionIndex = -1;
   final List<String> _recentSearchQueries = [];
@@ -58,21 +86,237 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _searchDropdownRadius = 12;
 
   bool _handledListingAddedMessage = false;
+  bool _applicationsReady = false;
+  int _applicationCount = 0;
+  double _averageMatchPercent = 0;
+  _HomeTab _selectedTab = _HomeTab.explore;
   /// Guards against [onChanged] firing when text is set programmatically.
   bool _settingTextProgrammatically = false;
 
   @override
   void initState() {
     super.initState();
+    authSessionNotifier.addListener(_onAuthSessionChanged);
+    profileStateNotifier.addListener(_onProfileStateChanged);
+    marketplaceContextNotifier.addListener(_onMarketplaceContextChanged);
+    homeExploreResetNotifier.addListener(_onHomeExploreResetRequested);
+    _ensureValidTowerSelection();
     _loadHomeData();
+    if (widget.authRequired) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _openSignIn(authRedirectPath: widget.authRedirectPath);
+      });
+    }
+  }
+
+  void _onHomeExploreResetRequested() {
+    if (!mounted) return;
+    if (_selectedTab != _HomeTab.explore) {
+      setState(() => _selectedTab = _HomeTab.explore);
+    }
+    _closeSuggestions();
+  }
+
+  void _onLogoTap() {
+    homeExploreResetNotifier.value = 0;
+    if (_selectedTab != _HomeTab.explore) {
+      setState(() => _selectedTab = _HomeTab.explore);
+    }
+    _closeSuggestions();
+    Navigator.of(context, rootNavigator: true).popUntil(
+      (Route<dynamic> route) => route.isFirst,
+    );
+    appRouter.pushReplacement('/');
+  }
+
+  Future<void> _openProfileEdit({Map<String, dynamic>? initialProfile}) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            ProfileEditScreen(initialProfile: initialProfile),
+      ),
+    );
+    if (!mounted) return;
+    await AuthService.reloadProfileFromStorage();
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openSignIn({String? authRedirectPath}) async {
+    final signedIn = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => const AuthScreen()),
+    );
+    if (!mounted) return;
+    if (signedIn == true) {
+      await AuthService.reloadProfileFromStorage();
+      if (!mounted) return;
+      setState(() {
+        _pipelineResult = null;
+      });
+      if (authRedirectPath != null && authRedirectPath.isNotEmpty) {
+        context.go(Uri.decodeComponent(authRedirectPath));
+      } else {
+        await navigateAfterAuth(context);
+      }
+    }
+  }
+
+  void _ensureValidTowerSelection() {
+    final enabled = MarketplaceSpace.enabledForMarket();
+    if (!enabled.contains(_activeSpace) && enabled.isNotEmpty) {
+      unawaited(marketplaceContextNotifier.setActiveSpace(enabled.first));
+    }
   }
 
   @override
   void dispose() {
+    authSessionNotifier.removeListener(_onAuthSessionChanged);
+    profileStateNotifier.removeListener(_onProfileStateChanged);
+    marketplaceContextNotifier.removeListener(_onMarketplaceContextChanged);
+    homeExploreResetNotifier.removeListener(_onHomeExploreResetRequested);
     _removeSearchDropdownOverlay();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  bool _reloadingProfile = false;
+
+  void _onAuthSessionChanged() {
+    if (!mounted) return;
+    profileStateNotifier.invalidateCache();
+    _syncDashboardFromGlobalSession();
+  }
+
+  Future<void> _reloadProfileSession() async {
+    if (_reloadingProfile) return;
+    if (!AuthService.isAuthenticated && AuthScreen.currentUserSession == null) {
+      return;
+    }
+    _reloadingProfile = true;
+    try {
+      await AuthService.reloadProfileFromStorage();
+      if (!mounted) return;
+      setState(() {});
+    } finally {
+      _reloadingProfile = false;
+    }
+  }
+
+  void _onProfileStateChanged() {
+    if (!mounted) return;
+    _refreshPipelineFromProfile();
+  }
+
+  void _onMarketplaceContextChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _selectActiveSpace(MarketplaceSpace space) async {
+    if (space == _activeSpace) return;
+    await marketplaceContextNotifier.setActiveSpace(space);
+    if (!mounted) return;
+    if (!_activeFilters.isEmpty) {
+      _runSearchWithFilters(
+        _activeFilters,
+        pipelineQuery: _activeFilters.pipelineQueryText(),
+      );
+    } else {
+      setState(() => _pipelineResult = _runDefaultPipeline());
+    }
+  }
+
+  Future<void> _refreshApplicationMetrics() async {
+    await applicationService.ensureLoaded();
+    final owned = marketplaceContextNotifier.ownedListings;
+    var totalScore = 0.0;
+    var count = 0;
+    for (final listing in owned) {
+      final apps = applicationService.rowsForListing(ListingData.id(listing));
+      count += apps.length;
+      for (final app in apps) {
+        final score = app['compatibility_score'];
+        if (score is num) totalScore += score;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _applicationCount = count;
+      _averageMatchPercent = count > 0 ? totalScore / count : 0;
+      _applicationsReady = true;
+    });
+  }
+
+  List<ListingApplication> get _userApplicationsForActiveSpace {
+    final userId = AuthService.currentUser?.id ?? '';
+    return [
+      for (final application in applicationService.getUserApplications(userId))
+        if (_applicationSpace(application) == _activeSpace) application,
+    ];
+  }
+
+  MarketplaceSpace? _applicationSpace(ListingApplication application) {
+    final fromListing = _listingSpaceForId(application.listingId);
+    if (fromListing != null) return fromListing;
+
+    for (final row in applicationService.allRows()) {
+      if (row['id']?.toString() != application.id) continue;
+      final token = row['space']?.toString();
+      if (token == null || token.isEmpty) return null;
+      return MarketplaceSpace.fromStorageToken(token);
+    }
+    return null;
+  }
+
+  MarketplaceSpace? _listingSpaceForId(String listingId) {
+    if (listingId.isEmpty) return null;
+    for (final listing in _listings) {
+      if (ListingData.id(listing) == listingId) {
+        return MarketplaceSpace.fromTowerPropertyType(
+          ListingData.propertyType(listing),
+        );
+      }
+    }
+    return null;
+  }
+
+  String _listingTitleForApplication(ListingApplication application) {
+    for (final listing in _listings) {
+      if (ListingData.id(listing) == application.listingId) {
+        final title = ListingData.title(listing);
+        if (title.isNotEmpty) return title;
+      }
+    }
+    return 'Listing unavailable';
+  }
+
+  String _formatAppliedDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final month = months[date.month - 1];
+    return '$month ${date.day}, ${date.year}';
+  }
+
+  /// Mirrors global profile session into home widgets immediately.
+  void _syncDashboardFromGlobalSession() {
+    if (!mounted) return;
+    setState(() {});
+    _loadListingsFromStorage();
   }
 
   // ── Overlay management ────────────────────────────────────────
@@ -141,27 +385,68 @@ class _HomeScreenState extends State<HomeScreen> {
     return _pipelineResult ??= _runDefaultPipeline();
   }
 
+  Map<String, dynamic>? get _activeUserSession =>
+      profileStateNotifier.session ?? AuthScreen.currentUserSession;
+
   MarketplaceListingPipelineResult _runDefaultPipeline() {
     return MarketplaceListingPipeline.runWithFilters(
       allListings: _listings,
       towerPropertyType: _selectedPropertyType,
       filters: const ListingSearchFilters(),
-      userSession: AuthScreen.currentUserSession,
+      userSession: _activeUserSession,
     );
+  }
+
+  void _refreshPipelineFromProfile() {
+    if (!mounted) return;
+    if (_activeFilters.isEmpty) {
+      setState(() => _pipelineResult = _runDefaultPipeline());
+    } else {
+      _runSearchWithFilters(
+        _activeFilters,
+        pipelineQuery: _activeFilters.pipelineQueryText(),
+      );
+    }
   }
 
   List<ScoredListing> get _rankedVisibleListings => _currentPipeline.ranked;
 
   /// Runs search from the text field (Enter key).
   void _commitSearchFromField() {
-    final text = SearchSuggestion.stripCountSuffix(_searchController.text);
+    final text = SearchSuggestion.stripCountSuffix(_searchController.text).trim();
     if (text.isEmpty) {
       _clearSearch();
       return;
     }
+
+    if (DublinMacroSearch.isExactMacroPhrase(text)) {
+      _applyAllDublinMacroSearch(clearSearchBar: true);
+      return;
+    }
+
     final parsed = ListingSearchIntent.parseQuery(text);
-    final filters = ListingSearchFilters.fromIntent(parsed);
+    var filters = ListingSearchFilters.fromIntent(parsed);
+    if (DublinMacroSearch.hasMicroLocationInQuery(
+      text,
+      parsedCityKey: parsed.city,
+      parsedLocalityKeywords: parsed.remainingKeywords,
+    )) {
+      filters = filters.withoutAllDublinMacro();
+    }
+
     _runSearchWithFilters(filters, pipelineQuery: text);
+  }
+
+  void _applyAllDublinMacroSearch({required bool clearSearchBar}) {
+    if (clearSearchBar) {
+      _settingTextProgrammatically = true;
+      _searchController.clear();
+      _settingTextProgrammatically = false;
+    }
+    _runSearchWithFilters(
+      _activeFilters.withAllDublinArea(),
+      pipelineQuery: '',
+    );
   }
 
   /// Single pipeline entry point. Runs the pipeline, updates state, done.
@@ -173,7 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
       allListings: _listings,
       towerPropertyType: _selectedPropertyType,
       filters: filters,
-      userSession: AuthScreen.currentUserSession,
+      userSession: _activeUserSession,
       searchQuery: pipelineQuery,
     );
 
@@ -211,6 +496,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onChipFiltersChanged(ListingSearchFilters filters) {
+    if (filters.isAllDublinMacro) {
+      _settingTextProgrammatically = true;
+      _searchController.clear();
+      _settingTextProgrammatically = false;
+    } else if (filters.effectiveAreaTokens.isNotEmpty &&
+        _activeFilters.isAllDublinMacro) {
+      _settingTextProgrammatically = true;
+      _searchController.clear();
+      _settingTextProgrammatically = false;
+    }
+
     if (filters.isEmpty && _searchController.text.trim().isEmpty) {
       _clearSearch();
       return;
@@ -218,9 +514,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final searchText = _searchController.text.trim();
     _runSearchWithFilters(
       filters,
-      pipelineQuery: searchText.isNotEmpty
-          ? searchText
-          : filters.toPipelineQuery(),
+      pipelineQuery: filters.pipelineQueryText(searchText: searchText),
     );
   }
 
@@ -252,11 +546,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _hydrateSessionFromStorage() async {
-    // Don't auto-restore session from storage — matching features
-    // require the user to explicitly sign in each session.
-    // Profile data remains in storage for the auth/edit screen.
-    if (!mounted) return;
-    setState(() {});
+    await _reloadProfileSession();
   }
 
   Future<void> _loadListingsFromStorage() async {
@@ -266,13 +556,16 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final listings = await ListingsStorageService.load();
       if (!mounted) return;
+      await marketplaceContextNotifier.refresh();
+      if (!mounted) return;
       _listings = listings;
       _listingsLoading = false;
+      await _refreshApplicationMetrics();
 
       if (!_activeFilters.isEmpty) {
         _runSearchWithFilters(
           _activeFilters,
-          pipelineQuery: _activeFilters.toPipelineQuery(),
+          pipelineQuery: _activeFilters.pipelineQueryText(),
         );
       } else {
         setState(() {
@@ -289,8 +582,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _goAddListing() {
-    if (AuthScreen.currentUserSession == null) {
-      _openSignIn();
+    if (!AuthService.isAuthenticated &&
+        AuthScreen.currentUserSession == null) {
+      _openSignIn(authRedirectPath: '/add-listing');
       return;
     }
     context.push('/add-listing').then((_) {
@@ -302,19 +596,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (compact) {
       return FilledButton(
         onPressed: _goAddListing,
-        style: FilledButton.styleFrom(
-          backgroundColor: HomeMarketplaceTheme.accent,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        style: AppButtonStyles.primaryFilled.copyWith(
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.add_rounded, size: 18, color: Colors.white),
+            const Icon(Icons.add_rounded, size: 16, color: Colors.white),
             const SizedBox(width: 6),
             Text(
               'Add Listing',
-              style: AppTypography.button().copyWith(fontSize: AppTypography.textSm),
+              style: AppTypography.button().copyWith(
+                fontSize: AppTypography.textSm,
+                height: 1.1,
+              ),
             ),
           ],
         ),
@@ -325,128 +624,242 @@ class _HomeScreenState extends State<HomeScreen> {
       onPressed: _goAddListing,
       icon: const Icon(Icons.add_rounded, size: 20),
       label: Text('Add Listing', style: AppTypography.button()),
-      style: FilledButton.styleFrom(
-        backgroundColor: HomeMarketplaceTheme.accent,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        elevation: 0,
+      style: AppButtonStyles.primaryFilled,
+    );
+  }
+
+  PreferredSizeWidget _buildHomeAppBar({
+    required bool signedIn,
+    required Map<String, dynamic>? userSession,
+  }) {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(_HomeNavBar.toolbarHeight),
+      child: Material(
+        color: HomeMarketplaceTheme.surface,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: HomeMarketplaceTheme.border, width: 0.5),
+            ),
+          ),
+          child: SizedBox(
+            height: _HomeNavBar.toolbarHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: _HomeNavBar.horizontalPadding,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  InkWell(
+                    onTap: _onLogoTap,
+                    borderRadius: BorderRadius.circular(8),
+                    mouseCursor: SystemMouseCursors.click,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          TrueCircleLogo.appBarMark(
+                            size: _HomeNavBar.markSize,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'TrueCircle',
+                            style: TextStyle(
+                              fontSize: _HomeNavBar.wordmarkSize,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF222222),
+                              letterSpacing: -0.5,
+                              height: 1.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  _buildAddListingButton(compact: true),
+                  const SizedBox(width: 10),
+                  if (!signedIn)
+                    FilledButton.icon(
+                      onPressed: () => _openSignIn(),
+                      icon: const Icon(
+                        Icons.login,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      label: Text(
+                        'Sign In',
+                        style: AppTypography.button().copyWith(
+                          fontSize: AppTypography.textSm,
+                          height: 1.1,
+                        ),
+                      ),
+                      style: AppButtonStyles.primaryFilled.copyWith(
+                        padding: const WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    )
+                  else
+                    _UserHeaderMenu(
+                      fullName: AuthService.displayName(userSession),
+                      onViewProfile: () {
+                        final session = AuthScreen.currentUserSession;
+                        if (ProfileData.isMatchingReady(session)) {
+                          context.go('/profile');
+                        } else {
+                          context.go('/profile/edit', extra: session);
+                        }
+                      },
+                      onLogout: () async {
+                        await AuthService.signOut();
+                        if (mounted) {
+                          setState(() {
+                            _pipelineResult = null;
+                          });
+                        }
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Read the public global session variable
-    final userSession = AuthScreen.currentUserSession;
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        authSessionNotifier,
+        profileStateNotifier,
+        marketplaceContextNotifier,
+      ]),
+      builder: (context, _) {
+        final userSession = profileStateNotifier.session;
+        final signedIn =
+            AuthService.isAuthenticated || userSession != null;
 
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final bodyPadding = screenWidth < 600 ? 16.0 : 24.0;
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final bodyPadding = screenWidth < 600 ? 16.0 : 24.0;
 
-    return Scaffold(
-      backgroundColor: HomeMarketplaceTheme.canvas,
-      appBar: AppBar(
-        backgroundColor: HomeMarketplaceTheme.surface,
-        foregroundColor: HomeMarketplaceTheme.textPrimary,
-        elevation: 0,
-        scrolledUnderElevation: 0.5,
-        surfaceTintColor: Colors.transparent,
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            const CircleKeyLogo(size: 28),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(
-                    text: 'Circle',
-                    style: AppTypography.appBarBrand().copyWith(
-                      color: HomeMarketplaceTheme.primary,
-                    ),
-                  ),
-                  TextSpan(
-                    text: 'Key',
-                    style: AppTypography.appBarBrand().copyWith(
-                      color: HomeMarketplaceTheme.accent,
-                    ),
-                  ),
-                ]),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Center(child: _buildAddListingButton(compact: true)),
+        return Scaffold(
+          backgroundColor: HomeMarketplaceTheme.canvas,
+          appBar: _buildHomeAppBar(
+            signedIn: signedIn,
+            userSession: userSession,
           ),
-          if (userSession == null)
-              Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Center(
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final shouldRefresh = await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const AuthScreen()),
-                    );
-                    if (shouldRefresh == true && mounted) {
-                      setState(() {
-                        _pipelineResult = null;
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.login, size: 16, color: Colors.white),
-                  label: Text(
-                    'Sign In',
-                    style: AppTypography.button().copyWith(fontSize: AppTypography.textSm),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: HomeMarketplaceTheme.accent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  ),
-                ),
+          body: IndexedStack(
+            index: _selectedTab.index,
+            children: [
+              _buildExploreTab(
+                userSession: userSession,
+                bodyPadding: bodyPadding,
+                screenWidth: screenWidth,
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Center(
-                child: _UserHeaderMenu(
-                  fullName: userSession['full_name']?.toString() ?? 'User',
-                  onViewProfile: () => context.go('/profile'),
-                  onLogout: () async {
-                    AuthScreen.currentUserSession = null;
-                    await ProfileStorageService.clear();
-                    if (mounted) {
-                      setState(() {
-                        _pipelineResult = null;
-                      });
-                    }
-                  },
-                ),
+              _HomeDashboardEmptyState(
+                icon: Icons.favorite_border_rounded,
+                title: 'Saved',
+                subtitle: 'Your saved listings will appear here.',
               ),
+              _buildApplicationsTab(),
+              _buildListingsTab(bodyPadding: bodyPadding),
+            ],
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _selectedTab.index,
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: AppColors.accent,
+            unselectedItemColor: const Color(0xFF9CA3AF),
+            backgroundColor: HomeMarketplaceTheme.surface,
+            selectedFontSize: 11,
+            unselectedFontSize: 11,
+            selectedLabelStyle: AppTypography.meta().copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.accent,
+              letterSpacing: 0.1,
+              height: 1.1,
             ),
-        ],
-      ),
-      body: Padding(
-        padding: EdgeInsets.all(bodyPadding),
-        child: TapRegion(
-          groupId: _searchTapGroup,
-          onTapOutside: (_) => _closeSuggestions(),
-          child: CustomScrollView(
-            physics: appPageScrollPhysics,
-            cacheExtent: 480,
-            slivers: _buildHomePageSlivers(
-              userSession: userSession,
-              contentWidth: screenWidth - (bodyPadding * 2),
+            unselectedLabelStyle: AppTypography.meta().copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF9CA3AF),
+              letterSpacing: 0.05,
+              height: 1.1,
+            ),
+            elevation: 0,
+            onTap: (index) {
+              if (_selectedTab.index == index) return;
+              setState(() {
+                _selectedTab = _HomeTab.values[index];
+              });
+              if (_HomeTab.values[index] == _HomeTab.applications) {
+                unawaited(_refreshApplicationMetrics());
+              }
+              _closeSuggestions();
+            },
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.explore_outlined),
+                activeIcon: Icon(Icons.explore),
+                label: 'Explore',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.favorite_border_rounded),
+                activeIcon: Icon(Icons.favorite_rounded),
+                label: 'Saved',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.description_outlined),
+                activeIcon: Icon(Icons.description),
+                label: 'Applications',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_work_outlined),
+                activeIcon: Icon(Icons.home_work),
+                label: 'Listings',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildExploreTab({
+    required Map<String, dynamic>? userSession,
+    required double bodyPadding,
+    required double screenWidth,
+  }) {
+    return Stack(
+      children: [
+        Padding(
+          padding: EdgeInsets.all(bodyPadding),
+          child: TapRegion(
+            groupId: _searchTapGroup,
+            onTapOutside: (_) => _closeSuggestions(),
+            child: CustomScrollView(
+              physics: appPageScrollPhysics,
+              cacheExtent: 480,
+              slivers: _buildHomePageSlivers(
+                userSession: userSession,
+                contentWidth: screenWidth - (bodyPadding * 2),
+              ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -459,43 +872,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const double _listingGridSpacing = 16;
 
-  double _listingCellWidth(double contentWidth, int crossAxisCount) {
-    if (crossAxisCount <= 1) return contentWidth;
-    return (contentWidth - _listingGridSpacing * (crossAxisCount - 1)) /
-        crossAxisCount;
-  }
-
-  Widget _buildListingCardsWrap({
+  Widget _buildListingGridSliver({
     Key? key,
     required List<ScoredListing> listings,
-    required double contentWidth,
     required int crossAxisCount,
   }) {
-    if (kDebugMode) {
-      debugPrint('UI using listings: ${listings.length}');
-    }
-
-    final itemWidth = _listingCellWidth(contentWidth, crossAxisCount);
-    final cards = <Widget>[];
-    for (var index = 0; index < listings.length; index++) {
-      final scored = listings[index];
-      final listingId = ListingData.id(scored.listing, fallbackIndex: index);
-      cards.add(
-        SizedBox(
-          width: itemWidth,
-          child: _buildListingCard(
+    return SliverGrid(
+      key: key,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: _listingGridSpacing,
+        mainAxisSpacing: _listingGridSpacing,
+        mainAxisExtent: PropertyCard.gridMainAxisExtent,
+      ),
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final scored = listings[index];
+          final listingId = ListingData.id(scored.listing, fallbackIndex: index);
+          return _buildListingCard(
             scored,
             index: index,
             key: ValueKey(listingId.isEmpty ? 'listing-$index' : listingId),
-          ),
-        ),
-      );
-    }
-    return Wrap(
-      key: key,
-      spacing: _listingGridSpacing,
-      runSpacing: _listingGridSpacing,
-      children: cards,
+          );
+        },
+        childCount: listings.length,
+      ),
     );
   }
 
@@ -506,19 +907,35 @@ class _HomeScreenState extends State<HomeScreen> {
     final crossAxisCount = _gridCrossAxisCount(contentWidth);
 
     return [
-      SliverToBoxAdapter(child: _buildHeroSection(userSession: userSession)),
-      const SliverToBoxAdapter(child: SizedBox(height: 40)),
       SliverToBoxAdapter(
-        child: Center(child: _buildSearchSection()),
+        child: Center(child: _buildExploreCommandBar()),
       ),
+      if (userSession != null &&
+          ProfileData.calculateProfileCompletionPercentage(userSession) < 100) ...[
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        SliverToBoxAdapter(
+          child: _buildProfileCompletionBanner(userSession),
+        ),
+      ],
+      if (_currentPipeline.isCommuteDivergent && !_showSuggestions) ...[
+        const SliverToBoxAdapter(child: SizedBox(height: 10)),
+        SliverToBoxAdapter(child: _buildCommuteDivergenceAlert()),
+      ],
       if (_currentPipeline.searchSummary != null &&
           !_showSuggestions) ...[
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+        const SliverToBoxAdapter(child: SizedBox(height: 10)),
         SliverToBoxAdapter(child: _buildSearchSummaryBanner()),
       ],
-      const SliverToBoxAdapter(child: SizedBox(height: 28)),
+      const SliverToBoxAdapter(child: SizedBox(height: 10)),
+      const SliverToBoxAdapter(
+        child: TrustTierLegendScale(
+          interactive: false,
+          compact: true,
+        ),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: 8)),
       SliverToBoxAdapter(child: _buildMarketplaceSectionHeader()),
-      const SliverToBoxAdapter(child: SizedBox(height: 20)),
+      const SliverToBoxAdapter(child: SizedBox(height: 12)),
       if (_listingsLoading)
         const SliverToBoxAdapter(
           child: Padding(
@@ -535,23 +952,24 @@ class _HomeScreenState extends State<HomeScreen> {
       else if (_currentPipeline.afterTower.isEmpty)
         SliverToBoxAdapter(child: _buildTowerEmptyState())
       else if (_rankedVisibleListings.isEmpty &&
-          _currentPipeline.hasActiveSearch &&
-          !_showSuggestions)
-        SliverToBoxAdapter(child: _buildSearchNoResultsState())
-      else
+          (_currentPipeline.isCommuteDivergent ||
+              (_currentPipeline.hasActiveSearch && !_showSuggestions)))
         SliverToBoxAdapter(
-          child: IgnorePointer(
-            ignoring: _showSuggestions && _flatSuggestions.isNotEmpty,
-            child: _buildListingCardsWrap(
-              key: ValueKey(
-                'grid-${_activeFilters.foodPreference}-'
-                '${_activeFilters.city}-'
-                '${_rankedVisibleListings.length}',
-              ),
-              listings: _rankedVisibleListings,
-              contentWidth: contentWidth,
-              crossAxisCount: crossAxisCount,
+          child: _currentPipeline.isCommuteDivergent
+              ? _buildCommuteDivergenceAlert()
+              : _buildSearchNoResultsState(),
+        )
+      else
+        SliverIgnorePointer(
+          ignoring: _showSuggestions && _flatSuggestions.isNotEmpty,
+          sliver: _buildListingGridSliver(
+            key: ValueKey(
+              'grid-${_activeFilters.foodPreference}-'
+              '${_activeFilters.city}-'
+              '${_rankedVisibleListings.length}',
             ),
+            listings: _rankedVisibleListings,
+            crossAxisCount: crossAxisCount,
           ),
         ),
       const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -651,9 +1069,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final pipelineQuery = item.query.trim().isNotEmpty
-        ? item.query
-        : filters.toPipelineQuery();
+    final pipelineQuery = filters.pipelineQueryText(searchText: item.query);
 
     final displayText =
         SearchSuggestion.stripCountSuffix(item.label).isNotEmpty
@@ -680,56 +1096,79 @@ class _HomeScreenState extends State<HomeScreen> {
     _recordRecentSearch(pipelineQuery);
   }
 
-  Widget _buildSearchSection() {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(
-        maxWidth: HomeMarketplaceTheme.searchBlockMaxWidth,
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: HomeMarketplaceTheme.surface,
-          borderRadius: BorderRadius.circular(
-            HomeMarketplaceTheme.searchBlockRadius,
-          ),
-          border: Border.all(color: HomeMarketplaceTheme.border),
-          boxShadow: HomeMarketplaceTheme.searchShadowSm,
+  Widget _buildExploreCommandBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: HomeMarketplaceTheme.searchBlockMaxWidth,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              HomeTowerTabs(
-                selectedPropertyType: _selectedPropertyType,
-                onSelected: (type) {
-                  if (_selectedPropertyType == type) return;
-                  _selectedPropertyType = type;
-                  if (!_activeFilters.isEmpty) {
-                    _runSearchWithFilters(
-                      _activeFilters,
-                      pipelineQuery: _activeFilters.toPipelineQuery(),
-                    );
-                  } else {
-                    setState(() {
-                      _pipelineResult = _runDefaultPipeline();
-                    });
-                  }
-                },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildExploreHeroCopy(),
+            const SizedBox(height: 24),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: HomeMarketplaceTheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: HomeMarketplaceTheme.border),
+                boxShadow: HomeMarketplaceTheme.cardShadowRest,
               ),
-              const SizedBox(height: 20),
-              _buildSearchBarAnchor(),
-              const SizedBox(height: 16),
-              MarketplaceFilterBar(
-                towerPropertyType: _selectedPropertyType,
-                activeFilters: _activeFilters,
-                onFiltersChanged: _onChipFiltersChanged,
-                onClearAll: _clearAllFilters,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SpaceSwitcher(
+                      activeSpace: _activeSpace,
+                      onSelected: (space) => unawaited(_selectActiveSpace(space)),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildSearchBarAnchor(),
+                    const SizedBox(height: 10),
+                    MarketplaceFilterBar(
+                      towerPropertyType: _selectedPropertyType,
+                      activeFilters: _activeFilters,
+                      onFiltersChanged: _onChipFiltersChanged,
+                      onClearAll: _clearAllFilters,
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildExploreHeroCopy() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'Match with spaces and communities that actually fit your story.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            height: 1.25,
+            color: HomeMarketplaceTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          HomeMarketplaceTheme.brandTagline,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 15,
+            height: 1.4,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
     );
   }
 
@@ -749,15 +1188,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSearchInputField(double borderRadius) {
-    return Material(
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      color: HomeMarketplaceTheme.searchSurface,
-      shape: RoundedRectangleBorder(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.surface,
         borderRadius: BorderRadius.circular(borderRadius),
-        side: const BorderSide(color: HomeMarketplaceTheme.border),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+        boxShadow: HomeMarketplaceTheme.searchShadowSm,
       ),
-      child: Focus(
+      child: Material(
+        color: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        child: Focus(
           focusNode: _searchFocusNode,
           onKeyEvent: (node, event) => _handleSearchKeyEvent(event),
           child: TextField(
@@ -781,7 +1226,7 @@ class _HomeScreenState extends State<HomeScreen> {
               }
             },
             decoration: InputDecoration(
-              hintText: 'Try Veg in Hyderabad, Family in Bangalore…',
+              hintText: MarketConfig.current.searchBarHint,
               hintStyle: AppTypography.searchHint(),
               prefixIcon: const Icon(
                 Icons.search_rounded,
@@ -810,6 +1255,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
     );
   }
 
@@ -923,7 +1369,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           index == _highlightedSuggestionIndex;
                       return Material(
                         color: highlighted
-                            ? HomeMarketplaceTheme.canvas
+                            ? HomeMarketplaceTheme.searchSurface
                             : Colors.transparent,
                         child: InkWell(
                           onTap: () => _handleSuggestionSelect(item),
@@ -961,18 +1407,58 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildCommuteDivergenceAlert() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A2332),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFB347), width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33FFB347),
+            blurRadius: 14,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.alt_route_rounded, size: 22, color: Color(0xFFFFB347)),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              MarketplaceListingPipelineResult.commuteDivergenceNotice,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                height: 1.45,
+                color: Color(0xFFF3F4F6),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchSummaryBanner() {
     final pipeline = _currentPipeline;
     final summary = pipeline.searchSummary!;
     final notice = pipeline.relaxationNotice;
+    final isDivergent = pipeline.isCommuteDivergent;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: HomeMarketplaceTheme.surface,
+        color: isDivergent ? const Color(0xFF1A2332) : HomeMarketplaceTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: HomeMarketplaceTheme.border),
+        border: Border.all(
+          color: isDivergent ? const Color(0xFFFFB347) : HomeMarketplaceTheme.border,
+        ),
         boxShadow: HomeMarketplaceTheme.cardShadowRest,
       ),
       child: Column(
@@ -981,21 +1467,27 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.travel_explore_rounded,
+              Icon(
+                isDivergent
+                    ? Icons.alt_route_rounded
+                    : Icons.travel_explore_rounded,
                 size: 17,
-                color: HomeMarketplaceTheme.primary,
+                color: isDivergent
+                    ? const Color(0xFFFFB347)
+                    : HomeMarketplaceTheme.primary,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   summary,
-                  style: AppTypography.cardTitle(),
+                  style: AppTypography.cardTitle().copyWith(
+                    color: isDivergent ? const Color(0xFFF3F4F6) : null,
+                  ),
                 ),
               ),
             ],
           ),
-          if (notice != null) ...[
+          if (notice != null && !isDivergent) ...[
             const SizedBox(height: 5),
             Text(notice, style: AppTypography.detail()),
           ],
@@ -1004,70 +1496,113 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _openSignIn() async {
-    final shouldRefresh = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (context) => const AuthScreen()),
-    );
-    if (shouldRefresh == true && mounted) {
-      setState(() {
-        _pipelineResult = null;
-      });
-    }
+  void _switchToExploreTab() {
+    if (_selectedTab == _HomeTab.explore) return;
+    setState(() => _selectedTab = _HomeTab.explore);
+    _closeSuggestions();
   }
 
-  Widget _buildHeroSection({
-    required Map<String, dynamic>? userSession,
-  }) {
-    final signedIn = userSession != null;
+  Widget _buildApplicationsTab() {
+    final applications = _userApplicationsForActiveSpace;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 36, 8, 12),
+    if (!_applicationsReady) {
+      return const SafeArea(
+        child: Center(
+          child: CircularProgressIndicator(color: HomeMarketplaceTheme.primary),
+        ),
+      );
+    }
+
+    if (applications.isEmpty) {
+      return _HomeDashboardEmptyState(
+        icon: Icons.description_outlined,
+        title: "You haven't applied to any places yet",
+        subtitle: 'Find places you like and apply in seconds',
+        actionLabel: 'Browse homes',
+        onAction: _switchToExploreTab,
+      );
+    }
+
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text('Applications', style: AppTypography.sectionTitle()),
+          const SizedBox(height: 4),
+          Text(
+            '${applications.length} pending in ${_activeSpace.label}',
+            style: AppTypography.sectionMeta(),
+          ),
+          const SizedBox(height: 16),
+          for (final application in applications)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ApplicationTile(
+                title: _listingTitleForApplication(application),
+                statusLabel: 'Pending',
+                appliedLabel:
+                    'Applied ${_formatAppliedDate(application.createdAt)}',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListingsTab({required double bodyPadding}) {
+    final spaceListings = _ownedListingsForActiveSpace;
+
+    if (spaceListings.isEmpty) {
+      return _HomeDashboardEmptyState(
+        icon: Icons.home_work_outlined,
+        title: 'No listings yet',
+        subtitle: 'Post a listing if you have a room or property to fill',
+        actionLabel: '+ Add Listing',
+        onAction: _goAddListing,
+      );
+    }
+
+    return SafeArea(
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: ListView(
+            padding: EdgeInsets.all(bodyPadding),
             children: [
+              Text('Listings', style: AppTypography.sectionTitle()),
+              const SizedBox(height: 4),
               Text(
-                'Find homes where you feel understood',
-                textAlign: TextAlign.center,
-                style: AppTypography.heroTitle(),
+                'Your listings',
+                style: AppTypography.sectionMeta(),
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Matched by lifestyle, language, and preferences you can trust',
-                textAlign: TextAlign.center,
-                style: AppTypography.heroSubtitle(),
-              ),
-              const SizedBox(height: 28),
-              if (!signedIn)
-                FilledButton(
-                  onPressed: _openSignIn,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: HomeMarketplaceTheme.accent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 15,
-                    ),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Text(
-                    'See your matches',
-                    style: AppTypography.button(),
-                  ),
-                )
-              else
-                Text(
-                  'Showing matches tailored to your profile',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.detail(),
+              const SizedBox(height: 20),
+              if (_applicationCount > 0) ...[
+                _YourListingsSummaryRow(
+                  listingCount: spaceListings.length,
+                  applicationCount: _applicationCount,
+                  averageMatchPercent: _averageMatchPercent,
                 ),
+                const SizedBox(height: 16),
+              ],
+              for (var index = 0; index < spaceListings.length; index++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _YourListingTile(
+                    listing: spaceListings[index],
+                    activeSpace: _activeSpace,
+                    onManage: () {
+                      final id = ListingData.id(spaceListings[index]);
+                      if (id.isNotEmpty) context.push('/listing/$id/manage');
+                    },
+                  ),
+                ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _goAddListing,
+                style: AppButtonStyles.primaryFilled,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text('+ Add Listing', style: AppTypography.button()),
+              ),
             ],
           ),
         ),
@@ -1075,34 +1610,90 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMarketplaceSectionHeader() {
-    final count = _rankedVisibleListings.length;
-    final subtext = _listingsLoading
-        ? 'Finding homes that match you…'
-        : count == 0
-            ? 'No homes match your preferences and search yet'
-            : count == 1
-                ? '1 home based on your preferences and search'
-                : '$count homes based on your preferences and search';
+  List<Map<String, dynamic>> get _ownedListingsForActiveSpace {
+    final owned = DublinMockData.useMockHarness &&
+            marketplaceContextNotifier.ownedListings.isEmpty
+        ? DublinMockData.ownedListingsForHost()
+        : marketplaceContextNotifier.ownedListings;
+    return [
+      for (final listing in owned)
+        if (MarketplaceSpace.fromTowerPropertyType(
+              ListingData.propertyType(listing),
+            ) ==
+            _activeSpace)
+          listing,
+    ];
+  }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Homes that truly fit you',
-          style: AppTypography.sectionTitle(),
-        ),
-        const SizedBox(height: 4),
-        Text(subtext, style: AppTypography.sectionMeta()),
-      ],
+  Widget _buildProfileCompletionBanner(Map<String, dynamic> userSession) {
+    final missing = ProfileData.missingFieldsForCompletion(userSession);
+    final percent =
+        ProfileData.calculateProfileCompletionPercentage(userSession);
+    if (percent >= 100) return const SizedBox.shrink();
+    final missingText = missing.take(3).join(', ');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.searchSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.auto_awesome_rounded,
+            color: HomeMarketplaceTheme.primary,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Profile $percent% complete',
+                  style: AppTypography.cardTitle(),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  missing.isEmpty
+                      ? 'Add a few more details for better ranking.'
+                      : 'Still needed: $missingText',
+                  style: AppTypography.detail(),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => _openProfileEdit(initialProfile: userSession),
+            child: const Text('Finish'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMarketplaceSectionHeader() {
+    final isShared = _activeSpace == MarketplaceSpace.sharedSpace;
+    final spaceLabel = isShared
+        ? 'Shared Living in Dublin'
+        : 'Independent Places in Dublin';
+
+    return Text(
+      spaceLabel,
+      style: AppTypography.sectionTitle().copyWith(
+        fontWeight: FontWeight.w800,
+        color: const Color(0xFF222222),
+      ),
     );
   }
 
   Widget _buildSearchNoResultsState() {
     final summary = _currentPipeline.requestedIntent.displaySummary;
-    final towerLabel = HomeTowerTabs.tabs
-        .firstWhere((t) => t.type == _selectedPropertyType)
-        .label;
+    final towerLabel = _activeSpace.label;
 
     return Container(
       width: double.infinity,
@@ -1142,9 +1733,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTowerEmptyState() {
-    final label = HomeTowerTabs.tabs
-        .firstWhere((t) => t.type == _selectedPropertyType)
-        .label;
+    final label = _activeSpace.label;
 
     return Container(
       width: double.infinity,
@@ -1196,15 +1785,18 @@ class _HomeScreenState extends State<HomeScreen> {
             'No listings yet',
             style: AppTypography.sectionTitle().copyWith(fontSize: AppTypography.textMd),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Post a listing if you have a room or property to fill',
+            textAlign: TextAlign.center,
+            style: AppTypography.detail(),
+          ),
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: _goAddListing,
             icon: const Icon(Icons.add_rounded, size: 20),
-            label: Text('Add your first listing', style: AppTypography.button()),
-            style: FilledButton.styleFrom(
-              backgroundColor: HomeMarketplaceTheme.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            ),
+            label: Text('Add listing', style: AppTypography.button()),
+            style: AppButtonStyles.primaryFilled,
           ),
         ],
       ),
@@ -1213,131 +1805,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildListingCard(ScoredListing scored, {required int index, Key? key}) {
     final item = scored.listing;
-    final matchResult = scored.match;
     final listingId = ListingData.id(item, fallbackIndex: index);
-    final title = ListingData.title(item);
-    final price = ListingData.price(item);
-    final location = ListingData.location(item);
 
-    return HoverableListingCard(
+    return PropertyCard(
       key: key,
-      match: matchResult,
+      listing: item,
+      match: scored.match,
+      viewerProfile: AuthScreen.currentUserSession,
+      activeSpace: _activeSpace,
       onTap: () {
         if (listingId.isEmpty) return;
         context.push('/listing/$listingId', extra: item);
       },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Cover image (no overlay)
-          AspectRatio(
-            aspectRatio: HomeMarketplaceTheme.listingCardImageAspectRatio,
-            child: ListingCoverImage(
-              listing: item,
-              fill: true,
-              compact: true,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(HomeMarketplaceTheme.cardRadius),
-              ),
-            ),
-          ),
-          // Trust row (full width, right below image)
-          ListingTrustRow(match: matchResult),
-          // Card body
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 2, 14, 14),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  price,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.cardPrice(),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.cardTitle(),
-                ),
-                if (location.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    location,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.detail(),
-                  ),
-                ],
-                const SizedBox(height: 8),
-                _buildCompactBadgeRow(item),
-                if (matchResult.reasons.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  ListingMatchReasonLine(
-                    reasons: matchResult.reasons,
-                    highlighted: matchResult.percentage >= 70,
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactBadgeRow(Map<String, dynamic> item) {
-    final bhk = ListingData.bhk(item);
-    final furnishing = ListingData.furnishing(item);
-    final category = ListingData.propertyCategory(item);
-    final roomType = ListingData.roomType(item);
-    final occupants = ListingData.currentOccupants(item);
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      clipBehavior: Clip.hardEdge,
-      children: [
-        ListingPropertyTypeBadge(listing: item),
-        if (bhk.isNotEmpty) _textChip(bhk, Icons.apartment_rounded),
-        if (furnishing.isNotEmpty) _textChip(furnishing, Icons.chair_rounded),
-        if (category.isNotEmpty) _textChip(category, Icons.category_rounded),
-        if (roomType.isNotEmpty) _textChip(roomType, Icons.meeting_room_rounded),
-        if (occupants > 0) _textChip('$occupants living', Icons.group_rounded),
-        ListingFoodBadge(listing: item),
-        ListingOccupantBadges(listing: item),
-      ],
-    );
-  }
-
-  Widget _textChip(String label, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: HomeMarketplaceTheme.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: HomeMarketplaceTheme.textSecondary),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: HomeMarketplaceTheme.textSecondary,
-              letterSpacing: -0.1,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1370,67 +1849,76 @@ class _UserHeaderMenuState extends State<_UserHeaderMenu> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: _hovering ? HomeMarketplaceTheme.canvas : HomeMarketplaceTheme.surface,
-      borderRadius: BorderRadius.circular(8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Tooltip(
-            message: 'View Profile',
-            waitDuration: const Duration(milliseconds: 350),
-            child: InkWell(
-              onTap: widget.onViewProfile,
-              onHover: (hovering) => setState(() => _hovering = hovering),
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: HomeMarketplaceTheme.primary,
-                        radius: 17,
-                        child: Text(
-                          _initial,
-                          style: AppTypography.button().copyWith(
-                            fontSize: AppTypography.textSm,
+    return SizedBox(
+      height: _HomeNavBar.actionHeight,
+      child: Material(
+        color: _hovering ? HomeMarketplaceTheme.canvas : HomeMarketplaceTheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Tooltip(
+              message: 'View Profile',
+              waitDuration: const Duration(milliseconds: 350),
+              child: InkWell(
+                onTap: widget.onViewProfile,
+                onHover: (hovering) => setState(() => _hovering = hovering),
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 4, 2, 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: HomeMarketplaceTheme.primary,
+                          radius: _HomeNavBar.avatarRadius,
+                          child: Text(
+                            _initial,
+                            style: AppTypography.button().copyWith(
+                              fontSize: 13,
+                              height: 1,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 120),
-                        child: Text(
-                          widget.fullName,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.cardTitle(),
+                        const SizedBox(width: 8),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 120),
+                          child: Text(
+                            widget.fullName,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.cardTitle().copyWith(
+                              fontSize: 14,
+                              height: 1.2,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          PopupMenuButton<String>(
-            padding: EdgeInsets.zero,
-            splashRadius: 18,
-            tooltip: 'Account menu',
-            offset: const Offset(0, 36),
-            color: Colors.white,
-            elevation: 6,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: Color(0xFFE5E7EB)),
-            ),
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 24,
-              color: Color(0xFF606770),
-            ),
+            PopupMenuButton<String>(
+              padding: EdgeInsets.zero,
+              splashRadius: 18,
+              tooltip: 'Account menu',
+              offset: const Offset(0, 40),
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              color: Colors.white,
+              elevation: 6,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 22,
+                color: Color(0xFF606770),
+              ),
             onSelected: (value) {
               switch (value) {
                 case 'profile':
@@ -1464,9 +1952,299 @@ class _UserHeaderMenuState extends State<_UserHeaderMenu> {
                 ),
               ),
             ],
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ApplicationTile extends StatelessWidget {
+  const _ApplicationTile({
+    required this.title,
+    required this.statusLabel,
+    required this.appliedLabel,
+  });
+
+  final String title;
+  final String statusLabel;
+  final String appliedLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+        boxShadow: HomeMarketplaceTheme.cardShadowRest,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: AppTypography.cardTitle(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: HomeMarketplaceTheme.searchSurface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: HomeMarketplaceTheme.border),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: AppTypography.detail().copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(appliedLabel, style: AppTypography.detail()),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _YourListingsSummaryRow extends StatelessWidget {
+  const _YourListingsSummaryRow({
+    required this.listingCount,
+    required this.applicationCount,
+    required this.averageMatchPercent,
+  });
+
+  final int listingCount;
+  final int applicationCount;
+  final double averageMatchPercent;
+
+  @override
+  Widget build(BuildContext context) {
+    final avgLabel =
+        '${NumericBounds.clampPercentInt(averageMatchPercent)}%';
+
+    return Row(
+      children: [
+        _YourListingsMetric(label: 'Listings', value: '$listingCount'),
+        const SizedBox(width: 12),
+        _YourListingsMetric(label: 'Applications', value: '$applicationCount'),
+        const SizedBox(width: 12),
+        _YourListingsMetric(label: 'Avg match', value: avgLabel),
+      ],
+    );
+  }
+}
+
+class _YourListingsMetric extends StatelessWidget {
+  const _YourListingsMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: HomeMarketplaceTheme.searchSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: HomeMarketplaceTheme.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: AppTypography.detail()),
+            const SizedBox(height: 4),
+            Text(value, style: AppTypography.cardTitle()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _YourListingTile extends StatelessWidget {
+  const _YourListingTile({
+    required this.listing,
+    required this.activeSpace,
+    required this.onManage,
+  });
+
+  final Map<String, dynamic> listing;
+  final MarketplaceSpace activeSpace;
+  final VoidCallback onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    final manageLabel = activeSpace == MarketplaceSpace.sharedSpace
+        ? 'Review matches'
+        : 'Review applicants';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+        boxShadow: HomeMarketplaceTheme.cardShadowRest,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ListingData.title(listing),
+                    style: AppTypography.cardTitle(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    ListingData.location(listing),
+                    style: AppTypography.detail(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    ListingData.price(listing),
+                    style: AppTypography.cardPrice(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: onManage,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                manageLabel,
+                style: AppTypography.button().copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+abstract final class _HomeNavBar {
+  static const markSize = 28.0;
+  static const wordmarkSize = 20.0;
+  static const horizontalPadding = 24.0;
+  static const toolbarHeight = 64.0;
+  static const actionHeight = 40.0;
+  static const avatarRadius = 14.0;
+}
+
+class _HomeDashboardEmptyState extends StatelessWidget {
+  const _HomeDashboardEmptyState({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  static const _maxWidth = 480.0;
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _maxWidth),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: HomeMarketplaceTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: HomeMarketplaceTheme.border),
+                boxShadow: HomeMarketplaceTheme.cardShadowRest,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 36,
+                      color: HomeMarketplaceTheme.primary,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.sectionTitle(),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.searchHint(),
+                    ),
+                    if (actionLabel != null && onAction != null) ...[
+                      const SizedBox(height: 20),
+                      FilledButton(
+                        onPressed: onAction,
+                        style: AppButtonStyles.primaryFilled,
+                        child: Text(
+                          actionLabel!,
+                          style: AppTypography.button(),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
-          const SizedBox(width: 4),
-        ],
+        ),
       ),
     );
   }

@@ -46,3 +46,8 @@ app.*.map.json
 .env
 .env.*
 !.env.example
+env.dev.json
+env.staging.json
+!env.dev.json.example
+!env.staging.json.example
+.tools/

@@ -59,7 +59,7 @@ abstract final class ListingSampleImages {
     'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=400&h=300&fit=crop',
     'https://images.unsplash.com/photo-1630699144867-37acec97df5a?w=400&h=300&fit=crop',
     'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=400&h=300&fit=crop',
-    'https://images.unsplash.com/photo-1598928506311-c55ez637a11?w=400&h=300&fit=crop',
+    'https://images.unsplash.com/photo-1598928506311-c5563763a11?w=400&h=300&fit=crop',
     'https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=400&h=300&fit=crop',
     'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=400&h=300&fit=crop',
     'https://images.unsplash.com/photo-1540518614846-7eded433c457?w=400&h=300&fit=crop',
@@ -67,19 +67,27 @@ abstract final class ListingSampleImages {
     'https://images.unsplash.com/photo-1560448075-cbc16bb4af8e?w=400&h=300&fit=crop',
   ];
 
-  /// Deterministic image per listing — uses listing ID hash to pick a stable
-  /// photo from the curated pool for each property type.
+  /// Stable photo by listing id hash (legacy / user-published listings).
   static String urlFor(String listingId, String propertyType) {
     final id = listingId.trim().isEmpty ? 'listing' : listingId.trim();
     final mode = propertyType.trim().toLowerCase();
     final hash = id.codeUnits.fold<int>(0, (sum, c) => sum * 31 + c);
-    final pool = switch (mode) {
-      'buy' => _buyPhotos,
-      'share' => _sharePhotos,
-      _ => _rentPhotos,
-    };
+    final pool = _poolFor(mode);
     return pool[hash.abs() % pool.length];
   }
+
+  /// Sequential photo from the curated pool — same Unsplash set as India seed.
+  static String photoAt(int index, String propertyType) {
+    final pool = _poolFor(propertyType.trim().toLowerCase());
+    final safe = index < 0 ? 0 : index;
+    return pool[safe % pool.length];
+  }
+
+  static List<String> _poolFor(String mode) => switch (mode) {
+        'buy' => _buyPhotos,
+        'share' => _sharePhotos,
+        _ => _rentPhotos,
+      };
 
   /// Fallback when a stored URL fails to load.
   static String fallbackFor(String listingId) =>

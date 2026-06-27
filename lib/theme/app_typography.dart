@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'home_marketplace_theme.dart';
+import '../core/theme/app_theme.dart' as core;
 
-/// Inter-based type scale — modern product UI with teal accent.
+/// Marketplace typography helpers — delegates to core [core.AppTypography].
 abstract final class AppTypography {
-  static const gray500 = Color(0xFF64748B);
+  static const gray500 = core.AppColors.secondaryText;
 
   static const double textXs = 12;
   static const double textSm = 14;
@@ -17,200 +17,78 @@ abstract final class AppTypography {
   static const double text3xl = 30;
   static const double text4xl = 36;
 
-  static TextTheme interTextTheme(TextTheme base) =>
-      GoogleFonts.interTextTheme(base);
+  static TextTheme textTheme(TextTheme base) => core.AppTheme.light.textTheme;
 
-  static TextStyle _inter({
-    required double fontSize,
-    required FontWeight fontWeight,
-    required Color color,
-    double height = 1.35,
-    double? letterSpacing,
-  }) {
-    return GoogleFonts.inter(
-      fontSize: fontSize,
-      fontWeight: fontWeight,
-      color: color,
-      height: height,
-      letterSpacing: letterSpacing,
-    );
-  }
+  static TextStyle heroTitle() =>
+      core.AppTypography.h1.copyWith(fontSize: text4xl);
 
-  /// Hero headline (product statement).
-  static TextStyle heroTitle() => _inter(
-        fontSize: text4xl,
-        fontWeight: FontWeight.w700,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.15,
-        letterSpacing: -0.6,
-      );
+  static TextStyle heroSubtitle() => core.AppTypography.bodySecondary;
 
-  /// Hero supporting line — text-lg.
-  static TextStyle heroSubtitle() => _inter(
-        fontSize: textLg,
-        fontWeight: FontWeight.w400,
-        color: gray500,
-        height: 1.55,
-      );
+  static TextStyle displayTitle({double size = text3xl}) =>
+      core.AppTypography.h1.copyWith(fontSize: size);
 
-  /// Smaller display titles (empty states, etc.).
-  static TextStyle displayTitle({double size = text3xl}) => _inter(
-        fontSize: size,
-        fontWeight: FontWeight.w600,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.25,
-        letterSpacing: -0.4,
-      );
+  static TextStyle displaySubtitle() => core.AppTypography.bodySecondary;
 
-  /// Supporting line under display titles.
-  static TextStyle displaySubtitle() => _inter(
-        fontSize: textBase,
-        fontWeight: FontWeight.w400,
-        color: gray500,
-        height: 1.5,
-      );
+  static TextStyle sectionTitle() =>
+      core.AppTypography.h2.copyWith(fontSize: textXl);
 
-  /// Section headings (e.g. Marketplace).
-  static TextStyle sectionTitle() => _inter(
-        fontSize: textXl,
-        fontWeight: FontWeight.w600,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.3,
-        letterSpacing: -0.2,
-      );
-
-  /// Section meta / counts.
   static TextStyle sectionMeta() => detail();
 
-  /// Listing card title — medium weight, soft.
-  static TextStyle cardTitle() => _inter(
-        fontSize: textSm,
-        fontWeight: FontWeight.w500,
-        color: HomeMarketplaceTheme.textSecondary,
-        height: 1.35,
-        letterSpacing: -0.1,
-      );
+  static TextStyle cardTitle() =>
+      core.AppTypography.bodySecondary.copyWith(fontSize: textSm);
 
-  /// Listing price — bold hero emphasis.
-  static TextStyle cardPrice() => _inter(
-        fontSize: textMd,
-        fontWeight: FontWeight.w700,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.25,
-        letterSpacing: -0.2,
-      );
+  static TextStyle cardPrice() =>
+      core.AppTypography.h3.copyWith(fontSize: textMd);
 
-  /// Location, host, match reasons — text-sm gray-500.
-  static TextStyle detail() => _inter(
+  static TextStyle detail() => core.AppTypography.caption.copyWith(
         fontSize: textSm,
         fontWeight: FontWeight.w400,
-        color: gray500,
-        height: 1.4,
       );
 
-  /// Small metadata (match overlay, compact labels).
-  static TextStyle meta() => _inter(
-        fontSize: textXs,
-        fontWeight: FontWeight.w400,
-        color: gray500,
-        height: 1.35,
-      );
+  static TextStyle meta() => core.AppTypography.caption;
 
-  /// Property / food / occupant tags — text-xs.
-  static TextStyle tag({Color? color}) => _inter(
-        fontSize: textXs,
-        fontWeight: FontWeight.w500,
-        color: color ?? gray500,
-        height: 1.2,
-      );
+  static TextStyle tag({Color? color}) =>
+      core.AppTypography.caption.copyWith(color: color ?? gray500);
 
-  /// Tower tab labels inside the search block.
-  static TextStyle searchTabLabel({required bool selected}) => _inter(
-        fontSize: textLg,
-        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-        color: selected ? Colors.white : HomeMarketplaceTheme.textSecondary,
-        height: 1.2,
-      );
-
-  /// Compact tabs (legacy / secondary use).
-  static TextStyle tabLabel({required bool selected}) => _inter(
+  static TextStyle searchTabLabel({required bool selected}) =>
+      GoogleFonts.plusJakartaSans(
         fontSize: textSm,
         fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-        color: selected
-            ? HomeMarketplaceTheme.primary
-            : HomeMarketplaceTheme.textSecondary,
-        height: 1.2,
+        color: selected ? core.AppColors.surface : core.AppColors.secondaryText,
       );
 
-  /// Prominent search field text.
-  static TextStyle searchInputProminent() => _inter(
+  static TextStyle tabLabel({required bool selected}) =>
+      GoogleFonts.plusJakartaSans(
+        fontSize: textSm,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+        color: selected ? core.AppColors.accent : core.AppColors.secondaryText,
+      );
+
+  static TextStyle searchInputProminent() =>
+      core.AppTypography.body.copyWith(fontSize: textMd);
+
+  static TextStyle searchInput() =>
+      core.AppTypography.body.copyWith(fontSize: textBase);
+
+  static TextStyle searchHint() => core.AppTypography.bodySecondary.copyWith(
         fontSize: textMd,
-        fontWeight: FontWeight.w400,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.3,
       );
 
-  /// Search field input.
-  static TextStyle searchInput() => _inter(
-        fontSize: textBase,
-        fontWeight: FontWeight.w400,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.3,
-      );
+  static TextStyle button() => core.AppTypography.button;
 
-  static TextStyle searchHint() => _inter(
-        fontSize: textMd,
-        fontWeight: FontWeight.w400,
-        color: HomeMarketplaceTheme.textMuted,
-        height: 1.3,
-      );
+  static TextStyle appBarBrand() => core.AppTypography.h2;
 
-  /// Primary buttons.
-  static TextStyle button() => _inter(
-        fontSize: textBase,
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
-        height: 1.2,
-      );
-
-  /// App bar brand.
-  static TextStyle appBarBrand() => _inter(
-        fontSize: textLg,
-        fontWeight: FontWeight.w600,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.2,
-        letterSpacing: -0.2,
-      );
-
-  /// Status / accent line (signed-in banner).
-  static TextStyle statusAccent() => _inter(
+  static TextStyle statusAccent() => core.AppTypography.link.copyWith(
         fontSize: textSm,
         fontWeight: FontWeight.w500,
-        color: HomeMarketplaceTheme.primary,
-        height: 1.35,
       );
 
-  /// Dropdown group labels.
-  static TextStyle suggestionGroup() => _inter(
-        fontSize: textXs,
+  static TextStyle suggestionGroup() => core.AppTypography.caption.copyWith(
         fontWeight: FontWeight.w600,
-        color: HomeMarketplaceTheme.primary,
-        height: 1.2,
-        letterSpacing: 0.1,
       );
 
-  static TextStyle suggestionItem() => _inter(
-        fontSize: textSm,
-        fontWeight: FontWeight.w500,
-        color: HomeMarketplaceTheme.textPrimary,
-        height: 1.3,
-      );
+  static TextStyle suggestionItem() =>
+      core.AppTypography.body.copyWith(fontSize: textSm);
 
-  static TextStyle suggestionCaption() => _inter(
-        fontSize: textXs,
-        fontWeight: FontWeight.w500,
-        color: HomeMarketplaceTheme.textMuted,
-        height: 1.2,
-        letterSpacing: 0.15,
-      );
+  static TextStyle suggestionCaption() => core.AppTypography.caption;
 }

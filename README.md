@@ -1,8 +1,8 @@
-# CircleKey
+# TrueCircle
 
-**Where trust meets home.**
+**Matched by lifestyle. Connected by trust.**
 
-CircleKey is a trust-weighted property marketplace for renting, sharing, and buying homes in India. Unlike flat listing sites, CircleKey ranks properties using a progressive trust funnel and cultural compatibility matching.
+TrueCircle is a trust-weighted property marketplace for renting, sharing, and buying homes. Unlike flat listing sites, TrueCircle ranks properties using a progressive trust funnel and cultural compatibility matching.
 
 ## Key Features
 
@@ -17,7 +17,7 @@ CircleKey is a trust-weighted property marketplace for renting, sharing, and buy
 
 | Layer | Technology |
 |---|---|
-| UI | Flutter 3.5+, Material 3, Google Fonts, GoRouter |
+| UI | Flutter 3.5+, Material 3, Inter (Google Fonts), GoRouter |
 | Backend | Supabase (initialized, local-first until fully wired) |
 | Local storage | localStorage (web) / SharedPreferences (mobile/desktop) |
 | Location | Geolocator, Geocoding |
@@ -41,7 +41,7 @@ flutter run -d ios
 
 ```
 lib/
-  main.dart                     # App entry, Supabase init, CircleKeyApp
+  main.dart                     # App entry, Supabase init, TrueCircleApp
   router/app_router.dart        # GoRouter route definitions
   screens/                      # All app screens (home, auth, listing detail, etc.)
   services/                     # Trust, profile, and listings storage services

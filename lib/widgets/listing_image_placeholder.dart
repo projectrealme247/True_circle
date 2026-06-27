@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
+
 /// Placeholder when a listing has no photo uploaded.
 class ListingImagePlaceholder extends StatelessWidget {
   const ListingImagePlaceholder({
@@ -29,9 +31,9 @@ class ListingImagePlaceholder extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFE8F0FE),
-              Color(0xFFF0F2F5),
-              Color(0xFFEEF2FF),
+              AppColors.neutralBadgeFill,
+              Color(0xFFF0F0F0),
+              AppColors.background,
             ],
           ),
         ),
@@ -44,7 +46,7 @@ class ListingImagePlaceholder extends StatelessWidget {
               child: Icon(
                 Icons.home_work_outlined,
                 size: resolvedHeight * 0.55,
-                color: const Color(0xFF0EA5E9).withValues(alpha: 0.06),
+                color: AppColors.secondaryText.withValues(alpha: 0.06),
               ),
             ),
             Center(
@@ -61,7 +63,7 @@ class ListingImagePlaceholder extends StatelessWidget {
                     child: Icon(
                       Icons.photo_outlined,
                       size: compact ? 20 : (resolvedHeight < 120 ? 26 : 36),
-                      color: const Color(0xFF0EA5E9).withValues(alpha: 0.75),
+                      color: AppColors.secondaryText.withValues(alpha: 0.75),
                     ),
                   ),
                   if (!compact) ...[

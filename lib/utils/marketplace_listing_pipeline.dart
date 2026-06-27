@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'listing_data.dart';
 import 'listing_match_engine.dart';
 import 'listing_search_intent.dart';
+import 'target_search_areas.dart';
 import 'viewer_profile.dart';
 
 /// Output of the unified marketplace pipeline (parse → filter → rank → display).
@@ -15,6 +16,7 @@ class MarketplaceListingPipelineResult {
     required this.ranked,
     this.relaxedConstraints = const [],
     this.usedClosestMatchFallback = false,
+    this.isCommuteDivergent = false,
   });
 
   final SearchIntent requestedIntent;
@@ -24,6 +26,9 @@ class MarketplaceListingPipelineResult {
   final List<ScoredListing> ranked;
   final List<String> relaxedConstraints;
   final bool usedClosestMatchFallback;
+
+  /// Path B — opposite-side commute hubs exceed max budget (zero-match feed).
+  final bool isCommuteDivergent;
 
   bool get hasActiveSearch => !requestedIntent.isEmpty;
 
@@ -37,7 +42,13 @@ class MarketplaceListingPipelineResult {
     return 'Showing results for: $summary';
   }
 
+  static const commuteDivergenceNotice =
+      'Your commute endpoints are on opposite sides of Dublin. '
+      'Consider adjusting your Maximum Commute Budget slider upward to reveal '
+      'properties situated perfectly in the middle.';
+
   String? get relaxationNotice {
+    if (isCommuteDivergent) return commuteDivergenceNotice;
     if (!filtersWereRelaxed) return null;
     if (usedClosestMatchFallback && relaxedConstraints.isEmpty) {
       return 'Showing closest matches to your search';
@@ -62,9 +73,7 @@ abstract final class MarketplaceListingPipeline {
     required Map<String, dynamic>? userSession,
     String searchQuery = '',
   }) {
-    final normalized = searchQuery.trim().isNotEmpty
-        ? ListingSearchIntent.normalizeQuery(searchQuery)
-        : filters.toPipelineQuery();
+    final normalized = filters.pipelineQueryText(searchText: searchQuery);
 
     final result = run(
       allListings: allListings,
@@ -74,16 +83,45 @@ abstract final class MarketplaceListingPipeline {
       searchIntent: filters.toSearchIntent(mergeQuery: normalized),
     );
 
+    final areaTokens = filters.effectiveAreaTokens;
+    var filtered = result.afterFilters;
+    if (areaTokens.isNotEmpty &&
+        !TargetSearchAreas.hasAllDublin(areaTokens)) {
+      filtered = [
+        for (final item in filtered)
+          if (TargetSearchAreas.listingMatchesTargets(areaTokens, item)) item,
+      ];
+    }
+
     if (filters.budgetMin == null && filters.budgetMax == null) {
-      return result;
+      if (identical(filtered, result.afterFilters)) return result;
+      final rankOutcome = ListingMatchEngine.rank(
+        filtered,
+        userSession,
+        searchIntent: result.requestedIntent.hasStructuredFilters
+            ? result.requestedIntent
+            : null,
+        appliedSearchIntent: result.appliedIntent,
+        filtersWereRelaxed: result.filtersWereRelaxed,
+      );
+      return MarketplaceListingPipelineResult(
+        requestedIntent: result.requestedIntent,
+        appliedIntent: result.appliedIntent,
+        afterTower: result.afterTower,
+        afterFilters: filtered,
+        ranked: rankOutcome.ranked,
+        relaxedConstraints: result.relaxedConstraints,
+        usedClosestMatchFallback: result.usedClosestMatchFallback,
+        isCommuteDivergent: rankOutcome.isCommuteDivergent,
+      );
     }
 
     final budgetFiltered = [
-      for (final item in result.afterFilters)
+      for (final item in filtered)
         if (filters.matchesListing(item)) item,
     ];
 
-    final ranked = ListingMatchEngine.rank(
+    final rankOutcome = ListingMatchEngine.rank(
       budgetFiltered,
       userSession,
       searchIntent: result.requestedIntent.hasStructuredFilters
@@ -98,9 +136,10 @@ abstract final class MarketplaceListingPipeline {
       appliedIntent: result.appliedIntent,
       afterTower: result.afterTower,
       afterFilters: budgetFiltered,
-      ranked: ranked,
+      ranked: rankOutcome.ranked,
       relaxedConstraints: result.relaxedConstraints,
       usedClosestMatchFallback: result.usedClosestMatchFallback,
+      isCommuteDivergent: rankOutcome.isCommuteDivergent,
     );
   }
 
@@ -135,13 +174,14 @@ abstract final class MarketplaceListingPipeline {
         ? requestedIntent
         : null;
 
-    var ranked = ListingMatchEngine.rank(
+    var rankOutcome = ListingMatchEngine.rank(
       pool,
       userSession,
       searchIntent: searchIntentForRanking,
       appliedSearchIntent: filterOutcome.appliedIntent,
       filtersWereRelaxed: filterOutcome.wasRelaxed,
     );
+    var ranked = rankOutcome.ranked;
 
     if (requestedIntent.food != null) {
       ranked = _enforceFoodOnRanked(ranked, requestedIntent.food);
@@ -155,6 +195,7 @@ abstract final class MarketplaceListingPipeline {
       ranked: ranked,
       relaxedConstraints: filterOutcome.relaxedConstraints,
       usedClosestMatchFallback: filterOutcome.usedClosestMatchFallback,
+      isCommuteDivergent: rankOutcome.isCommuteDivergent,
     );
   }
 

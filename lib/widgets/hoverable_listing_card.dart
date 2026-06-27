@@ -1,10 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_match_engine.dart';
 
-/// Premium listing card shell with hover lift and soft shadow.
-/// Clean Airbnb-style — no side stripes, just rounded corners and shadow.
+/// Listing card shell with premium 3D hover lift on desktop/web.
 class HoverableListingCard extends StatefulWidget {
   const HoverableListingCard({
     super.key,
@@ -24,7 +24,14 @@ class HoverableListingCard extends StatefulWidget {
 }
 
 class _HoverableListingCardState extends State<HoverableListingCard> {
-  bool _hovering = false;
+  bool _isHovered = false;
+
+  static const double _hoverBreakpoint = 768;
+
+  bool _hoverEffectsEnabled(BuildContext context) {
+    if (kIsWeb) return true;
+    return MediaQuery.sizeOf(context).width >= _hoverBreakpoint;
+  }
 
   double get _opacity {
     final m = widget.match;
@@ -35,31 +42,45 @@ class _HoverableListingCardState extends State<HoverableListingCard> {
 
   @override
   Widget build(BuildContext context) {
+    final hoverActive = _isHovered && _hoverEffectsEnabled(context);
+
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
+      onEnter: (_) {
+        if (_hoverEffectsEnabled(context)) {
+          setState(() => _isHovered = true);
+        }
+      },
+      onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
-        child: Transform.scale(
-          scale: _hovering ? 1.015 : 1,
-          alignment: Alignment.center,
-          transformHitTests: true,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          transform: hoverActive
+              ? (Matrix4.identity()..translate(0.0, -6.0, 0.0))
+              : Matrix4.identity(),
+          transformAlignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: HomeMarketplaceTheme.surface,
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            border: hoverActive
+                ? null
+                : Border.all(color: HomeMarketplaceTheme.border),
+            boxShadow: hoverActive
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, 12),
+                    ),
+                  ]
+                : HomeMarketplaceTheme.cardShadowRest,
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Opacity(
             opacity: _opacity,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              decoration: BoxDecoration(
-                color: HomeMarketplaceTheme.surface,
-                borderRadius: BorderRadius.circular(widget.borderRadius),
-                boxShadow: _hovering
-                    ? HomeMarketplaceTheme.cardShadowHover
-                    : HomeMarketplaceTheme.cardShadowRest,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: widget.child,
-            ),
+            child: widget.child,
           ),
         ),
       ),

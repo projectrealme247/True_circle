@@ -1,27 +1,50 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart' show AppColors;
+import '../config/market/market_config.dart';
 import '../theme/app_typography.dart';
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_match_engine.dart';
+import '../utils/polymorphic_identity.dart';
+import '../theme/trust_tier_design.dart';
+import '../utils/trust_tier_tooltips.dart';
 import '../utils/viewer_profile.dart';
+import '../widgets/listing_card_overlay_badge.dart';
+import '../widgets/trust_tier_badge.dart';
 
 /// Full-width trust row shown at the top of the card body, right below
 /// the image. Contains the trust badge on the left and match score on
 /// the right.
 class ListingTrustRow extends StatelessWidget {
-  const ListingTrustRow({super.key, required this.match});
+  const ListingTrustRow({
+    super.key,
+    required this.match,
+    this.listing,
+  });
 
   final ListingMatchResult match;
+  final Map<String, dynamic>? listing;
 
   @override
   Widget build(BuildContext context) {
-    if (match.inCircle) return _CircleBanner(match: match);
+    if (match.inCircle) {
+      return _CircleBanner(match: match, listing: listing);
+    }
+
+    final professionalHost = listing != null &&
+        PolymorphicIdentity.showVerifiedProfessionalHostBadge(listing!);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Row(
         children: [
-          _TrustPill(trustStage: match.trustStage),
+          if (professionalHost)
+            const _ProfessionalHostPill()
+          else
+            _TrustPill(
+              trustStage: match.trustStage,
+              preArrivalBadge: match.preArrivalBadge,
+            ),
           const Spacer(),
           if (match.percentage > 0) _ScorePill(percentage: match.percentage),
         ],
@@ -30,11 +53,36 @@ class ListingTrustRow extends StatelessWidget {
   }
 }
 
-/// "In Your Circle" banner -- blue-tinted, full-width, prominent.
+/// "In Your Circle" banner — premium indigo relational marker, full-width.
+class _ProfessionalHostPill extends StatelessWidget {
+  const _ProfessionalHostPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE6F7F5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFBCE8DB)),
+      ),
+      child: const Text(
+        PolymorphicIdentity.verifiedProfessionalHostLabel,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF0F3D36),
+        ),
+      ),
+    );
+  }
+}
+
 class _CircleBanner extends StatelessWidget {
-  const _CircleBanner({required this.match});
+  const _CircleBanner({required this.match, this.listing});
 
   final ListingMatchResult match;
+  final Map<String, dynamic>? listing;
 
   @override
   Widget build(BuildContext context) {
@@ -42,25 +90,29 @@ class _CircleBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(8, 6, 8, 2),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F0FE),
-        borderRadius: BorderRadius.circular(10),
+        color: InYourCircleOverlayTokens.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: InYourCircleOverlayTokens.border,
+          width: InYourCircleOverlayTokens.borderWidth,
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.people_rounded, size: 18, color: Color(0xFF0EA5E9)),
-          const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
-              'In Your Circle',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0EA5E9),
-                letterSpacing: -0.1,
-              ),
+              InYourCircleOverlayTokens.label,
+              style: InYourCircleOverlayTokens.bannerLabelStyle,
             ),
           ),
-          _TrustPill(trustStage: match.trustStage),
+          if (listing != null &&
+              PolymorphicIdentity.showVerifiedProfessionalHostBadge(listing!))
+            const _ProfessionalHostPill()
+          else
+            _TrustPill(
+              trustStage: match.trustStage,
+              preArrivalBadge: match.preArrivalBadge,
+            ),
           if (match.percentage > 0) ...[
             const SizedBox(width: 8),
             _ScorePill(percentage: match.percentage),
@@ -73,40 +125,64 @@ class _CircleBanner extends StatelessWidget {
 
 /// Colored pill showing trust stage (e.g., "Verified Pro").
 class _TrustPill extends StatelessWidget {
-  const _TrustPill({required this.trustStage});
+  const _TrustPill({
+    required this.trustStage,
+    this.preArrivalBadge = false,
+  });
 
   final TrustStage trustStage;
+  final bool preArrivalBadge;
 
   @override
   Widget build(BuildContext context) {
-    final (icon, label, color, bgColor) = switch (trustStage) {
+    if (preArrivalBadge) {
+      return ListingCardLabelOverlayBadge(label: 'Pre-Arrival');
+    }
+
+    final lightTrust =
+        MarketConfig.current.trustVerificationKind == TrustVerificationKind.lightTrust;
+
+    if (lightTrust && trustStage != TrustStage.anonymous) {
+      final tier = TrustTierDesign.fromTrustStage(trustStage);
+      return TrustTierBadge(
+        tier: tier,
+        tooltip: TrustTierTooltips.forTrustStage(trustStage),
+      );
+    }
+
+    final (icon, label, color, bgColor, tooltip) =
+        switch (trustStage) {
       TrustStage.idVerified => (
           Icons.verified_user_rounded,
           'ID Verified',
-          const Color(0xFF008A05),
+          HomeMarketplaceTheme.trustIdVerified,
           const Color(0xFFDCFCE7),
+          null as String?,
         ),
       TrustStage.socialVerified => (
           Icons.workspace_premium_rounded,
           'Verified Pro',
-          const Color(0xFF7C3AED),
-          const Color(0xFFF3E8FF),
+          HomeMarketplaceTheme.trustSocialVerified,
+          AppColors.trustMutedSurface,
+          null,
         ),
       TrustStage.casual => (
           Icons.person_outline_rounded,
           'Casual',
-          const Color(0xFF717171),
+          HomeMarketplaceTheme.textSecondary,
           const Color(0xFFF3F4F6),
+          null,
         ),
       TrustStage.anonymous => (
           Icons.help_outline_rounded,
           'Unverified',
-          const Color(0xFFB0B0B0),
-          const Color(0xFFF7F7F7),
+          HomeMarketplaceTheme.textMuted,
+          HomeMarketplaceTheme.trustAnonymous,
+          null,
         ),
     };
 
-    return Container(
+    final pill = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: bgColor,
@@ -129,6 +205,17 @@ class _TrustPill extends StatelessWidget {
         ],
       ),
     );
+
+    if (tooltip == null || tooltip.isEmpty) return pill;
+
+    return Tooltip(
+      message: tooltip,
+      triggerMode: TooltipTriggerMode.tap,
+      preferBelow: true,
+      waitDuration: Duration.zero,
+      showDuration: const Duration(seconds: 4),
+      child: pill,
+    );
   }
 }
 
@@ -141,26 +228,23 @@ class _ScorePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = percentage.round();
-    final color = pct >= 70
-        ? const Color(0xFF008A05)
-        : pct >= 50
-            ? HomeMarketplaceTheme.textPrimary
-            : HomeMarketplaceTheme.textSecondary;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: TrustTierDesign.trustScaleCapsulePadding,
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F7),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: HomeMarketplaceTheme.border),
+        color: TrustTierDesign.trustScaleCapsuleBg,
+        borderRadius:
+            BorderRadius.circular(TrustTierDesign.trustScaleCapsuleRadius),
+        border: Border.all(color: ListingCardOverlayTokens.border),
       ),
       child: Text(
-        '$pct%',
+        '$pct% match',
         style: TextStyle(
-          fontSize: 16,
+          fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: color,
-          letterSpacing: -0.2,
+          color: ListingCardOverlayTokens.matchText,
+          letterSpacing: -0.1,
+          height: 1.2,
         ),
       ),
     );

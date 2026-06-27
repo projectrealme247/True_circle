@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/theme/app_theme.dart';
+import '../services/auth_service.dart';
+import '../services/listings_storage_service.dart';
+import '../services/profile_state_notifier.dart';
 import '../services/profile_storage_service.dart';
+import '../utils/polymorphic_identity.dart';
 import '../utils/profile_data.dart';
+import '../utils/profile_progress.dart';
+import '../utils/target_search_areas.dart';
+import '../utils/trust_tier_tooltips.dart';
+import '../widgets/profile_trust_section.dart';
 import 'auth_screen.dart';
 
 /// Read-only profile view; loads persisted signup data from localStorage (web).
 class UserProfileScreen extends StatefulWidget {
-  const UserProfileScreen({super.key});
+  const UserProfileScreen({super.key, this.initialSession});
+
+  /// Fresh session passed after profile edit save.
+  final Map<String, dynamic>? initialSession;
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -17,11 +29,60 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Map<String, dynamic>? _session;
   bool _loading = true;
   bool _loadFailed = false;
+  int _ownedListingCount = 0;
 
   @override
   void initState() {
     super.initState();
+    authSessionNotifier.addListener(_onAuthSessionChanged);
+    profileStateNotifier.addListener(_onProfileStateChanged);
+    final seeded = widget.initialSession ?? profileStateNotifier.session;
+    if (seeded != null) {
+      _applyLiveSession(seeded, loading: false);
+    } else {
+      _loadFromStorage();
+    }
+  }
+
+  @override
+  void dispose() {
+    authSessionNotifier.removeListener(_onAuthSessionChanged);
+    profileStateNotifier.removeListener(_onProfileStateChanged);
+    super.dispose();
+  }
+
+  void _applyLiveSession(Map<String, dynamic> session, {required bool loading}) {
+    AuthScreen.currentUserSession = session;
+    profileStateNotifier.commitPersisted(session);
+    setState(() {
+      _session = Map<String, dynamic>.from(session);
+      _loading = loading;
+      _loadFailed = false;
+    });
+    _refreshOwnedListingCount(session);
+  }
+
+  void _onAuthSessionChanged() {
+    if (!mounted) return;
+    final live = profileStateNotifier.session ?? AuthScreen.currentUserSession;
+    if (live != null && ProfileData.normalize(live) != null) {
+      _applyLiveSession(live, loading: false);
+      return;
+    }
     _loadFromStorage();
+  }
+
+  void _onProfileStateChanged() {
+    if (!mounted) return;
+    final live = profileStateNotifier.session;
+    if (live == null) return;
+    setState(() => _session = Map<String, dynamic>.from(live));
+  }
+
+  Future<void> _refreshOwnedListingCount(Map<String, dynamic>? session) async {
+    final owned = await ListingsStorageService.ownedByCurrentUser(session);
+    if (!mounted) return;
+    setState(() => _ownedListingCount = owned.length);
   }
 
   Future<void> _loadFromStorage() async {
@@ -31,16 +92,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     });
 
     try {
+      await AuthService.bootstrap();
       final stored = await ProfileStorageService.load();
       if (!mounted) return;
 
-      final normalized = ProfileData.normalize(stored);
+      final live = AuthScreen.currentUserSession;
+      final normalized = ProfileData.normalize(live ?? stored);
+      final session = normalized ?? live ?? stored;
+
+      if (AuthService.isAuthenticated &&
+          !ProfileData.isMatchingReady(session)) {
+        AuthScreen.currentUserSession = session;
+        if (mounted) {
+          setState(() => _loading = false);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            context.go('/profile/edit', extra: session);
+          });
+        }
+        return;
+      }
+
+      final owned = await ListingsStorageService.ownedByCurrentUser(session);
+      if (!mounted) return;
+
       setState(() {
         _session = normalized;
+        _ownedListingCount = owned.length;
         _loading = false;
       });
 
-      if (normalized != null) {
+      if (normalized != null &&
+          AuthScreen.currentUserSession == null) {
         AuthScreen.currentUserSession = normalized;
       }
     } catch (_) {
@@ -112,10 +195,114 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
 
     if (_session == null) {
+      if (AuthService.isAuthenticated) {
+        final email = AuthScreen.currentUserSession?['email']?.toString() ??
+            AuthService.currentUser?.email ??
+            '';
+        final missing = ProfileProgress.missingFields(
+          AuthScreen.currentUserSession,
+          ownedListingCount: _ownedListingCount,
+        );
+        return _IncompleteProfile(
+          email: email,
+          percent: ProfileProgress.percent(
+            AuthScreen.currentUserSession,
+            ownedListingCount: _ownedListingCount,
+          ),
+          detail: missing.isEmpty
+              ? 'Complete your profile to unlock tailored matching.'
+              : 'Still needed: ${missing.take(4).join(', ')}.',
+          onComplete: () => context.push('/profile/edit'),
+        );
+      }
       return _EmptyProfile(onSignIn: _openAuth);
     }
 
+    if (ProfileData.isProfileIncomplete(_session!)) {
+      final missing = ProfileProgress.missingFields(
+        _session,
+        ownedListingCount: _ownedListingCount,
+      );
+      return _IncompleteProfile(
+        email: ProfileData.text(_session!['email']),
+        percent: ProfileProgress.percent(
+          _session,
+          ownedListingCount: _ownedListingCount,
+        ),
+        detail: missing.isEmpty
+            ? 'Add a few more details to unlock tailored matching.'
+            : 'Still needed: ${missing.take(4).join(', ')}.',
+        onComplete: () => context.push('/profile/edit', extra: _session),
+      );
+    }
+
     return _ProfileBody(session: _session!);
+  }
+}
+
+class _IncompleteProfile extends StatelessWidget {
+  const _IncompleteProfile({
+    required this.email,
+    required this.onComplete,
+    this.detail,
+    this.percent,
+  });
+
+  final String email;
+  final VoidCallback onComplete;
+  final String? detail;
+  final int? percent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _ProfileLayout.maxWidthLg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.person_outline_rounded, size: 56, color: _ProfileTheme.gray400),
+              const SizedBox(height: 16),
+              const Text('Your Profile', style: _ProfileTheme.pageTitle),
+              if (percent != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Profile $percent% complete',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.accentDark,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                detail ??
+                    (email.isNotEmpty
+                        ? 'Signed in as $email. Complete your profile to unlock matching.'
+                        : 'You are signed in. Complete your profile to unlock matching.'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: _ProfileTheme.gray500, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: onComplete,
+                style: AppButtonStyles.primaryFilled,
+                child: Text(
+                  'Complete profile',
+                  style: AppTypography.button.copyWith(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -150,11 +337,11 @@ class _LoadErrorState extends StatelessWidget {
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: onRetry,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _ProfileTheme.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                style: AppButtonStyles.primaryFilled,
+                child: Text(
+                  'Try again',
+                  style: AppTypography.button.copyWith(fontWeight: FontWeight.w500),
                 ),
-                child: const Text('Try again', style: TextStyle(fontWeight: FontWeight.w700)),
               ),
               const SizedBox(height: 10),
               TextButton(
@@ -196,16 +383,13 @@ class _EmptyProfile extends StatelessWidget {
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: onSignIn,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _ProfileTheme.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
+                style: AppButtonStyles.primaryFilled,
+                child: Text(
                   'Sign in / Register',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  style: AppTypography.button.copyWith(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
                 ),
               ),
             ],
@@ -230,10 +414,18 @@ class _ProfileBody extends StatelessWidget {
     final fullName = ProfileData.display(session['full_name']);
     final email = ProfileData.display(session['email']);
     final city = ProfileData.display(session['detected_city']);
-    final nativePlace = ProfileData.display(session['native_place']);
+    final targetAreas = TargetSearchAreas.displaySummary(
+      TargetSearchAreas.hydrateFromSession(session),
+    );
+    final nativePlace = ProfileData.text(session['native_place']);
     final motherTongue = ProfileData.display(session['mother_tongue']);
+    final isSharedRoomSeeker = ProfileData.isSharedRoomSeeker(session);
     final foodPref = ProfileData.display(session['food_preference']);
-    final languages = ProfileData.displayLanguages(session['spoken_languages']);
+    final languages = ProfileData.displayOtherLanguages(session);
+    final languagesDisplay = languages.isEmpty
+        ? ProfileData.notProvided
+        : languages.join(', ');
+    final kitchenUsage = ProfileData.text(session['kitchen_usage_timing']);
 
     final emailSubtitle = ProfileData.text(session['email']);
 
@@ -289,6 +481,29 @@ class _ProfileBody extends StatelessWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (PolymorphicIdentity.showEnterpriseVerifiedSeekerBadge(
+                              session,
+                            )) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  PolymorphicIdentity.enterpriseVerifiedLabel,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.accentDark,
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (emailSubtitle.isNotEmpty) ...[
                               const SizedBox(height: 4),
                               Text(emailSubtitle, style: _ProfileTheme.pageSubtitle),
@@ -298,6 +513,12 @@ class _ProfileBody extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  ProfileTrustSection(
+                    session: session,
+                    actionColor: _ProfileTheme.coralRose,
+                    tierTooltipForLabel: TrustTierTooltips.forBadgeLabel,
+                  ),
                   const SizedBox(height: _ProfileLayout.spaceY6),
                   const _SectionDivider(),
                   const SizedBox(height: _ProfileLayout.spaceY6),
@@ -306,7 +527,7 @@ class _ProfileBody extends StatelessWidget {
                     children: [
                       _ProfileField(label: 'Full name', value: fullName),
                       _ProfileField(label: 'Email', value: email),
-                      _ProfileField(label: 'Current city', value: city),
+                      _ProfileField(label: 'Your current location', value: city),
                     ],
                   ),
                   const SizedBox(height: _ProfileLayout.spaceY6),
@@ -316,17 +537,40 @@ class _ProfileBody extends StatelessWidget {
                     title: 'Community info',
                     children: [
                       _ProfileField(label: 'Mother tongue', value: motherTongue),
-                      _ProfileField(label: 'Other languages', value: languages),
-                      _ProfileField(label: 'Native place', value: nativePlace),
+                      _ProfileField(label: 'Other languages', value: languagesDisplay),
                     ],
                   ),
+                  if (nativePlace.isNotEmpty) ...[
+                    const SizedBox(height: _ProfileLayout.spaceY6),
+                    const _SectionDivider(),
+                    const SizedBox(height: _ProfileLayout.spaceY6),
+                    _ProfileSectionBlock(
+                      title: 'About you',
+                      subtitle:
+                          'Optional — hometown or native place for your bio and icebreakers',
+                      children: [
+                        _ProfileField(label: 'Native place', value: nativePlace),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: _ProfileLayout.spaceY6),
                   const _SectionDivider(),
                   const SizedBox(height: _ProfileLayout.spaceY6),
                   _ProfileSectionBlock(
-                    title: 'Preferences',
+                    title: 'Search preferences',
                     children: [
-                      _ProfileField(label: 'Food preference', value: foodPref),
+                      _ProfileField(
+                        label: 'Target search areas',
+                        value: targetAreas,
+                      ),
+                      if (isSharedRoomSeeker) ...[
+                        _ProfileField(label: 'Food preference', value: foodPref),
+                        if (kitchenUsage.isNotEmpty)
+                          _ProfileField(
+                            label: 'Kitchen usage',
+                            value: ProfileData.display(kitchenUsage),
+                          ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: _ProfileLayout.spaceY6),
@@ -370,9 +614,11 @@ class _ProfileSectionBlock extends StatelessWidget {
   const _ProfileSectionBlock({
     required this.title,
     required this.children,
+    this.subtitle,
   });
 
   final String title;
+  final String? subtitle;
   final List<Widget> children;
 
   @override
@@ -383,6 +629,10 @@ class _ProfileSectionBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(title, style: _ProfileTheme.sectionHeader),
+        if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(subtitle!, style: _ProfileTheme.pageSubtitle),
+        ],
         const SizedBox(height: 16),
         ...children.expand((child) => [child, const SizedBox(height: 20)]).toList()
           ..removeLast(),
@@ -434,7 +684,8 @@ abstract final class _ProfileLayout {
 }
 
 abstract final class _ProfileTheme {
-  static const primary = Color(0xFF0EA5E9);
+  static const primary = AppColors.accent;
+  static const coralRose = AppColors.accent;
   static const canvas = Color(0xFFF3F4F6);
   static const surface = Color(0xFFFFFFFF);
   static const borderSoft = Color(0xFFE5E7EB);

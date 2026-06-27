@@ -2,17 +2,18 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-const listingsStorageKey = 'circlekey_listings';
-
-Future<void> saveListings(List<Map<String, dynamic>> listings) async {
+Future<void> saveListings(
+  String storageKey,
+  List<Map<String, dynamic>> listings,
+) async {
   final prefs = await SharedPreferences.getInstance();
-  await prefs.setString(listingsStorageKey, jsonEncode(listings));
+  await prefs.setString(storageKey, jsonEncode(listings));
 }
 
-Future<List<Map<String, dynamic>>> loadListings() async {
+Future<List<Map<String, dynamic>>> loadListings(String storageKey) async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(listingsStorageKey);
+    final raw = prefs.getString(storageKey);
     return _decodeListings(raw);
   } catch (_) {
     return [];

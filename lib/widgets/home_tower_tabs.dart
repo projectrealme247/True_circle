@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/market/market_config.dart';
 import '../theme/app_typography.dart';
 import '../theme/home_marketplace_theme.dart';
 
@@ -15,17 +16,22 @@ class HomeTowerTabs extends StatelessWidget {
   final String selectedPropertyType;
   final ValueChanged<String> onSelected;
 
-  static const tabs = <({String type, String label})>[
-    (type: 'Rent', label: 'Rent'),
-    (type: 'Buy', label: 'Buy / Sell'),
-    (type: 'Share', label: 'Shared Spaces'),
-  ];
+  static List<({String type, String label})> get tabs {
+    return MarketConfig.current.enabledTowers.map((type) {
+      final label = switch (type) {
+        'Buy' => 'Buy / Sell',
+        'Share' => 'Shared Spaces',
+        _ => 'Rent',
+      };
+      return (type: type, label: label);
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: HomeMarketplaceTheme.canvas,
+        color: HomeMarketplaceTheme.searchSurface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: HomeMarketplaceTheme.border),
       ),
@@ -78,8 +84,8 @@ class _TowerPill extends StatelessWidget {
             boxShadow: selected
                 ? const [
                     BoxShadow(
-                      color: Color(0x1A0EA5E9),
-                      blurRadius: 8,
+                      color: Color(0x1A000000),
+                      blurRadius: 6,
                       offset: Offset(0, 2),
                     ),
                   ]

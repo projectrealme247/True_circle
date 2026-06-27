@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
 import '../utils/listing_media.dart';
 
 /// Image/video picker with previews for the add-listing form.
@@ -159,7 +160,7 @@ class ListingMediaPicker extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.movie_outlined, color: Color(0xFF0EA5E9), size: 20),
+                const Icon(Icons.movie_outlined, color: AppColors.accent, size: 20),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
@@ -241,7 +242,7 @@ class ListingMediaPicker extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF0EA5E9),
+                color: AppColors.accent,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(

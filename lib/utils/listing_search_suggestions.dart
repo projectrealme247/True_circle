@@ -1,5 +1,7 @@
+import '../config/market/market_config.dart';
 import 'listing_data.dart';
 import 'listing_search_intent.dart';
+import 'target_search_areas.dart';
 import 'viewer_profile.dart';
 
 /// Category for grouping autocomplete rows in the search dropdown.
@@ -845,9 +847,24 @@ abstract final class ListingSearchSuggestions {
         if (viewerFood == food) score += 60;
       }
       if (city != null) {
-        final viewerCity = viewer.city.toLowerCase();
-        if (viewerCity.contains(city) || city.contains(viewerCity)) {
-          score += 50;
+        final cityNorm = city.toLowerCase();
+        if (viewer.targetSearchAreas.isNotEmpty) {
+          for (final token in viewer.targetSearchAreas) {
+            if (token == TargetSearchAreas.allDublinToken) {
+              score += 50;
+              break;
+            }
+            final label = token.toLowerCase();
+            if (label.contains(cityNorm) || cityNorm.contains(label)) {
+              score += 50;
+              break;
+            }
+          }
+        } else {
+          final viewerCity = viewer.city.toLowerCase();
+          if (viewerCity.contains(cityNorm) || cityNorm.contains(viewerCity)) {
+            score += 50;
+          }
         }
       }
       if (occupant != null &&
@@ -1033,27 +1050,22 @@ abstract final class ListingSearchSuggestions {
         : null;
     final cityName = cityKey != null
         ? ListingSearchIntent.cityDisplayName(cityKey)
-        : 'Hyderabad';
+        : MarketConfig.current.defaultAreaDisplayName;
 
-    final items = [
+    final items = <SearchSuggestion>[
       SearchSuggestion.fromParts(
         label: 'Try: $cityName',
-        query: cityKey ?? 'hyderabad',
+        query: cityKey ?? MarketConfig.current.defaultAreaKey,
         category: SearchSuggestionCategory.fallback,
         isFallback: true,
       ),
-      SearchSuggestion.fromParts(
-        label: 'Try: Veg',
-        query: 'veg',
-        category: SearchSuggestionCategory.fallback,
-        isFallback: true,
-      ),
-      SearchSuggestion.fromParts(
-        label: 'Try: Family',
-        query: 'family',
-        category: SearchSuggestionCategory.fallback,
-        isFallback: true,
-      ),
+      for (final example in MarketConfig.current.fallbackSearchSuggestions)
+        SearchSuggestion.fromParts(
+          label: 'Try: ${example.$1}',
+          query: example.$2,
+          category: SearchSuggestionCategory.fallback,
+          isFallback: true,
+        ),
     ];
 
     return [

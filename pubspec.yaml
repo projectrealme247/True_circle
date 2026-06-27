@@ -1,5 +1,5 @@
 name: true_circle
-description: CircleKey — Where trust meets home.
+description: TrueCircle — Matched by lifestyle. Connected by trust.
 publish_to: "none"
 version: 1.0.0+1
 
@@ -33,3 +33,16 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/Plus_Jakarta_Sans/static/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Plus_Jakarta_Sans/static/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Plus_Jakarta_Sans/static/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Plus_Jakarta_Sans/static/PlusJakartaSans-Bold.ttf
+          weight: 700

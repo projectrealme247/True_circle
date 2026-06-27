@@ -1,4 +1,8 @@
+import '../config/market/market_config.dart';
+import 'city_area_match.dart';
 import 'listing_data.dart';
+import 'dublin_macro_search.dart';
+import 'target_search_areas.dart';
 
 /// Structured filters parsed from a natural-language search query.
 class SearchIntent {
@@ -59,9 +63,14 @@ class SearchIntent {
       parts.add(gender == 'girls' ? 'Girls' : 'Boys');
     }
     for (final keyword in remainingKeywords) {
-      final bhk = RegExp(r'^(\d)bhk$').firstMatch(keyword);
+      final bhk = RegExp(r'^(\d+)bhk$').firstMatch(keyword);
       if (bhk != null) {
         parts.add('${bhk.group(1)} BHK');
+        continue;
+      }
+      final bed = RegExp(r'^(\d+)bed$').firstMatch(keyword);
+      if (bed != null) {
+        parts.add('${bed.group(1)} Bed');
         continue;
       }
       final locality = ListingSearchIntent.localityDisplayName(keyword);
@@ -125,6 +134,7 @@ class ListingSearchFilters {
   const ListingSearchFilters({
     this.foodPreference,
     this.city,
+    this.targetSearchAreas = const [],
     this.occupantType,
     this.genderPreference,
     this.budgetMin,
@@ -133,7 +143,13 @@ class ListingSearchFilters {
   });
 
   final String? foodPreference;
+
+  /// Legacy single city key — prefer [targetSearchAreas] when set.
   final String? city;
+
+  /// Area tokens (`dublin4`, `ALL_DUBLIN`, …) — matches [TargetSearchAreas].
+  final List<String> targetSearchAreas;
+
   final String? occupantType;
   final String? genderPreference;
   final int? budgetMin;
@@ -142,9 +158,30 @@ class ListingSearchFilters {
   /// Free-text tokens (e.g. `2bhk`, `furnished`) from the search box.
   final List<String> keywords;
 
+  List<String> get effectiveAreaTokens {
+    if (targetSearchAreas.isNotEmpty) {
+      return TargetSearchAreas.normalizeTokens(targetSearchAreas);
+    }
+    if (city != null && city!.isNotEmpty) return [city!];
+    return const [];
+  }
+
+  bool get isAllDublinMacro =>
+      TargetSearchAreas.hasAllDublin(effectiveAreaTokens);
+
+  ListingSearchFilters withAllDublinArea() => copyWith(
+        city: null,
+        targetSearchAreas: TargetSearchAreas.allDublinFilterTokens,
+      );
+
+  ListingSearchFilters withoutAllDublinMacro() {
+    if (!isAllDublinMacro) return this;
+    return copyWith(city: null, targetSearchAreas: const []);
+  }
+
   bool get isEmpty =>
       foodPreference == null &&
-      city == null &&
+      effectiveAreaTokens.isEmpty &&
       occupantType == null &&
       genderPreference == null &&
       budgetMin == null &&
@@ -154,6 +191,7 @@ class ListingSearchFilters {
   ListingSearchFilters copyWith({
     Object? foodPreference = _filterUnset,
     Object? city = _filterUnset,
+    List<String>? targetSearchAreas,
     Object? occupantType = _filterUnset,
     Object? genderPreference = _filterUnset,
     Object? budgetMin = _filterUnset,
@@ -165,6 +203,7 @@ class ListingSearchFilters {
           ? this.foodPreference
           : foodPreference as String?,
       city: identical(city, _filterUnset) ? this.city : city as String?,
+      targetSearchAreas: targetSearchAreas ?? this.targetSearchAreas,
       occupantType: identical(occupantType, _filterUnset)
           ? this.occupantType
           : occupantType as String?,
@@ -179,13 +218,22 @@ class ListingSearchFilters {
     );
   }
 
+  static String areaChipLabel(List<String> tokens) {
+    if (tokens.isEmpty) return '';
+    if (TargetSearchAreas.hasAllDublin(tokens)) {
+      return 'Area: ${TargetSearchAreas.allDublinLabel}';
+    }
+    return 'Area: ${ListingSearchIntent.cityDisplayName(tokens.first)}';
+  }
+
   /// Human-readable active filters for the chip bar pills row.
   List<AppliedFilterPill> appliedPills() {
     final pills = <AppliedFilterPill>[];
-    if (city != null) {
+    final areaTokens = effectiveAreaTokens;
+    if (areaTokens.isNotEmpty) {
       pills.add(AppliedFilterPill(
         id: 'city',
-        label: ListingSearchIntent.cityDisplayName(city!),
+        label: areaChipLabel(areaTokens),
       ));
     }
     if (foodPreference != null) {
@@ -210,11 +258,24 @@ class ListingSearchFilters {
       ));
     }
     for (final keyword in keywords) {
-      final bhk = RegExp(r'^(\d)bhk$').firstMatch(keyword);
+      final configLabel = _filterKeywordLabel(keyword);
+      if (configLabel != null) {
+        pills.add(AppliedFilterPill(id: 'kw:$keyword', label: configLabel));
+        continue;
+      }
+      final bhk = RegExp(r'^(\d+)bhk$').firstMatch(keyword);
       if (bhk != null) {
         pills.add(AppliedFilterPill(
           id: 'bhk:$keyword',
           label: '${bhk.group(1)} BHK',
+        ));
+        continue;
+      }
+      final bed = RegExp(r'^(\d+)bed$').firstMatch(keyword);
+      if (bed != null) {
+        pills.add(AppliedFilterPill(
+          id: 'bed:$keyword',
+          label: '${bed.group(1)} Bed',
         ));
         continue;
       }
@@ -232,14 +293,18 @@ class ListingSearchFilters {
   }
 
   ListingSearchFilters withoutPill(String pillId) {
-    if (pillId == 'city') return copyWith(city: null);
+    if (pillId == 'city') {
+      return copyWith(city: null, targetSearchAreas: const []);
+    }
     if (pillId == 'food') return copyWith(foodPreference: null);
     if (pillId == 'occupant') return copyWith(occupantType: null);
     if (pillId == 'gender') return copyWith(genderPreference: null);
     if (pillId == 'budget') {
       return copyWith(budgetMin: null, budgetMax: null);
     }
-    if (pillId.startsWith('bhk:') || pillId.startsWith('kw:')) {
+    if (pillId.startsWith('bhk:') ||
+        pillId.startsWith('bed:') ||
+        pillId.startsWith('kw:')) {
       final token = pillId.contains(':') ? pillId.split(':').last : pillId;
       return copyWith(
         keywords: keywords.where((k) => k != token).toList(),
@@ -248,30 +313,32 @@ class ListingSearchFilters {
     return this;
   }
 
-  String _budgetLabel() {
-    if (budgetMin != null && budgetMax != null) {
-      return '₹${_formatInr(budgetMin!)} – ₹${_formatInr(budgetMax!)}';
-    }
-    if (budgetMax != null) return 'Under ₹${_formatInr(budgetMax!)}';
-    if (budgetMin != null) return 'Above ₹${_formatInr(budgetMin!)}';
-    return 'Budget';
-  }
-
-  static String _formatInr(int value) {
-    if (value >= 100000) return '${(value / 100000).toStringAsFixed(1)}L';
-    if (value >= 1000) return '${(value / 1000).round()}k';
-    return value.toString();
-  }
+  String _budgetLabel() =>
+      MarketConfig.current.formatBudgetRange(budgetMin, budgetMax);
 
   static String _titleCaseKeyword(String value) {
     if (value.isEmpty) return value;
     return value[0].toUpperCase() + value.substring(1);
   }
 
+  static String? _filterKeywordLabel(String keyword) {
+    for (final tower in MarketConfig.current.enabledTowers) {
+      for (final (id, label) in MarketConfig.current.layoutFilterOptionsFor(tower)) {
+        if (id == keyword) return label;
+      }
+    }
+    for (final (id, label) in MarketConfig.current.dwellingFilterOptions) {
+      if (id == keyword) return label;
+    }
+    return null;
+  }
+
   factory ListingSearchFilters.fromIntent(SearchIntent intent) {
     return ListingSearchFilters(
       foodPreference: intent.food,
-      city: intent.city,
+      city: null,
+      targetSearchAreas:
+          intent.city != null ? [intent.city!] : const [],
       occupantType: intent.occupant,
       genderPreference: intent.gender,
       keywords: intent.remainingKeywords,
@@ -280,23 +347,32 @@ class ListingSearchFilters {
 
   /// Merges explicit filters with a full query parse (keywords, BHK, etc.).
   SearchIntent toSearchIntent({String? mergeQuery}) {
+    final areaTokens = effectiveAreaTokens;
+    final areaCity = areaTokens.isEmpty || isAllDublinMacro
+        ? null
+        : areaTokens.first;
+
     if (mergeQuery == null || mergeQuery.trim().isEmpty) {
       return SearchIntent(
         food: foodPreference,
-        city: city,
+        city: areaCity,
         occupant: occupantType,
         gender: genderPreference,
         remainingKeywords: keywords,
       );
     }
 
-    final parsed = ListingSearchIntent.parseQuery(mergeQuery);
+    final parsed = isAllDublinMacro
+        ? const SearchIntent()
+        : ListingSearchIntent.parseQuery(mergeQuery);
     return SearchIntent(
       food: foodPreference ?? parsed.food,
-      city: city ?? parsed.city,
+      city: isAllDublinMacro ? null : (areaCity ?? parsed.city),
       occupant: occupantType ?? parsed.occupant,
       gender: genderPreference ?? parsed.gender,
-      remainingKeywords: _mergeKeywords(keywords, parsed.remainingKeywords),
+      remainingKeywords: isAllDublinMacro
+          ? keywords
+          : _mergeKeywords(keywords, parsed.remainingKeywords),
     );
   }
 
@@ -319,11 +395,26 @@ class ListingSearchFilters {
   String toPipelineQuery() {
     final parts = <String>[];
     if (foodPreference != null) parts.add(foodPreference!);
-    if (city != null) parts.add(city!);
+    final tokens = effectiveAreaTokens;
+    if (tokens.isNotEmpty && !isAllDublinMacro) {
+      parts.add(tokens.first);
+    }
+    // ALL_DUBLIN is carried only in [targetSearchAreas] — never as query text
+    // (parsing "all of dublin" incorrectly extracts a micro district like dublin4).
     if (occupantType != null) parts.add(occupantType!.toLowerCase());
     if (genderPreference != null) parts.add(genderPreference!);
     parts.addAll(keywords);
     return ListingSearchIntent.normalizeQuery(parts.join(' '));
+  }
+
+  /// Query string for the listing pipeline — never emits macro area text.
+  String pipelineQueryText({String searchText = ''}) {
+    final trimmed = searchText.trim();
+    if (trimmed.isNotEmpty) {
+      return ListingSearchIntent.normalizeQuery(trimmed);
+    }
+    if (isAllDublinMacro) return '';
+    return toPipelineQuery();
   }
 
   @override
@@ -334,8 +425,9 @@ class ListingSearchFilters {
 
   /// Flexible AND filter — city uses substring; food/occupant use case-insensitive match.
   bool matchesListing(Map<String, dynamic> listing) {
-    if (city != null &&
-        !ListingData.matchesCityFilter(listing, city!)) {
+    final tokens = effectiveAreaTokens;
+    if (tokens.isNotEmpty &&
+        !TargetSearchAreas.listingMatchesTargets(tokens, listing)) {
       return false;
     }
     if (foodPreference != null &&
@@ -386,66 +478,22 @@ abstract final class ListingSearchIntent {
   };
 
   /// Broad aliases for listing → city grouping (suggestions, cards).
-  static const _cityAliases = <String, List<String>>{
-    'hyderabad': ['hyderabad', 'hyd', 'secunderabad', 'hitech', 'hitec', 'gachibowli'],
-    'bangalore': ['bangalore', 'bengaluru', 'blr', 'bang', 'koramangala', 'whitefield'],
-    'chennai': ['chennai', 'madras', 'chn', 'omr', 'velachery'],
-    'mumbai': ['mumbai', 'bombay', 'andheri', 'bandra', 'powai', 'navi mumbai'],
-    'delhi': ['delhi', 'ncr', 'dwarka', 'noida', 'gurgaon', 'gurugram'],
-  };
+  static Map<String, List<String>> get _cityAliases =>
+      MarketConfig.current.cityAliases;
 
   /// City-level tokens only (whole-city filter). Localities use [remainingKeywords].
-  static const _parseCityAliases = <String, List<String>>{
-    'hyderabad': ['hyderabad', 'hyd', 'secunderabad'],
-    'bangalore': ['bangalore', 'bengaluru', 'blr'],
-    'chennai': ['chennai', 'madras', 'chn'],
-    'mumbai': ['mumbai', 'bombay'],
-    'delhi': ['delhi', 'ncr', 'noida', 'gurgaon', 'gurugram'],
-  };
+  static Map<String, List<String>> get _parseCityAliases =>
+      MarketConfig.current.parseCityAliases;
 
   /// Neighborhood / area tokens — match title & location text, not entire city.
-  static const _localityKeywords = [
-    'hitec',
-    'hitech',
-    'gachibowli',
-    'koramangala',
-    'whitefield',
-    'indiranagar',
-    'jubilee hills',
-    'jubilee',
-    'velachery',
-    'omr',
-    'andheri',
-    'bandra',
-    'powai',
-    'dwarka',
-    'banjara',
-    'madhapur',
-    'kondapur',
-  ];
+  static List<String> get _localityKeywords =>
+      MarketConfig.current.localityKeywords;
 
-  static final Set<String> _localityKeywordSet =
+  static Set<String> get _localityKeywordSet =>
       Set<String>.from(_localityKeywords);
 
-  static const _localityDisplayNames = <String, String>{
-    'hitec': 'HITEC',
-    'hitech': 'HITEC',
-    'gachibowli': 'Gachibowli',
-    'koramangala': 'Koramangala',
-    'whitefield': 'Whitefield',
-    'indiranagar': 'Indiranagar',
-    'jubilee': 'Jubilee Hills',
-    'jubilee hills': 'Jubilee Hills',
-    'velachery': 'Velachery',
-    'omr': 'OMR',
-    'andheri': 'Andheri',
-    'bandra': 'Bandra',
-    'powai': 'Powai',
-    'dwarka': 'Dwarka',
-    'banjara': 'Banjara Hills',
-    'madhapur': 'Madhapur',
-    'kondapur': 'Kondapur',
-  };
+  static Map<String, String> get _localityDisplayNames =>
+      MarketConfig.current.localityDisplayNames;
 
   static String? localityDisplayName(String keyword) =>
       _localityDisplayNames[keyword];
@@ -457,19 +505,21 @@ abstract final class ListingSearchIntent {
   static SearchIntent parseQuery(String rawQuery) {
     final query = normalizeQuery(rawQuery);
     if (query.isEmpty) return const SearchIntent();
+    if (DublinMacroSearch.isExactMacroPhrase(rawQuery)) {
+      return const SearchIntent();
+    }
     return parse(query);
   }
 
-  static const _cityDisplayNames = <String, String>{
-    'hyderabad': 'Hyderabad',
-    'bangalore': 'Bangalore',
-    'chennai': 'Chennai',
-    'mumbai': 'Mumbai',
-    'delhi': 'Delhi',
-  };
+  static Map<String, String> get _cityDisplayNames =>
+      MarketConfig.current.cityDisplayNames;
 
-  static String cityDisplayName(String cityKey) =>
-      _cityDisplayNames[cityKey] ?? SearchIntent._titleCase(cityKey);
+  static String cityDisplayName(String cityKey) {
+    if (cityKey == TargetSearchAreas.allDublinToken) {
+      return TargetSearchAreas.allDublinLabel;
+    }
+    return _cityDisplayNames[cityKey] ?? SearchIntent._titleCase(cityKey);
+  }
 
   /// Canonical city key from a listing's location/host city, if recognized.
   static String? canonicalCityForListing(Map<String, dynamic> item) {
@@ -682,104 +732,131 @@ abstract final class ListingSearchIntent {
   }
 
   static final RegExp _bhkSpacedPattern =
-      RegExp(r'(\d)\s*bhk', caseSensitive: false);
+      RegExp(r'(\d+)\s*bhk', caseSensitive: false);
   static final RegExp _bhkCompactPattern =
-      RegExp(r'(\d)bhk', caseSensitive: false);
+      RegExp(r'(\d+)bhk', caseSensitive: false);
+  static final RegExp _bedSpacedPattern =
+      RegExp(r'(\d+)\s*-?\s*bed(?:room)?s?', caseSensitive: false);
+  static final RegExp _bedCompactPattern =
+      RegExp(r'(\d+)bed(?!room)', caseSensitive: false);
 
   static SearchIntent parse(String normalizedQuery) {
-    var working = normalizedQuery;
-    String? food;
+    if (normalizedQuery.isEmpty) return const SearchIntent();
+
+    final consumed = <_QuerySpan>[];
+    final bedroomKeywords = <String>[];
+
+    void consumeMatch(RegExpMatch match) {
+      consumed.add(_QuerySpan(match.start, match.end));
+    }
+
+    for (final match in _bhkSpacedPattern.allMatches(normalizedQuery)) {
+      if (!_spanAvailable(consumed, match.start, match.end)) continue;
+      final beds = match.group(1);
+      if (beds == null) continue;
+      final token = '${beds}bhk';
+      if (!bedroomKeywords.contains(token)) bedroomKeywords.add(token);
+      consumeMatch(match);
+    }
+    for (final match in _bhkCompactPattern.allMatches(normalizedQuery)) {
+      if (!_spanAvailable(consumed, match.start, match.end)) continue;
+      final beds = match.group(1);
+      if (beds == null) continue;
+      final token = '${beds}bhk';
+      if (!bedroomKeywords.contains(token)) bedroomKeywords.add(token);
+      consumeMatch(match);
+    }
+    for (final match in _bedSpacedPattern.allMatches(normalizedQuery)) {
+      if (!_spanAvailable(consumed, match.start, match.end)) continue;
+      final beds = match.group(1);
+      if (beds == null) continue;
+      final token = '${beds}bed';
+      if (!bedroomKeywords.contains(token)) bedroomKeywords.add(token);
+      consumeMatch(match);
+    }
+    for (final match in _bedCompactPattern.allMatches(normalizedQuery)) {
+      if (!_spanAvailable(consumed, match.start, match.end)) continue;
+      final beds = match.group(1);
+      if (beds == null) continue;
+      final token = '${beds}bed';
+      if (!bedroomKeywords.contains(token)) bedroomKeywords.add(token);
+      consumeMatch(match);
+    }
+
+    final food = _extractBoundedPhrase(
+      normalizedQuery,
+      consumed,
+      const [
+        (['non veg', 'non-veg', 'nonvegetarian', 'non vegetarian'], 'non-veg'),
+        (['vegetarian', 'vegetarians'], 'veg'),
+        (['veg'], 'veg'),
+      ],
+    );
+
+    final cityMatch = CityAreaMatch.findFirstMatch(
+      normalizedQuery,
+      isAvailable: (start, end) => _spanAvailable(consumed, start, end),
+    );
     String? city;
-    String? occupant;
-    String? gender;
-    final bhkKeywords = <String>[];
-
-    for (final match in _bhkSpacedPattern.allMatches(working)) {
-      final beds = match.group(1);
-      if (beds == null) continue;
-      final token = '${beds}bhk';
-      if (!bhkKeywords.contains(token)) bhkKeywords.add(token);
-      working = working.replaceAll(match.group(0)!, ' ');
-    }
-    for (final match in _bhkCompactPattern.allMatches(working)) {
-      final beds = match.group(1);
-      if (beds == null) continue;
-      final token = '${beds}bhk';
-      if (!bhkKeywords.contains(token)) bhkKeywords.add(token);
-      working = working.replaceAll(match.group(0)!, ' ');
-    }
-
-    const foodPhrases = [
-      (['non veg', 'non-veg', 'nonvegetarian', 'non vegetarian'], 'non-veg'),
-      (['vegetarian', 'vegetarians', 'veg'], 'veg'),
-    ];
-    for (final entry in foodPhrases) {
-      for (final phrase in entry.$1) {
-        if (working.contains(phrase)) {
-          food = entry.$2;
-          working = working.replaceAll(phrase, ' ');
-        }
-      }
+    if (cityMatch != null) {
+      city = cityMatch.$1;
+      consumed.add(_QuerySpan(cityMatch.$2, cityMatch.$3));
     }
 
     final localityKeywords = <String>[];
-    working = _consumeLocalitiesFromWorking(working, localityKeywords);
-
-    for (final entry in _parseCityAliases.entries) {
-      for (final alias in entry.value) {
-        if (alias.length < 3) continue;
-        if (working == alias ||
-            working.split(RegExp(r'\s+')).contains(alias)) {
-          city = entry.key;
-          working = working.replaceAll(alias, ' ');
-        }
+    final sortedLocalities = [..._localityKeywords]
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final loc in sortedLocalities) {
+      for (final match in CityAreaMatch.aliasPattern(loc).allMatches(
+        normalizedQuery,
+      )) {
+        if (!_spanAvailable(consumed, match.start, match.end)) continue;
+        final canon = _canonicalLocality(loc);
+        if (!localityKeywords.contains(canon)) localityKeywords.add(canon);
+        consumeMatch(match);
       }
     }
 
-    const occupantPhrases = [
-      (['bachelors', 'bachelor', 'bachelors only'], 'Bachelors'),
-      (['students', 'student'], 'Students'),
-      (['family', 'families'], 'Family'),
-    ];
-    for (final entry in occupantPhrases) {
-      for (final phrase in entry.$1) {
-        if (working.contains(phrase)) {
-          occupant = entry.$2;
-          working = working.replaceAll(phrase, ' ');
-        }
-      }
-    }
+    final occupant = _extractBoundedPhrase(
+      normalizedQuery,
+      consumed,
+      const [
+        (['bachelors only', 'bachelors', 'bachelor'], 'Bachelors'),
+        (['students', 'student'], 'Students'),
+        (['families', 'family'], 'Family'),
+      ],
+    );
 
-    const genderPhrases = [
-      (['girls', 'girl', 'female', 'females'], 'girls'),
-      (['boys', 'boy', 'male', 'males'], 'boys'),
-    ];
-    for (final entry in genderPhrases) {
-      for (final phrase in entry.$1) {
-        if (working.contains(phrase)) {
-          gender = entry.$2;
-          working = working.replaceAll(phrase, ' ');
-        }
-      }
-    }
+    final gender = _extractBoundedPhrase(
+      normalizedQuery,
+      consumed,
+      const [
+        (['females', 'female', 'girls', 'girl'], 'girls'),
+        (['males', 'male', 'boys', 'boy'], 'boys'),
+      ],
+    );
 
+    final working = _queryMinusSpans(normalizedQuery, consumed);
     final tokens = working
         .split(RegExp(r'\s+'))
         .map((t) => t.trim())
         .where((t) => t.isNotEmpty && !_stopWords.contains(t))
         .toList();
 
-    final remaining = <String>[...bhkKeywords, ...localityKeywords];
+    final remaining = <String>[...bedroomKeywords, ...localityKeywords];
 
     for (final token in tokens) {
-      food ??= _foodFromToken(token);
-      city ??= _cityFromToken(token);
-      occupant ??= _occupantFromToken(token);
-      gender ??= _genderFromToken(token);
+      final parsedFood = food ?? _foodFromToken(token);
+      final parsedCity = city ?? _cityFromToken(token);
+      final parsedOccupant = occupant ?? _occupantFromToken(token);
+      final parsedGender = gender ?? _genderFromToken(token);
 
-      if (token == 'bhk' && bhkKeywords.isNotEmpty) continue;
-      if (RegExp(r'^\d$').hasMatch(token) &&
-          bhkKeywords.any((b) => b.startsWith(token))) {
+      if (const {'bhk', 'bed', 'beds', 'bedroom', 'bedrooms'}.contains(token) &&
+          bedroomKeywords.isNotEmpty) {
+        continue;
+      }
+      if (RegExp(r'^\d+$').hasMatch(token) &&
+          bedroomKeywords.any((b) => b.startsWith(token))) {
         continue;
       }
       if (_localityKeywordSet.contains(token) ||
@@ -789,7 +866,13 @@ abstract final class ListingSearchIntent {
         continue;
       }
 
-      if (!_isConsumed(token, food, city, occupant, gender)) {
+      if (!_isConsumed(
+        token,
+        parsedFood,
+        parsedCity,
+        parsedOccupant,
+        parsedGender,
+      )) {
         if (_shouldAddKeywordToken(token)) {
           if (!remaining.contains(token)) remaining.add(token);
         }
@@ -803,6 +886,54 @@ abstract final class ListingSearchIntent {
       gender: gender,
       remainingKeywords: remaining,
     );
+  }
+
+  static RegExp _boundedPhrasePattern(String phrase) => RegExp(
+        r'(?<![0-9a-z])' + RegExp.escape(phrase) + r'(?![0-9a-z])',
+        caseSensitive: false,
+      );
+
+  static String? _extractBoundedPhrase(
+    String query,
+    List<_QuerySpan> consumed,
+    List<(List<String> phrases, String value)> groups,
+  ) {
+    for (final entry in groups) {
+      final sorted = [...entry.$1]..sort((a, b) => b.length.compareTo(a.length));
+      for (final phrase in sorted) {
+        for (final match in _boundedPhrasePattern(phrase).allMatches(query)) {
+          if (!_spanAvailable(consumed, match.start, match.end)) continue;
+          consumed.add(_QuerySpan(match.start, match.end));
+          return entry.$2;
+        }
+      }
+    }
+    return null;
+  }
+
+  static bool _spanAvailable(List<_QuerySpan> spans, int start, int end) {
+    for (final span in spans) {
+      if (start < span.end && end > span.start) return false;
+    }
+    return true;
+  }
+
+  static String _queryMinusSpans(String query, List<_QuerySpan> spans) {
+    if (spans.isEmpty) return query;
+    final sorted = [...spans]..sort((a, b) => a.start.compareTo(b.start));
+    final buf = StringBuffer();
+    var cursor = 0;
+    for (final span in sorted) {
+      if (span.start > cursor) {
+        buf.write(query.substring(cursor, span.start));
+      }
+      buf.write(' ');
+      cursor = span.end;
+    }
+    if (cursor < query.length) {
+      buf.write(query.substring(cursor));
+    }
+    return buf.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   static String _normalizeQuery(String raw) =>
@@ -872,12 +1003,12 @@ abstract final class ListingSearchIntent {
       'boy',
       'male',
       'female',
-      'hyderabad',
-      'bangalore',
-      'mumbai',
-      'delhi',
     ];
-    for (final phrase in phrases) {
+    final cityPhrases = [
+      for (final entry in _parseCityAliases.entries) entry.key,
+      for (final entry in _parseCityAliases.entries) ...entry.value,
+    ];
+    for (final phrase in [...phrases, ...cityPhrases]) {
       if (phrase.startsWith(t) && phrase != t) return true;
     }
 
@@ -893,6 +1024,7 @@ abstract final class ListingSearchIntent {
 
   static bool _shouldAddKeywordToken(String token) {
     if (RegExp(r'^\d+bhk$').hasMatch(token)) return true;
+    if (RegExp(r'^\d+bed$').hasMatch(token)) return true;
     if (_localityKeywordSet.contains(token)) return true;
     if (_isIncompleteStructuredPrefix(token)) return false;
     return token.length >= 3;
@@ -907,9 +1039,70 @@ abstract final class ListingSearchIntent {
   }
 
   /// Avoid `hi` → `hindi`, `st` → `students`, `bh` → `bhk` false positives.
+  static bool _bedBathMatches(String blob, String term) {
+    final match = RegExp(r'^(\d+)bed(\d+)bath$').firstMatch(term);
+    if (match == null) return false;
+    final beds = match.group(1)!;
+    final baths = match.group(2)!;
+    if (blob.contains(term)) return true;
+    final bedOk = RegExp(
+      r'(?<![0-9])' + RegExp.escape(beds) + r'\s*-?\s*bed(?:room)?s?(?![0-9])',
+      caseSensitive: false,
+    ).hasMatch(blob);
+    final bathOk = RegExp(
+      r'(?<![0-9])' + RegExp.escape(baths) + r'\s*-?\s*bath(?:room)?s?(?![0-9])',
+      caseSensitive: false,
+    ).hasMatch(blob);
+    return bedOk && bathOk;
+  }
+
+  static bool _shareRoomKindMatches(String blob, String term) {
+    return switch (term) {
+      'ensuite' => blob.contains('ensuite'),
+      'double_ensuite' =>
+        blob.contains('double ensuite') || blob.contains('ensuite double'),
+      'bed_shared' =>
+        blob.contains('bed in shared') ||
+        blob.contains('bed_shared') ||
+        blob.contains('sharing room') ||
+        blob.contains('bed space'),
+      'private_bath' =>
+        blob.contains('private_bath') ||
+        (blob.contains('private room') &&
+            (blob.contains('bathroom') || blob.contains('own bath'))),
+      'student_room' =>
+        blob.contains('student_room') ||
+        blob.contains('student room') ||
+        blob.contains('students'),
+      _ => false,
+    };
+  }
+
+  static bool _dwellingMatches(String blob, String term) {
+    return switch (term) {
+      'apartment' =>
+        blob.contains('apartment') ||
+        blob.contains('flat') ||
+        blob.contains('studio'),
+      'house' => blob.contains('house') || blob.contains('cottage'),
+      'duplex' => blob.contains('duplex') || blob.contains('townhouse'),
+      _ => blob.contains(term),
+    };
+  }
+
   static bool _blobContainsTerm(String blob, String term) {
     if (term.isEmpty) return true;
     if (RegExp(r'^\d+bhk$').hasMatch(term)) return blob.contains(term);
+    if (RegExp(r'^\d+bed\d+bath$').hasMatch(term)) {
+      return _bedBathMatches(blob, term);
+    }
+    if (RegExp(r'^\d+bed$').hasMatch(term)) {
+      return _bedCountMatches(blob, term);
+    }
+    if (_shareRoomKindMatches(blob, term)) return true;
+    if (const {'apartment', 'house', 'duplex'}.contains(term)) {
+      return _dwellingMatches(blob, term);
+    }
 
     var index = 0;
     while (index < blob.length) {
@@ -925,50 +1118,23 @@ abstract final class ListingSearchIntent {
     return false;
   }
 
+  /// Match `3bed` against `3 bed`, `3-bed`, `3 bedroom` — not `13 bed` or `2 bed`.
+  static bool _bedCountMatches(String blob, String term) {
+    final match = RegExp(r'^(\d+)bed$').firstMatch(term);
+    if (match == null) return false;
+    final count = match.group(1)!;
+    return RegExp(
+      r'(?<![0-9])' +
+          RegExp.escape(count) +
+          r'\s*-?\s*bed(?:room)?s?(?![0-9])',
+      caseSensitive: false,
+    ).hasMatch(blob);
+  }
+
   static bool _keywordMatches(String blob, String keyword) {
     final k = keyword.trim().toLowerCase();
     if (k.isEmpty) return true;
     return _blobContainsTerm(blob, k);
-  }
-
-  static String _consumeLocalitiesFromWorking(
-    String working,
-    List<String> keywords,
-  ) {
-    var w = working.trim();
-    if (w.isEmpty) return w;
-
-    final sorted = [..._localityKeywords]
-      ..sort((a, b) => b.length.compareTo(a.length));
-
-    for (final loc in sorted) {
-      if (w == loc) {
-        final canon = _canonicalLocality(loc);
-        if (!keywords.contains(canon)) keywords.add(canon);
-        return '';
-      }
-      if (w.contains(loc)) {
-        final canon = _canonicalLocality(loc);
-        if (!keywords.contains(canon)) keywords.add(canon);
-        w = w.replaceAll(loc, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
-      }
-    }
-
-    final single = w.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
-    if (single.length == 1) {
-      final token = single.first;
-      if (token.length >= 4) {
-        for (final loc in sorted) {
-          if (loc.startsWith(token)) {
-            final canon = _canonicalLocality(loc);
-            if (!keywords.contains(canon)) keywords.add(canon);
-            return '';
-          }
-        }
-      }
-    }
-
-    return w;
   }
 
   static int _relevanceScore(
@@ -996,6 +1162,8 @@ abstract final class ListingSearchIntent {
     for (final keyword in intent.remainingKeywords) {
       if (!_keywordMatches(blob, keyword)) continue;
       if (RegExp(r'^\d+bhk$').hasMatch(keyword)) {
+        score += 45;
+      } else if (RegExp(r'^\d+bed$').hasMatch(keyword)) {
         score += 45;
       } else if (_localityKeywordSet.contains(keyword) ||
           _localityDisplayNames.containsKey(keyword)) {
@@ -1139,8 +1307,11 @@ abstract final class ListingSearchIntent {
   static bool _foodMatches(Map<String, dynamic> item, String food) =>
       ListingData.matchesFoodPreferenceFilter(item, food);
 
-  static bool _cityMatches(Map<String, dynamic> item, String city) =>
-      ListingData.matchesCityFilter(item, city);
+  static bool _cityMatches(Map<String, dynamic> item, String city) {
+    final canonical = canonicalCityForListing(item);
+    if (canonical != null && canonical == city) return true;
+    return ListingData.matchesCityFilter(item, city);
+  }
 
   static bool _occupantMatches(Map<String, dynamic> item, String occupant) =>
       ListingData.matchesOccupantTypeFilter(item, occupant);
@@ -1156,4 +1327,10 @@ abstract final class ListingSearchIntent {
     }
     return false;
   }
+}
+
+class _QuerySpan {
+  const _QuerySpan(this.start, this.end);
+  final int start;
+  final int end;
 }

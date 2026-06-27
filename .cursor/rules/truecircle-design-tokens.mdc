@@ -1,0 +1,20 @@
+---
+description: TrueCircle color and typography guardrails for UI widgets
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# TrueCircle Design Tokens
+
+## Palette
+- **Primary accent**: Coral/red only — `AppColors.accent` (`Color(0xFFFF5A5F)`).
+- **Neutrals**: Charcoal text (`AppColors.primaryText`), light grey surfaces (`AppColors.neutralBadgeFill` / `Colors.grey[100]`).
+- **Trust / OAuth UI**: `AppColors.executiveCta`, `AppColors.trustMuted`, `AppColors.trustMutedSurface` — never platform brand colors.
+
+## Hard constraints
+- Do **not** use corporate blues (`Colors.blue`, LinkedIn blue, `blueAccent`) in custom widgets or social integrations.
+- Do **not** use generic oranges (`Colors.orange`) for UI accents — use `AppColors.accent` or `AppColors.error` instead.
+- Third-party connect flows (LinkedIn, etc.): executive charcoal CTA + neutral badge; coral only for TrueCircle-primary actions.
+
+## Source of truth
+`lib/core/theme/app_theme.dart` → `AppColors`

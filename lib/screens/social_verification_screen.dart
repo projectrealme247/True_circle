@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../services/linkedin_oauth_service.dart';
 import '../services/trust_service.dart';
+import '../widgets/corporate_document_upload_card.dart';
 import '../utils/viewer_profile.dart';
 
-/// Stage 2: Social verification via LinkedIn.
-/// In production, this would use LinkedIn OAuth to pull real data.
-/// Currently simulates the flow with manual input.
+import '../core/theme/app_theme.dart';
+import '../theme/home_marketplace_theme.dart';
+
+/// Stage 2: Social verification via LinkedIn OpenID Connect.
 class SocialVerificationScreen extends StatefulWidget {
   const SocialVerificationScreen({super.key});
 
@@ -18,8 +21,41 @@ class SocialVerificationScreen extends StatefulWidget {
 class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
   final _companyController = TextEditingController();
   final _titleController = TextEditingController();
-  bool _verifying = false;
+
+  LinkedInProfile? _linkedInProfile;
+  bool _isLinkedInAuthenticated = false;
+  bool _connecting = false;
+  bool _completing = false;
   bool _verified = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    final uri = GoRouterState.of(context).uri;
+    final linkedinError = uri.queryParameters['linkedin_error'];
+    if (linkedinError != null && linkedinError.isNotEmpty) {
+      setState(() => _error = Uri.decodeComponent(linkedinError));
+      return;
+    }
+
+    // Only restore profile after an explicit OAuth return — not on cold load.
+    final linkedinConnected = uri.queryParameters['linkedin'] == 'connected';
+    if (!linkedinConnected) return;
+
+    final pending = await LinkedInOAuthService.loadPendingProfile();
+    if (!mounted) return;
+    if (pending != null) {
+      setState(() {
+        _linkedInProfile = pending;
+        _isLinkedInAuthenticated = true;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -28,30 +64,67 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
     super.dispose();
   }
 
-  Future<void> _simulateLinkedInVerification() async {
-    if (_companyController.text.trim().isEmpty ||
-        _titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter your company and job title')),
-      );
+  Future<void> _connectLinkedIn() async {
+    setState(() {
+      _connecting = true;
+      _error = null;
+    });
+
+    try {
+      await LinkedInOAuthService.beginAuthorization();
+      if (LinkedInOAuthService.usesMock) {
+        final profile = await LinkedInOAuthService.loadPendingProfile();
+        if (!mounted) return;
+        setState(() {
+          _linkedInProfile = profile;
+          _isLinkedInAuthenticated = profile != null;
+          _connecting = false;
+        });
+      }
+    } on LinkedInOAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _connecting = false;
+      });
+    }
+  }
+
+  Future<void> _completeVerification() async {
+    if (_linkedInProfile == null) {
+      _snack('Connect LinkedIn first.');
       return;
     }
 
-    setState(() => _verifying = true);
+    if (_companyController.text.trim().isEmpty ||
+        _titleController.text.trim().isEmpty) {
+      _snack('Enter your company and job title.');
+      return;
+    }
 
-    // Simulate OAuth delay
-    await Future.delayed(const Duration(milliseconds: 1500));
+    setState(() => _completing = true);
 
     await TrustService.upgradeSocial(
       company: _companyController.text.trim(),
       jobTitle: _titleController.text.trim(),
+      linkedinSub: _linkedInProfile!.sub,
+      linkedinEmail: _linkedInProfile!.email,
+      linkedinName: _linkedInProfile!.name,
+      linkedinPictureUrl: _linkedInProfile!.picture,
     );
+    await LinkedInOAuthService.clearPendingProfile();
 
     if (!mounted) return;
     setState(() {
-      _verifying = false;
+      _completing = false;
       _verified = true;
     });
+  }
+
+  void _snack(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -61,11 +134,11 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
         currentStage.level >= TrustStage.socialVerified.level;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: HomeMarketplaceTheme.canvas,
       appBar: AppBar(
         title: const Text('Social Verification'),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1C1E21),
+        backgroundColor: HomeMarketplaceTheme.surface,
+        foregroundColor: HomeMarketplaceTheme.textPrimary,
         elevation: 0,
       ),
       body: Center(
@@ -80,15 +153,10 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: HomeMarketplaceTheme.surface,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x0A000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
+                    border: Border.all(color: HomeMarketplaceTheme.border),
+                    boxShadow: HomeMarketplaceTheme.cardShadowRest,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,12 +166,12 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0A66C2).withValues(alpha: 0.1),
+                              color: AppColors.accent.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(
                               Icons.workspace_premium_rounded,
-                              color: Color(0xFF0A66C2),
+                              color: AppColors.accent,
                               size: 28,
                             ),
                           ),
@@ -117,17 +185,17 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFF1C1E21),
+                                    color: AppColors.primaryText,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   alreadyVerified || _verified
-                                      ? 'Stage 2 verified — 0.9x trust multiplier'
-                                      : 'Boost your trust score to 0.9x',
+                                      ? 'Stage 2 verified — 0.9× trust multiplier'
+                                      : 'Connect LinkedIn, then confirm your role',
                                   style: const TextStyle(
                                     fontSize: 13,
-                                    color: Color(0xFF606770),
+                                    color: AppColors.secondaryText,
                                   ),
                                 ),
                               ],
@@ -135,18 +203,30 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                           ),
                         ],
                       ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          _error!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.error,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       if (alreadyVerified || _verified) ...[
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFDCFCE7),
+                            color: AppColors.trustMutedSurface,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Row(
                             children: [
                               Icon(Icons.check_circle_rounded,
-                                  color: Color(0xFF16A34A), size: 22),
+                                  color: AppColors.trustMuted,
+                                  size: 22),
                               SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -154,7 +234,7 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
-                                    color: Color(0xFF166534),
+                                    color: AppColors.trustMuted,
                                   ),
                                 ),
                               ),
@@ -165,20 +245,76 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                         SizedBox(
                           width: double.infinity,
                           height: 48,
-                          child: FilledButton(
+                          child: OutlinedButton(
                             onPressed: () => context.go('/profile'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF0EA5E9),
-                            ),
                             child: const Text('Back to profile'),
                           ),
                         ),
+                      ] else if (!_isLinkedInAuthenticated) ...[
+                        const Text(
+                          'Sign in with LinkedIn to prove your professional identity. '
+                          'LinkedIn OpenID does not share employer details — you will '
+                          'confirm company and title next.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.secondaryText,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                _connecting ? null : _connectLinkedIn,
+                            icon: _connecting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.accent,
+                                    ),
+                                  )
+                                : const Icon(Icons.lock_outline_rounded),
+                            label: Text(
+                              _connecting
+                                  ? 'Connecting…'
+                                  : 'Securely Link LinkedIn Account',
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.accent,
+                              side: const BorderSide(
+                                color: AppColors.accent,
+                                width: 1.5,
+                              ),
+                              disabledForegroundColor:
+                                  AppColors.accent.withValues(alpha: 0.45),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (LinkedInOAuthService.usesMock) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Mock mode: no LinkedIn redirect.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.secondaryText,
+                            ),
+                          ),
+                        ],
                       ] else ...[
+                        _LinkedInConnectedCard(profile: _linkedInProfile!),
+                        const SizedBox(height: 16),
                         TextField(
                           controller: _companyController,
                           decoration: InputDecoration(
                             labelText: 'Company',
-                            hintText: 'e.g. Google, TCS, Infosys',
+                            hintText: 'e.g. Google, Deloitte, TCS',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -195,24 +331,13 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'In production, this connects via LinkedIn OAuth. '
-                          'Your company and title will be shown as a trust badge on your listings.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF9CA3AF),
-                          ),
-                        ),
                         const SizedBox(height: 18),
                         SizedBox(
                           width: double.infinity,
                           height: 52,
                           child: FilledButton.icon(
-                            onPressed: _verifying
-                                ? null
-                                : _simulateLinkedInVerification,
-                            icon: _verifying
+                            onPressed: _completing ? null : _completeVerification,
+                            icon: _completing
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
@@ -221,25 +346,41 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Icon(Icons.link_rounded),
+                                : const Icon(Icons.verified_rounded),
                             label: Text(
-                              _verifying
-                                  ? 'Verifying...'
-                                  : 'Verify with LinkedIn',
+                              _completing
+                                  ? 'Saving…'
+                                  : 'Complete social verification',
                             ),
                             style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF0A66C2),
+                              backgroundColor: AppColors.accent,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor:
+                                  AppColors.accent.withValues(alpha: 0.45),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
                           ),
                         ),
+                        TextButton(
+                          onPressed: _connecting ? null : _connectLinkedIn,
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.secondaryText,
+                          ),
+                          child: const Text('Use a different LinkedIn account'),
+                        ),
                       ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (!alreadyVerified && !_verified) ...[
+                  CorporateDocumentUploadCard(
+                    onVerified: () => setState(() => _verified = true),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 _buildTrustStageIndicator(currentStage),
               ],
             ),
@@ -255,8 +396,9 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: HomeMarketplaceTheme.surface,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,7 +408,7 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF606770),
+              color: AppColors.secondaryText,
             ),
           ),
           const SizedBox(height: 10),
@@ -282,20 +424,19 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                           : Icons.circle_outlined,
                       size: 18,
                       color: stage.level >= s.level
-                          ? const Color(0xFF16A34A)
-                          : const Color(0xFFD1D5DB),
+                          ? AppColors.trustMuted
+                          : AppColors.disabled,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'Stage ${s.level}: ${s.label}',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: stage == s
-                            ? FontWeight.w700
-                            : FontWeight.w400,
+                        fontWeight:
+                            stage == s ? FontWeight.w700 : FontWeight.w400,
                         color: stage.level >= s.level
-                            ? const Color(0xFF1C1E21)
-                            : const Color(0xFF9CA3AF),
+                            ? AppColors.primaryText
+                            : AppColors.secondaryText,
                       ),
                     ),
                     const Spacer(),
@@ -305,13 +446,84 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: stage.level >= s.level
-                            ? const Color(0xFF0EA5E9)
-                            : const Color(0xFFD1D5DB),
+                            ? AppColors.trustMuted
+                            : AppColors.disabled,
                       ),
                     ),
                   ],
                 ),
               ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkedInConnectedCard extends StatelessWidget {
+  const _LinkedInConnectedCard({required this.profile});
+
+  final LinkedInProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.accent.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (profile.picture.isNotEmpty)
+            CircleAvatar(
+              backgroundImage: NetworkImage(profile.picture),
+              radius: 22,
+            )
+          else
+            const CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.accent,
+              child: Icon(Icons.person, color: Colors.white),
+            ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  profile.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: AppColors.primaryText,
+                  ),
+                ),
+                if (profile.email.isNotEmpty)
+                  Text(
+                    profile.email,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondaryText,
+                    ),
+                  ),
+                const Text(
+                  'LinkedIn connected',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.accent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.check_circle,
+            color: AppColors.accent,
+          ),
         ],
       ),
     );
