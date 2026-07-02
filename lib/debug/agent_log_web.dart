@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:js_interop';
 
+import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
 void agentLog({
@@ -11,7 +12,7 @@ void agentLog({
   String runId = 'pre-fix',
 }) {
   final payload = jsonEncode({
-    'sessionId': 'f79c8e',
+    'sessionId': '0e3626',
     'runId': runId,
     'hypothesisId': hypothesisId,
     'location': location,
@@ -19,6 +20,7 @@ void agentLog({
     'data': data,
     'timestamp': DateTime.now().millisecondsSinceEpoch,
   });
+  debugPrint('TC_DEBUG $payload');
   try {
     final xhr = web.XMLHttpRequest();
     xhr.open(
@@ -26,7 +28,7 @@ void agentLog({
       'http://127.0.0.1:7937/ingest/3104528a-dafa-4274-b754-34f2ed630895',
     );
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('X-Debug-Session-Id', 'f79c8e');
+    xhr.setRequestHeader('X-Debug-Session-Id', '0e3626');
     xhr.send(payload.toJS);
   } catch (_) {}
 }

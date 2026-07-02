@@ -37,16 +37,58 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #fafafa;
+      color: #222222;
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    #truecircle-loading {
+      display: flex;
+      min-height: 100%;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #truecircle-loading strong {
+      font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    #truecircle-loading p {
+      margin: 0;
+      color: #717171;
+      font-size: 0.95rem;
+    }
+
+    .truecircle-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #ebebeb;
+      border-top-color: #ff5a5f;
+      border-radius: 50%;
+      animation: truecircle-spin 0.9s linear infinite;
+    }
+
+    @keyframes truecircle-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <div id="truecircle-loading" aria-live="polite" aria-busy="true">
+    <div class="truecircle-spinner" aria-hidden="true"></div>
+    <strong>TrueCircle</strong>
+    <p>Loading marketplace…</p>
+  </div>
+  <!-- Required by supabase_flutter 2.15+ / passkeys_web on Chrome -->
+  <script src="https://github.com/corbado/flutter-passkeys/releases/download/2.4.0/bundle.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

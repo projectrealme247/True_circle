@@ -22,9 +22,10 @@ abstract final class ListingCreationValidationService {
       errors['price'] = 'Price should start with a number.';
     }
 
-    if (draft.description.trim().length < _minDescriptionLength) {
+    final description = draft.description.trim();
+    if (description.isNotEmpty && description.length < _minDescriptionLength) {
       errors['description'] =
-          'Add a short description (at least $_minDescriptionLength characters).';
+          'If you add a description, use at least $_minDescriptionLength characters.';
     }
 
     final eircode = draft.eircode.trim();

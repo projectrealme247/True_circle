@@ -10,9 +10,9 @@ import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_data.dart';
 import '../utils/trust_status_copy.dart';
 import '../utils/viewer_profile.dart';
-import '../utils/listing_media.dart';
 import '../models/marketplace_space.dart';
 import '../services/listing_applications_service.dart';
+import '../services/listing_contact_service.dart';
 import '../services/marketplace_context_notifier.dart';
 import '../services/replacement_workflow_service.dart';
 import '../utils/shared_space_compatibility_scorer.dart';
@@ -114,6 +114,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         canContact: false,
         stage: TrustService.currentStage(),
         cohort: ViewerProfile.seekerCohortFromSession(session),
+        listing: item,
       );
       return;
     }
@@ -135,11 +136,27 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       space: _listingSpace,
       compatibilityScore: NumericBounds.clampPercentInt(score),
     );
+    await ListingContactService.notifyHost(
+      listing: item,
+      applicantSession: session,
+      compatibilityScore: NumericBounds.clampPercentInt(score),
+    );
     if (!mounted) return;
     setState(() => _hasApplied = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Application submitted')),
-    );
+    final hostName = ListingData.hostName(item);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            'Application sent — $hostName will be notified.',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          backgroundColor: const Color(0xFF42B72A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
   }
 
   Future<void> _handleStartReplacement(Map<String, dynamic> item) async {
@@ -249,6 +266,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       onRequestViewing: () => _showScheduleViewing(item),
       onManage: () => context.push('/listing/${widget.listingId}/manage'),
       onStartReplacement: () => _handleStartReplacement(item),
+      onEdit: () => context.push('/add-listing', extra: item),
     );
   }
 
@@ -277,30 +295,6 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
 
   List<Widget> _buildMediaExtras(List<String> images, bool hasVideo) {
     return [
-      if (images.length > 1) ...[
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 64,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: images.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final bytes = ListingMedia.decodeDataUri(images[index]);
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: bytes != null
-                      ? Image.memory(bytes, fit: BoxFit.cover)
-                      : const ColoredBox(color: Color(0xFFE5E7EB)),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
       if (hasVideo) ...[
         const SizedBox(height: 10),
         const Row(
@@ -431,9 +425,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     required bool canContact,
     required TrustStage stage,
     required SeekerCohort cohort,
+    Map<String, dynamic>? listing,
   }) {
-    if (canContact) {
-      _showContactConfirmation();
+    if (canContact && listing != null) {
+      _handleApply(listing);
       return;
     }
 
@@ -445,8 +440,9 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         onVerified: () {
           if (!mounted) return;
           setState(() {});
-          if (TrustService.canContact()) {
-            _showContactConfirmation();
+          final item = _listing;
+          if (TrustService.canContact() && item != null) {
+            _handleApply(item);
           }
         },
       );
@@ -611,23 +607,6 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     );
   }
 
-  void _showContactConfirmation() {
-    final hostName = ListingData.hostName(_listing!);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            'Contact request sent to $hostName. They will be notified.',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-          backgroundColor: const Color(0xFF42B72A),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-  }
-
   void _showScheduleViewing(Map<String, dynamic> item) {
     showModalBottomSheet(
       context: context,
@@ -637,14 +616,26 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       ),
       builder: (ctx) => _ScheduleViewingSheet(
         listing: item,
-        onBooked: (date, timeSlot, note) {
+        onBooked: (date, timeSlot, note) async {
           Navigator.pop(ctx);
+          final session = AuthScreen.currentUserSession;
+          if (session != null) {
+            await ListingContactService.notifyHost(
+              listing: item,
+              applicantSession: session,
+              compatibilityScore: 0,
+              kind: ListingContactEvent.viewingRequest,
+              viewingSlot: '${_formatDate(date)} at $timeSlot',
+              viewingNote: note,
+            );
+          }
+          if (!mounted) return;
           ScaffoldMessenger.of(context)
             ..clearSnackBars()
             ..showSnackBar(
               SnackBar(
                 content: Text(
-                  'Viewing requested for ${_formatDate(date)} at $timeSlot.',
+                  'Viewing requested for ${_formatDate(date)} at $timeSlot — host notified.',
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 backgroundColor: const Color(0xFF42B72A),
@@ -730,9 +721,10 @@ abstract final class ListingDetailCopy {
   }
 
   static String displayPrice(Map<String, dynamic> listing) {
-    final raw = ListingData.price(listing);
-    if (raw == 'Price on request') return raw;
+    final label = ListingData.priceDisplayLabel(listing);
+    if (label == 'Rent not set') return label;
 
+    final raw = ListingData.price(listing);
     final amount = ListingData.listingPriceAmount(listing);
     final symbol = MarketConfig.current.currencySymbol;
     final periodMatch = RegExp(r'/(\w+)$').firstMatch(raw);

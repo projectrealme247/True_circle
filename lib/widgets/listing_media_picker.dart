@@ -14,6 +14,12 @@ class ListingMediaPicker extends StatelessWidget {
     required this.onVideoChanged,
     required this.enabled,
     this.onMessage,
+    this.minPhotosRequired = 0,
+    this.previewHeight = 80,
+    this.useDropzoneStyle = false,
+    this.showRequirementLabel = true,
+    this.showPhotoUpload = true,
+    this.showVideoControls = true,
   });
 
   final List<String> images;
@@ -22,6 +28,12 @@ class ListingMediaPicker extends StatelessWidget {
   final ValueChanged<String?> onVideoChanged;
   final bool enabled;
   final void Function(String message)? onMessage;
+  final int minPhotosRequired;
+  final double previewHeight;
+  final bool useDropzoneStyle;
+  final bool showRequirementLabel;
+  final bool showPhotoUpload;
+  final bool showVideoControls;
 
   Future<void> _pickImages() async {
     if (!enabled) return;
@@ -44,7 +56,7 @@ class ListingMediaPicker extends StatelessWidget {
       final bytes = file.bytes;
       if (bytes == null) continue;
       if (bytes.length > ListingMedia.maxBytesPerImage) {
-        onMessage?.call('${file.name} is too large (max ~1.5 MB).');
+        onMessage?.call('${file.name} is too large (max 10 MB).');
         continue;
       }
       final mime = ListingMedia.guessImageMime(file.extension) ?? 'image/jpeg';
@@ -78,7 +90,7 @@ class ListingMediaPicker extends StatelessWidget {
       return;
     }
     if (bytes.length > ListingMedia.maxBytesPerVideo) {
-      onMessage?.call('Video is too large (max ~8 MB).');
+      onMessage?.call('Video file size exceeds the 30MB safety limit.');
       return;
     }
     final mime = ListingMedia.guessVideoMime(file.extension) ?? 'video/mp4';
@@ -87,101 +99,287 @@ class ListingMediaPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (useDropzoneStyle) {
+      return _dropzoneLayout(context);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            const Text(
-              'Photos',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: Color(0xFF1C1E21),
+        if (showPhotoUpload) ...[
+          Row(
+            children: [
+              const Text(
+                'Photos',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: Color(0xFF1C1E21),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (showRequirementLabel)
+                Text(
+                  minPhotosRequired > 0
+                      ? 'Required · ${images.length}/$minPhotosRequired min · max ${ListingMedia.maxImages}'
+                      : 'Optional · ${images.length}/${ListingMedia.maxImages}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: minPhotosRequired > 0 &&
+                            images.length < minPhotosRequired
+                        ? const Color(0xFFEA580C)
+                        : const Color(0xFF6B7280),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (images.isEmpty)
+            _emptyPreview()
+          else
+            SizedBox(
+              height: previewHeight,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: images.length,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: index == images.length - 1 ? 0 : 8,
+                    ),
+                    child: _thumb(
+                      dataUri: images[index],
+                      size: previewHeight,
+                      onRemove: enabled
+                          ? () {
+                              final next = List<String>.from(images)
+                                ..removeAt(index);
+                              onImagesChanged(next);
+                            }
+                          : null,
+                      badge: index == 0 ? 'Cover' : null,
+                    ),
+                  );
+                },
               ),
             ),
-            const SizedBox(width: 8),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: enabled && images.length < ListingMedia.maxImages
+                ? _pickImages
+                : null,
+            icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+            label: const Text('Add photos'),
+          ),
+        ],
+        if (showVideoControls) ...[
+          if (showPhotoUpload) const SizedBox(height: 10),
+          if (video == null) ...[
+            OutlinedButton.icon(
+              onPressed: enabled ? _pickVideo : null,
+              icon: const Icon(Icons.videocam_outlined, size: 18),
+              label: const Text('Add video'),
+            ),
+            const SizedBox(height: 4),
             Text(
-              'Optional · ${images.length}/${ListingMedia.maxImages}',
-              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+              '⚠️ Videos are optional and capped at 30MB max to optimize load times.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                height: 1.35,
+              ),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        if (images.isEmpty)
-          _emptyPreview()
-        else
-          SizedBox(
-            height: 88,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: images.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) => _thumb(
-                dataUri: images[index],
-                onRemove: enabled
-                    ? () {
-                        final next = List<String>.from(images)..removeAt(index);
-                        onImagesChanged(next);
-                      }
-                    : null,
-                badge: index == 0 ? 'Cover' : null,
+          if (video != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.movie_outlined, color: AppColors.accent, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      '1 video attached',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: Color(0xFF1C1E21),
+                      ),
+                    ),
+                  ),
+                  if (enabled)
+                    IconButton(
+                      tooltip: 'Remove video',
+                      onPressed: () => onVideoChanged(null),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
               ),
             ),
-          ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              onPressed: enabled && images.length < ListingMedia.maxImages
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _dropzoneLayout(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showPhotoUpload)
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: enabled && images.length < ListingMedia.maxImages
                   ? _pickImages
                   : null,
-              icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-              label: const Text('Add photos'),
-            ),
-            if (video == null)
-              OutlinedButton.icon(
-                onPressed: enabled ? _pickVideo : null,
-                icon: const Icon(Icons.videocam_outlined, size: 18),
-                label: const Text('Add video'),
-              ),
-          ],
-        ),
-        if (video != null) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.movie_outlined, color: AppColors.accent, size: 20),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    '1 video attached',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: Color(0xFF1C1E21),
+              borderRadius: BorderRadius.circular(16),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAFAFA),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: CustomPaint(
+                  painter: _DottedBorderPainter(
+                    color: const Color(0xFFCBD5E1),
+                    radius: 16,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: 32,
+                          color: enabled
+                              ? AppColors.accent
+                              : const Color(0xFF9CA3AF),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '📸 Add Photos',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: enabled
+                                ? const Color(0xFF374151)
+                                : const Color(0xFF9CA3AF),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Min 3 · Recommended 5+ · Max ${ListingMedia.maxImages}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: enabled
+                                ? const Color(0xFF6B7280)
+                                : const Color(0xFF9CA3AF),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                if (enabled)
-                  IconButton(
-                    tooltip: 'Remove video',
-                    onPressed: () => onVideoChanged(null),
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
+              ),
             ),
           ),
+        if (showPhotoUpload && images.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          SizedBox(
+            height: previewHeight,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index == images.length - 1 ? 0 : 8,
+                  ),
+                  child: _thumb(
+                    dataUri: images[index],
+                    size: previewHeight,
+                    onRemove: enabled
+                        ? () {
+                            final next = List<String>.from(images)
+                              ..removeAt(index);
+                            onImagesChanged(next);
+                          }
+                        : null,
+                    badge: index == 0 ? 'Cover' : null,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+        if (showVideoControls) ...[
+          if (showPhotoUpload) const SizedBox(height: 10),
+          if (video == null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: enabled ? _pickVideo : null,
+                icon: const Icon(Icons.videocam_outlined, size: 18),
+                label: const Text('Add optional video tour'),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '⚠️ Videos are optional and capped at 30MB max to optimize load times.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                height: 1.35,
+              ),
+            ),
+          ],
+          if (video != null) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.movie_outlined, color: AppColors.accent, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      '1 video attached',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: Color(0xFF1C1E21),
+                      ),
+                    ),
+                  ),
+                  if (enabled)
+                    IconButton(
+                      tooltip: 'Remove video',
+                      onPressed: () => onVideoChanged(null),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       ],
     );
@@ -218,6 +416,7 @@ class ListingMediaPicker extends StatelessWidget {
     required String dataUri,
     required VoidCallback? onRemove,
     String? badge,
+    double size = 80,
   }) {
     final bytes = ListingMedia.decodeDataUri(dataUri);
     return Stack(
@@ -225,8 +424,8 @@ class ListingMediaPicker extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: SizedBox(
-            width: 88,
-            height: 88,
+            width: size,
+            height: size,
             child: bytes != null
                 ? Image.memory(bytes, fit: BoxFit.cover)
                 : Container(
@@ -275,4 +474,42 @@ class ListingMediaPicker extends StatelessWidget {
       ],
     );
   }
+}
+
+class _DottedBorderPainter extends CustomPainter {
+  _DottedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    const dashWidth = 6.0;
+    const dashSpace = 5.0;
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dashWidth;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DottedBorderPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
 }

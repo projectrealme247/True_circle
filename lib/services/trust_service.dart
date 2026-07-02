@@ -1,6 +1,8 @@
 import '../config/market/market_config.dart';
+import '../debug/agent_log.dart';
 import '../screens/auth_screen.dart';
 import '../utils/irish_university_domains.dart';
+import '../utils/profile_data.dart';
 import '../utils/viewer_profile.dart';
 import 'profile_storage_service.dart';
 
@@ -48,6 +50,24 @@ abstract final class TrustService {
     if (linkedinPictureUrl != null) {
       session['linkedin_picture_url'] = linkedinPictureUrl;
     }
+    if (ProfileData.text(session['full_name']).isEmpty &&
+        linkedinName != null &&
+        linkedinName.trim().isNotEmpty) {
+      session['full_name'] = linkedinName.trim();
+    }
+
+    // #region agent log
+    agentLog(
+      location: 'trust_service.dart:upgradeSocial',
+      message: 'LinkedIn social upgrade persisted',
+      hypothesisId: 'H1',
+      data: {
+        'fullNameSet': ProfileData.text(session['full_name']).isNotEmpty,
+        'trustStage': session['trust_stage'],
+        'linkedinVerified': session['linkedin_verified'] == true,
+      },
+    );
+    // #endregion
 
     AuthScreen.currentUserSession = session;
     await ProfileStorageService.save(session);

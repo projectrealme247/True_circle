@@ -18,6 +18,9 @@ class LandlordApplicantCardModel {
     required this.languages,
     required this.sourceRow,
     required this.isSharedLiving,
+    this.budgetLabel,
+    this.commuteLabel,
+    this.moveInLabel,
   });
 
   final String applicationId;
@@ -32,6 +35,9 @@ class LandlordApplicantCardModel {
   final List<String> languages;
   final Object sourceRow;
   final bool isSharedLiving;
+  final String? budgetLabel;
+  final String? commuteLabel;
+  final String? moveInLabel;
 
   String get trustTabLabel => switch (trustTier) {
         ApplicantTrustTier.sound => 'Sound (Vouched & Secured)',
@@ -92,6 +98,8 @@ class LandlordApplicantCardModel {
       languages: row.seekerLanguages,
       sourceRow: row,
       isSharedLiving: true,
+      commuteLabel: _commuteLabel(row.verifiedTransitDurationSeconds),
+      moveInLabel: null,
     );
   }
 
@@ -116,7 +124,20 @@ class LandlordApplicantCardModel {
       languages: const [],
       sourceRow: row,
       isSharedLiving: false,
+      budgetLabel: multiplier > 0
+          ? '${multiplier.toStringAsFixed(1)}× rent affordability'
+          : null,
+      commuteLabel: _commuteLabel(row.verifiedTransitDurationSeconds),
+      moveInLabel: row.earliestMoveInDate?.trim().isNotEmpty == true
+          ? 'Move-in ${row.earliestMoveInDate}'
+          : null,
     );
+  }
+
+  static String? _commuteLabel(int? transitSeconds) {
+    if (transitSeconds == null || transitSeconds <= 0) return null;
+    final minutes = (transitSeconds / 60).round();
+    return '$minutes min commute';
   }
 
   static double _defaultMultiplier(ApplicantTrustTier tier) => switch (tier) {

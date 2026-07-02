@@ -14,9 +14,19 @@ if (-not (Test-Path $config)) {
 }
 
 Set-Location $root
-Write-Host "Building staging web (Flutter 3.41+ uses CanvasKit by default)..." -ForegroundColor Cyan
-flutter build web --release --dart-define-from-file=env.staging.json --tree-shake-icons
+Write-Host "Building staging web for Vercel (CDN CanvasKit, smaller upload)..." -ForegroundColor Cyan
+flutter build web --release --web-resources-cdn --dart-define-from-file=env.staging.json --tree-shake-icons
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$vercelConfig = Join-Path $root "vercel.json"
+if (Test-Path $vercelConfig) {
+  Copy-Item $vercelConfig (Join-Path $root "build\web\vercel.json") -Force
+}
+
+$vercelIgnore = Join-Path $root "scripts\vercel_web.vercelignore"
+if (Test-Path $vercelIgnore) {
+  Copy-Item $vercelIgnore (Join-Path $root "build\web\.vercelignore") -Force
+}
 
 Write-Host ""
 Write-Host "Build complete. Serve locally:" -ForegroundColor Green

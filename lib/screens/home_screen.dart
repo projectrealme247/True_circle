@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../navigation/home_explore_reset_notifier.dart';
-import '../router/app_routes.dart';
 import '../router/app_router.dart';
 
 import '../navigation/space_gateway_navigation.dart';
@@ -16,6 +15,8 @@ import '../services/application_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/marketplace_context_notifier.dart';
 import '../services/profile_state_notifier.dart';
+import '../services/profile_onboarding_repository.dart';
+import '../services/profile_portal_inheritance_service.dart';
 import '../models/listing_application.dart';
 import '../models/marketplace_space.dart';
 import '../utils/listing_data.dart';
@@ -86,6 +87,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _searchDropdownRadius = 12;
 
   bool _handledListingAddedMessage = false;
+  bool _handledPortalWelcome = false;
+  bool _showWelcomeFeedBanner = false;
+  bool _showFirstListingPrompt = false;
   bool _applicationsReady = false;
   int _applicationCount = 0;
   double _averageMatchPercent = 0;
@@ -389,12 +393,21 @@ class _HomeScreenState extends State<HomeScreen> {
       profileStateNotifier.session ?? AuthScreen.currentUserSession;
 
   MarketplaceListingPipelineResult _runDefaultPipeline() {
+    final inheritedFilters = _inheritedFeedFilters(_activeUserSession);
     return MarketplaceListingPipeline.runWithFilters(
       allListings: _listings,
       towerPropertyType: _selectedPropertyType,
-      filters: const ListingSearchFilters(),
+      filters: inheritedFilters,
       userSession: _activeUserSession,
     );
+  }
+
+  ListingSearchFilters _inheritedFeedFilters(Map<String, dynamic>? session) {
+    if (session == null || session.isEmpty) {
+      return const ListingSearchFilters();
+    }
+    final snapshot = ProfileOnboardingRepository.snapshotFromSession(session);
+    return ProfilePortalInheritanceService.seekerFeedDefaults(snapshot);
   }
 
   void _refreshPipelineFromProfile() {
@@ -481,11 +494,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Clears search and restores the full tower grid.
   void _clearSearch() {
+    final inheritedFilters = _inheritedFeedFilters(_activeUserSession);
     setState(() {
       _showSuggestions = false;
       _highlightedSuggestionIndex = -1;
-      _activeFilters = const ListingSearchFilters();
-      _pipelineResult = _runDefaultPipeline();
+      _activeFilters = inheritedFilters;
+      _pipelineResult = MarketplaceListingPipeline.runWithFilters(
+        allListings: _listings,
+        towerPropertyType: _selectedPropertyType,
+        filters: inheritedFilters,
+        userSession: _activeUserSession,
+      );
     });
     _removeSearchDropdownOverlay();
   }
@@ -521,22 +540,51 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_handledListingAddedMessage) return;
+    if (!_handledListingAddedMessage) {
+      final extra = GoRouterState.of(context).extra;
+      if (extra is Map && extra['listingAdded'] != null) {
+        _handledListingAddedMessage = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('Listing added to the marketplace.'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+        });
+      }
+    }
 
-    final extra = GoRouterState.of(context).extra;
-    if (extra is Map && extra['listingAdded'] != null) {
-      _handledListingAddedMessage = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('Listing added to the marketplace.'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-      });
+    if (!_handledPortalWelcome) {
+      final qp = GoRouterState.of(context).uri.queryParameters;
+      if (qp.containsKey('welcomeFeed') || qp.containsKey('promptFirstListing')) {
+        _handledPortalWelcome = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (qp['welcomeFeed'] == '1') {
+            final inherited = _inheritedFeedFilters(_activeUserSession);
+            if (!inherited.isEmpty) {
+              _runSearchWithFilters(
+                inherited,
+                pipelineQuery: inherited.pipelineQueryText(),
+              );
+            } else {
+              setState(() {
+                _showWelcomeFeedBanner = true;
+                _pipelineResult = _runDefaultPipeline();
+              });
+              return;
+            }
+            setState(() => _showWelcomeFeedBanner = true);
+          }
+          if (qp['promptFirstListing'] == '1') {
+            setState(() => _showFirstListingPrompt = true);
+          }
+        });
+      }
     }
   }
 
@@ -587,7 +635,12 @@ class _HomeScreenState extends State<HomeScreen> {
       _openSignIn(authRedirectPath: '/add-listing');
       return;
     }
-    context.push('/add-listing').then((_) {
+    final session = _activeUserSession;
+    final snapshot = ProfileOnboardingRepository.snapshotFromSession(session);
+    final prefill = snapshot.track.isLandlord
+        ? ProfilePortalInheritanceService.listingPrefill(snapshot).toDraftMap()
+        : null;
+    context.push('/add-listing', extra: prefill == null ? null : {'listingDraft': prefill}).then((_) {
       if (mounted) _loadListingsFromStorage();
     });
   }
@@ -916,6 +969,14 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverToBoxAdapter(
           child: _buildProfileCompletionBanner(userSession),
         ),
+      ],
+      if (_showWelcomeFeedBanner) ...[
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        SliverToBoxAdapter(child: _buildWelcomeFeedBanner()),
+      ],
+      if (_showFirstListingPrompt && _ownedListingsForActiveSpace.isEmpty) ...[
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+        SliverToBoxAdapter(child: _buildFirstListingPromptBanner()),
       ],
       if (_currentPipeline.isCommuteDivergent && !_showSuggestions) ...[
         const SliverToBoxAdapter(child: SizedBox(height: 10)),
@@ -1670,6 +1731,105 @@ class _HomeScreenState extends State<HomeScreen> {
           TextButton(
             onPressed: () => _openProfileEdit(initialProfile: userSession),
             child: const Text('Finish'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeFeedBanner() {
+    final filterSummary = _activeFilters.isEmpty
+        ? 'your onboarding preferences'
+        : _activeFilters.pipelineQueryText();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: HomeMarketplaceTheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.explore_rounded,
+            color: HomeMarketplaceTheme.primary,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome to your feed',
+                  style: AppTypography.cardTitle(),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  filterSummary.isEmpty
+                      ? 'Listings ranked by your commute and profile.'
+                      : 'Showing matches for $filterSummary.',
+                  style: AppTypography.detail(),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () => setState(() => _showWelcomeFeedBanner = false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFirstListingPromptBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.searchSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.home_work_outlined,
+            color: HomeMarketplaceTheme.primary,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ready to list your space?',
+                  style: AppTypography.cardTitle(),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your host profile is saved. Add your first listing when you are ready.',
+                  style: AppTypography.detail(),
+                ),
+                const SizedBox(height: 10),
+                FilledButton(
+                  onPressed: _goAddListing,
+                  style: AppButtonStyles.primaryFilled,
+                  child: Text('+ Add your first listing', style: AppTypography.button()),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () => setState(() => _showFirstListingPrompt = false),
           ),
         ],
       ),

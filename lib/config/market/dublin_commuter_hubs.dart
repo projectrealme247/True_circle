@@ -1,4 +1,5 @@
 import '../../utils/geo_math.dart';
+import 'dublin_transit_network.dart';
 
 /// Canonical Dublin commuter anchoring hubs for Path B seeker profiles.
 class DublinCommuterHub {
@@ -71,6 +72,32 @@ abstract final class DublinCommuterHubs {
     anchorStationId: 'luas_green_cherrywood',
   );
 
+  static const ifscDocklands = DublinCommuterHub(
+    id: 'ifsc_docklands',
+    label: 'IFSC / Docklands',
+    latitude: 53.3478,
+    longitude: -6.2427,
+    anchorStationId: 'luas_red_connolly',
+  );
+
+  static const dcu = DublinCommuterHub(
+    id: 'dcu',
+    label: 'Dublin City University (DCU)',
+    latitude: 53.3851,
+    longitude: -6.2577,
+    anchorStationId: 'luas_green_parnell',
+  );
+
+  static const dublinAirport = DublinCommuterHub(
+    id: 'dublin_airport',
+    label: 'Dublin Airport',
+    latitude: 53.4264,
+    longitude: -6.2499,
+    anchorStationId: 'dart_clontarf_road',
+  );
+
+  static const otherLocationLabel = 'Other location…';
+
   static const all = <DublinCommuterHub>[
     stStephensGreen,
     grandCanalDock,
@@ -78,7 +105,64 @@ abstract final class DublinCommuterHubs {
     ucd,
     siliconDocks,
     cherrywoodBusinessPark,
+    ifscDocklands,
+    dcu,
+    dublinAirport,
   ];
+
+  /// Curated anchors for working professionals and families.
+  static const professionalPopular = <DublinCommuterHub>[
+    stStephensGreen,
+    grandCanalDock,
+    siliconDocks,
+    ifscDocklands,
+    cherrywoodBusinessPark,
+    dublinAirport,
+  ];
+
+  /// Curated anchors for students.
+  static const studentPopular = <DublinCommuterHub>[
+    tcd,
+    ucd,
+    dcu,
+    stStephensGreen,
+    grandCanalDock,
+  ];
+
+  static List<DublinCommuterHub> hubsForOccupantType(String? occupantType) {
+    if (occupantType == 'Students') {
+      return List<DublinCommuterHub>.from(studentPopular);
+    }
+    return List<DublinCommuterHub>.from(professionalPopular);
+  }
+
+  static bool isCustomHub(DublinCommuterHub hub) => hub.id.startsWith('custom_');
+
+  /// Builds a commute anchor from a geocoded Dublin-area place name.
+  static DublinCommuterHub fromGeocoded({
+    required String label,
+    required double latitude,
+    required double longitude,
+  }) {
+    final nearestCanonical = _nearestByCoordinates(latitude, longitude);
+    final nearestTransit = DublinTransitNetwork.nearestTo(
+      LatLng(latitude, longitude),
+    );
+    final anchorId = nearestCanonical?.anchorStationId ?? nearestTransit.id;
+    final normalized = label.trim();
+    final slug = normalized
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    return DublinCommuterHub(
+      id: 'custom_${slug.isEmpty ? 'place' : slug}',
+      label: normalized,
+      latitude: latitude,
+      longitude: longitude,
+      anchorStationId: anchorId,
+    );
+  }
 
   static List<String> get labels =>
       all.map((hub) => hub.label).toList(growable: false);
@@ -124,6 +208,21 @@ abstract final class DublinCommuterHubs {
 
   /// Resolves a saved profile row to a canonical hub (id → label → coords).
   static DublinCommuterHub? resolveFromProfile(Map<String, dynamic> profile) {
+    final hubId = profile['commute_destination_hub_id']?.toString();
+    if (hubId != null && hubId.startsWith('custom_')) {
+      final lat = profile['destination_latitude'];
+      final lon = profile['destination_longitude'];
+      final label = profile['commute_destination'] ??
+          profile['primary_commute_destination'];
+      if (lat is num && lon is num && label != null) {
+        return fromGeocoded(
+          label: label.toString(),
+          latitude: lat.toDouble(),
+          longitude: lon.toDouble(),
+        );
+      }
+    }
+
     final byStoredId = byId(profile['commute_destination_hub_id']?.toString());
     if (byStoredId != null) return byStoredId;
 

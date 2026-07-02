@@ -2,7 +2,27 @@
 
 abstract final class ApplicantSessionSync {
   static const defaultMaxCommuteMinutes = 45;
-  static const leaseTermOptions = [6, 9, 12, 24];
+  static const leaseTermOptions = [6, 9, 12];
+  static const leaseBeyondTwelveMonths = 99;
+
+  static List<String> get leaseTermLabels => [
+        for (final months in leaseTermOptions) '$months months',
+        '> 12 months',
+      ];
+
+  static int? leaseMonthsFromLabel(String label) {
+    final trimmed = label.trim();
+    if (trimmed == '> 12 months') return leaseBeyondTwelveMonths;
+    return int.tryParse(trimmed.replaceAll(RegExp(r'[^0-9]'), ''));
+  }
+
+  static String leaseLabelForMonths(int? months) {
+    if (months == null) return '';
+    if (months == leaseBeyondTwelveMonths || months > 12) {
+      return '> 12 months';
+    }
+    return '$months months';
+  }
 
   static Map<String, dynamic> enrich(Map<String, dynamic> session) {
     final payload = Map<String, dynamic>.from(session);

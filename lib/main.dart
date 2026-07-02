@@ -12,14 +12,93 @@ import 'services/marketplace_context_notifier.dart';
 import 'core/theme/app_theme.dart';
 import 'theme/app_scroll_behavior.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
+  runApp(const _AppBootstrap());
+}
 
+class _AppBootstrap extends StatefulWidget {
+  const _AppBootstrap();
+
+  @override
+  State<_AppBootstrap> createState() => _AppBootstrapState();
+}
+
+class _AppBootstrapState extends State<_AppBootstrap> {
+  Widget? _app;
+  Object? _startupError;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    try {
+      await _initializeApp();
+      if (!mounted) return;
+      setState(() => _app = const TrueCircleApp());
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'main',
+          context: ErrorDescription('while initializing TrueCircle'),
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _startupError = error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_startupError != null) {
+      return MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: SelectableText(
+                    'TrueCircle could not start:\n\n$_startupError',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final app = _app;
+    if (app == null) {
+      return MaterialApp(
+        theme: AppTheme.light,
+        home: const Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
+    return app;
+  }
+}
+
+Future<void> _initializeApp() async {
   if (AppEnv.supabaseUrl.isEmpty || AppEnv.supabaseAnonKey.isEmpty) {
     throw StateError(
       'Missing Supabase config.\n\n'
-      'After flutter clean, plain "flutter run" will not work â€” env vars '
+      'After flutter clean, plain "flutter run" will not work — env vars '
       'must be passed at compile time.\n\n'
       'Use:\n'
       '  .\\scripts\\run_dublin.ps1\n\n'
@@ -45,8 +124,6 @@ void main() async {
     debugPrint('TrueCircle market: ${MarketConfig.current.id.name}');
     return true;
   }());
-
-  runApp(const TrueCircleApp());
 }
 
 String _normalizeSupabaseUrl(String raw) {
@@ -66,7 +143,7 @@ void _validateSupabaseUrl(String url) {
   if (!url.startsWith('https://') || !url.contains('.supabase.co')) {
     throw StateError(
       'SUPABASE_URL must look like https://YOUR_PROJECT.supabase.co '
-      '(Project Settings â†’ API â†’ Project URL). Got: $url',
+      '(Project Settings → API → Project URL). Got: $url',
     );
   }
   final lower = url.toLowerCase();
@@ -75,13 +152,13 @@ void _validateSupabaseUrl(String url) {
       lower.contains('your_project_ref')) {
     throw StateError(
       'SUPABASE_URL is still a placeholder. Edit env.dev.json with your real '
-      'Project URL (Supabase â†’ Settings â†’ API), then stop and re-run:\n'
+      'Project URL (Supabase → Settings → API), then stop and re-run:\n'
       '  flutter run -d chrome --dart-define-from-file=env.dev.json',
     );
   }
   if (url.contains('/auth/') || url.contains('/rest/')) {
     throw StateError(
-      'SUPABASE_URL must be the project root only â€” remove /auth/v1 or /rest/v1.',
+      'SUPABASE_URL must be the project root only — remove /auth/v1 or /rest/v1.',
     );
   }
 }

@@ -6,6 +6,7 @@
 | `run_dublin.bat` | Same as above for cmd.exe |
 | `build_staging_web.ps1` | Release web build with `env.staging.json` (CanvasKit default on Flutter 3.41+) |
 | `serve_staging_web.ps1` | Serve `build\web` on http://localhost:8080 (no Python) |
+| `deploy_vercel_web.ps1` | Package `build\web` as prebuilt static output and deploy to Vercel (`-Login` first time) |
 | `seed_demo_applicants.ps1` | **Demo check** (default) or optional DB seed (`-Database`) |
 | `trim_logo.ps1` | Crop logo assets |
 

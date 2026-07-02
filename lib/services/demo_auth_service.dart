@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../config/app_env.dart';
 import '../config/market/dublin_commuter_hubs.dart';
 import '../data/dublin_mock_data.dart';
@@ -9,7 +11,8 @@ import 'profile_storage_service.dart';
 import 'user_session_store.dart';
 
 abstract final class DemoAuthService {
-  static bool get isEnabled => AppEnv.demoAuthBypass;
+  static bool get isEnabled =>
+      AppEnv.demoAuthBypass || kDebugMode || AppEnv.demoMockHarness;
 
   static Future<void> enterAsDemoLandlord() async {
     final session = <String, dynamic>{
@@ -25,6 +28,8 @@ abstract final class DemoAuthService {
       'active_marketplace_space': MarketplaceSpace.sharedSpace.storageToken,
       'demo_mode': true,
       'demo_listing_id': DublinMockData.listingId,
+      'pending_listing_eircode': 'D02 X285',
+      'host_profile_complete': true,
     };
     await _persistSession(session);
   }

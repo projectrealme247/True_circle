@@ -139,6 +139,9 @@ class ListingSearchFilters {
     this.genderPreference,
     this.budgetMin,
     this.budgetMax,
+    this.preferredLeaseMonths,
+    this.moveInWindow,
+    this.wfhFriendly,
     this.keywords = const [],
   });
 
@@ -154,6 +157,9 @@ class ListingSearchFilters {
   final String? genderPreference;
   final int? budgetMin;
   final int? budgetMax;
+  final int? preferredLeaseMonths;
+  final String? moveInWindow;
+  final bool? wfhFriendly;
 
   /// Free-text tokens (e.g. `2bhk`, `furnished`) from the search box.
   final List<String> keywords;
@@ -186,6 +192,9 @@ class ListingSearchFilters {
       genderPreference == null &&
       budgetMin == null &&
       budgetMax == null &&
+      preferredLeaseMonths == null &&
+      (moveInWindow == null || moveInWindow!.isEmpty) &&
+      wfhFriendly == null &&
       keywords.isEmpty;
 
   ListingSearchFilters copyWith({
@@ -196,6 +205,9 @@ class ListingSearchFilters {
     Object? genderPreference = _filterUnset,
     Object? budgetMin = _filterUnset,
     Object? budgetMax = _filterUnset,
+    Object? preferredLeaseMonths = _filterUnset,
+    Object? moveInWindow = _filterUnset,
+    Object? wfhFriendly = _filterUnset,
     List<String>? keywords,
   }) {
     return ListingSearchFilters(
@@ -214,6 +226,15 @@ class ListingSearchFilters {
           identical(budgetMin, _filterUnset) ? this.budgetMin : budgetMin as int?,
       budgetMax:
           identical(budgetMax, _filterUnset) ? this.budgetMax : budgetMax as int?,
+      preferredLeaseMonths: identical(preferredLeaseMonths, _filterUnset)
+          ? this.preferredLeaseMonths
+          : preferredLeaseMonths as int?,
+      moveInWindow: identical(moveInWindow, _filterUnset)
+          ? this.moveInWindow
+          : moveInWindow as String?,
+      wfhFriendly: identical(wfhFriendly, _filterUnset)
+          ? this.wfhFriendly
+          : wfhFriendly as bool?,
       keywords: keywords ?? this.keywords,
     );
   }
@@ -256,6 +277,21 @@ class ListingSearchFilters {
         id: 'budget',
         label: _budgetLabel(),
       ));
+    }
+    if (preferredLeaseMonths != null) {
+      pills.add(AppliedFilterPill(
+        id: 'lease',
+        label: 'Lease: $preferredLeaseMonths mo',
+      ));
+    }
+    if (moveInWindow != null && moveInWindow!.isNotEmpty) {
+      pills.add(AppliedFilterPill(
+        id: 'movein',
+        label: 'Move-in: $moveInWindow',
+      ));
+    }
+    if (wfhFriendly == true) {
+      pills.add(const AppliedFilterPill(id: 'wfh', label: 'WFH Friendly'));
     }
     for (final keyword in keywords) {
       final configLabel = _filterKeywordLabel(keyword);
@@ -302,6 +338,9 @@ class ListingSearchFilters {
     if (pillId == 'budget') {
       return copyWith(budgetMin: null, budgetMax: null);
     }
+    if (pillId == 'lease') return copyWith(preferredLeaseMonths: null);
+    if (pillId == 'movein') return copyWith(moveInWindow: null);
+    if (pillId == 'wfh') return copyWith(wfhFriendly: null);
     if (pillId.startsWith('bhk:') ||
         pillId.startsWith('bed:') ||
         pillId.startsWith('kw:')) {
@@ -421,7 +460,8 @@ class ListingSearchFilters {
   String toString() =>
       'ListingSearchFilters(foodPreference: $foodPreference, city: $city, '
       'occupantType: $occupantType, genderPreference: $genderPreference, '
-      'keywords: $keywords)';
+      'preferredLeaseMonths: $preferredLeaseMonths, moveInWindow: $moveInWindow, '
+      'wfhFriendly: $wfhFriendly, keywords: $keywords)';
 
   /// Flexible AND filter — city uses substring; food/occupant use case-insensitive match.
   bool matchesListing(Map<String, dynamic> listing) {
@@ -450,6 +490,30 @@ class ListingSearchFilters {
       if (amount == null) return false;
       if (budgetMin != null && amount < budgetMin!) return false;
       if (budgetMax != null && amount > budgetMax!) return false;
+    }
+    if (preferredLeaseMonths != null) {
+      final leaseLength = int.tryParse(
+        ListingData.text(listing['preferred_lease_months']),
+      );
+      if (leaseLength != null && leaseLength < preferredLeaseMonths!) {
+        return false;
+      }
+    }
+    if (moveInWindow != null && moveInWindow!.isNotEmpty) {
+      final requestedMoveIn = DateTime.tryParse(moveInWindow!);
+      final availableFrom = DateTime.tryParse(
+        ListingData.text(listing['available_from']),
+      );
+      if (requestedMoveIn != null &&
+          availableFrom != null &&
+          availableFrom.isAfter(requestedMoveIn)) {
+        return false;
+      }
+    }
+    if (wfhFriendly == true) {
+      final schedule = ListingData.scheduleType(listing).toLowerCase();
+      final supportsWfh = listing['wfh_friendly'] == true || schedule == 'flexible';
+      if (!supportsWfh) return false;
     }
     if (keywords.isNotEmpty &&
         !ListingSearchIntent.matchesKeywords(listing, keywords)) {

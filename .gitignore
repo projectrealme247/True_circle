@@ -51,3 +51,5 @@ env.staging.json
 !env.dev.json.example
 !env.staging.json.example
 .tools/
+.vercel
+.env*

@@ -12,6 +12,9 @@ import '../models/shared_living_applicant_stream.dart';
 import '../services/listing_applications_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/profile_state_notifier.dart';
+import '../screens/auth_screen.dart';
+import '../utils/listing_data.dart';
+import '../utils/profile_data.dart';
 import '../theme/app_typography.dart';
 import '../utils/landlord_dashboard_helpers.dart';
 import '../widgets/landlord_dashboard/landlord_dashboard_theme.dart';
@@ -450,6 +453,13 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
                         actionLoadingId: _actionLoadingId,
                         onOptimizeListing: () =>
                             context.push('/listing/$pageId'),
+                        hostPhoneE164: ProfileData.text(
+                          AuthScreen.currentUserSession?['contact_phone_e164'],
+                        ),
+                        hostPrefersWhatsapp:
+                            AuthScreen.currentUserSession?['prefers_whatsapp'] ==
+                                true,
+                        listingTitle: ListingData.title(pageListing),
                       ),
                     ),
                   ],

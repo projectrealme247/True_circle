@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../services/linkedin_oauth_service.dart';
+import '../services/profile_state_notifier.dart';
 import '../services/trust_service.dart';
 import '../widgets/corporate_document_upload_card.dart';
 import '../utils/viewer_profile.dart';
+import 'auth_screen.dart';
 
 import '../core/theme/app_theme.dart';
 import '../theme/home_marketplace_theme.dart';
@@ -113,12 +115,22 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
       linkedinPictureUrl: _linkedInProfile!.picture,
     );
     await LinkedInOAuthService.clearPendingProfile();
+    final session = AuthScreen.currentUserSession;
+    if (session != null) {
+      profileStateNotifier.commitPersisted(session);
+    } else {
+      profileStateNotifier.invalidateCache();
+    }
 
     if (!mounted) return;
     setState(() {
       _completing = false;
       _verified = true;
     });
+    _snack('LinkedIn verified — your profile progress has been updated.');
+    if (context.canPop()) {
+      context.pop(true);
+    }
   }
 
   void _snack(String message) {

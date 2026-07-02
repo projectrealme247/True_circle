@@ -41,7 +41,25 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/add-listing',
-      builder: (context, state) => const AddListingScreen(),
+      builder: (context, state) {
+        final extra = state.extra;
+        if (extra is Map<String, dynamic>) {
+          final draft = extra['listingDraft'];
+          if (draft is Map<String, dynamic>) {
+            return AddListingScreen(draftListing: draft);
+          }
+          final id = extra['id']?.toString() ?? extra['listing_id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            return AddListingScreen(editingListing: extra);
+          }
+          if (extra.containsKey('location') ||
+              extra.containsKey('eircode')) {
+            return AddListingScreen(draftListing: extra);
+          }
+          return AddListingScreen(editingListing: extra);
+        }
+        return const AddListingScreen();
+      },
     ),
     GoRoute(
       path: '/listing/:id',

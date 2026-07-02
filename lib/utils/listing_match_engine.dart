@@ -4,6 +4,7 @@ import 'listing_data.dart';
 import 'listing_search_intent.dart';
 import 'viewer_profile.dart';
 
+import '../debug/agent_log.dart';
 import '../services/commute_scoring_service.dart';
 import 'commute_profile.dart';
 import 'profile_data.dart';
@@ -669,8 +670,27 @@ abstract final class ListingMatchEngine {
         if (f.languageMatch) all.add('Γ£à Speaks your language');
         if (f.nativityMatch) all.add('Γ£à Same native region');
     }
-    return all.take(maxReasons).toList();
+    final result = all.take(maxReasons).toList();
+    // #region agent log
+    if (_combinedReasonsLogCount < 3 && result.isNotEmpty) {
+      _combinedReasonsLogCount++;
+      agentLog(
+        location: 'listing_match_engine.dart:_combinedReasons',
+        message: 'Match reasons built',
+        hypothesisId: 'B',
+        data: {
+          'count': result.length,
+          'firstReason': result.first,
+          'firstHasNonAscii': result.first.runes.any((r) => r > 127),
+          'tower': tower.name,
+        },
+      );
+    }
+    // #endregion
+    return result;
   }
+
+  static int _combinedReasonsLogCount = 0;
 
   static void _appendExactSearchReasons(
     List<String> all,

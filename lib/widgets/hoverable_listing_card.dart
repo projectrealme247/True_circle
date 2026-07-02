@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_match_engine.dart';
+import '../debug/agent_log.dart';
 
 /// Listing card shell with premium 3D hover lift on desktop/web.
 class HoverableListingCard extends StatefulWidget {

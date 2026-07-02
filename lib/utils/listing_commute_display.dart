@@ -191,36 +191,36 @@ abstract final class ListingCommuteDisplay {
     Map<String, dynamic> listing,
     LatLng? property,
   ) {
-    var walkMinutes = ListingData.transitWalkMinutes(listing);
-    var transitType = ListingData.transitTypeLabel(listing);
-
-    if ((walkMinutes == null || transitType.isEmpty) && property != null) {
+    if (property != null) {
       final extracted = TransitExtractionService.extractLocally(
         latitude: property.latitude,
         longitude: property.longitude,
       );
       if (extracted != null) {
         final walk = extracted['walk_minutes'];
-        if (walk is num) walkMinutes = walk.round();
-        transitType = extracted['transit_type']?.toString() ?? transitType;
+        final transitType = extracted['transit_type']?.toString() ?? '';
+        if (walk is num && transitType.isNotEmpty) {
+          final minutes = walk.round();
+          return CommuteDisplayRow(
+            commuterLabel: 'Property transit',
+            minutes: minutes,
+            headline: '$minutes-min walk to $transitType',
+          );
+        }
       }
+      return null;
     }
 
-    if (walkMinutes == null || transitType.isEmpty) {
-      final profile = ListingData.detailTransitWalkProfile(listing);
-      if (profile != null) {
-        walkMinutes = profile.minutes;
-        transitType = profile.destination;
-      }
+    final profile = ListingData.detailTransitWalkProfile(listing);
+    if (profile != null) {
+      return CommuteDisplayRow(
+        commuterLabel: 'Property transit',
+        minutes: profile.minutes,
+        headline: '${profile.minutes}-min walk to ${profile.destination}',
+      );
     }
 
-    if (walkMinutes == null || transitType.isEmpty) return null;
-
-    return CommuteDisplayRow(
-      commuterLabel: 'Property transit',
-      minutes: walkMinutes,
-      headline: '$walkMinutes-min walk to $transitType',
-    );
+    return null;
   }
 
   static CommuteDisplayRow _personalizedRow({

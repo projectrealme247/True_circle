@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/applicant_trust_tier.dart';
 import '../utils/viewer_profile.dart';
+import '../debug/agent_log.dart';
 
 /// Premium trust-tier dot + pill color tokens.
 abstract final class TrustTierDesign {
@@ -50,8 +51,27 @@ abstract final class TrustTierDesign {
         ApplicantTrustTier.justLanded => '🟡',
       };
 
-  static String trustScaleEmojiLabel(ApplicantTrustTier tier) =>
-      '${emojiDotFor(tier)} ${labelFor(tier)}';
+  static String trustScaleEmojiLabel(ApplicantTrustTier tier) {
+    final label = '${emojiDotFor(tier)} ${labelFor(tier)}';
+    // #region agent log
+    if (!_trustEmojiLabelLogged) {
+      _trustEmojiLabelLogged = true;
+      agentLog(
+        location: 'trust_tier_design.dart:trustScaleEmojiLabel',
+        message: 'Trust tier emoji label composed',
+        hypothesisId: 'A',
+        data: {
+          'tier': tier.name,
+          'label': label,
+          'hasNonAscii': label.runes.any((r) => r > 127),
+        },
+      );
+    }
+    // #endregion
+    return label;
+  }
+
+  static bool _trustEmojiLabelLogged = false;
 
   static TextStyle trustScaleLabelStyle({bool compact = false}) => TextStyle(
         fontSize: compact ? 11 : 12,

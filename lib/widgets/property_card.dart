@@ -15,6 +15,8 @@ import '../utils/polymorphic_identity.dart';
 import '../utils/viewer_profile.dart';
 import '../widgets/hoverable_listing_card.dart';
 import '../widgets/listing_card_overlay_badge.dart';
+import '../widgets/listing_gallery_nav_button.dart';
+import '../debug/agent_log.dart';
 
 class PropertyCard extends StatelessWidget {
   const PropertyCard({
@@ -54,8 +56,27 @@ class PropertyCard extends StatelessWidget {
   final Map<String, dynamic>? viewerProfile;
   final VoidCallback onTap;
 
+  static int _propertyCardLogCount = 0;
+
   @override
   Widget build(BuildContext context) {
+    // #region agent log
+    if (_propertyCardLogCount < 2) {
+      _propertyCardLogCount++;
+      agentLog(
+        location: 'property_card.dart:build',
+        message: 'Property card rendering',
+        hypothesisId: 'A',
+        data: {
+          'index': _propertyCardLogCount,
+          'reasonCount': match.reasons.length,
+          'firstReason': match.reasons.isEmpty ? '' : match.reasons.first,
+          'inCircle': match.inCircle,
+          'trustStage': match.trustStage.name,
+        },
+      );
+    }
+    // #endregion
     final displayPct = NumericBounds.clampPercent(match.percentage);
     final clampedMatch = ListingMatchResult(
       score: match.score,
@@ -87,7 +108,7 @@ class PropertyCard extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      _PropertyCardCoverImage(listing: listing),
+                      _PropertyCardCoverCarousel(listing: listing),
                       Positioned(
                         top: 10,
                         left: 10,
@@ -215,9 +236,10 @@ class _CardDetails extends StatelessWidget {
 
 abstract final class _CardCopy {
   static String displayPrice(Map<String, dynamic> listing) {
-    final raw = ListingData.price(listing);
-    if (raw == 'Price on request') return raw;
+    final label = ListingData.priceDisplayLabel(listing);
+    if (label == 'Rent not set') return label;
 
+    final raw = ListingData.price(listing);
     final amount = ListingData.listingPriceAmount(listing);
     final symbol = MarketConfig.current.currencySymbol;
     final periodMatch = RegExp(r'/(\w+)$').firstMatch(raw);
@@ -404,89 +426,170 @@ class _FrostedTrustBadge extends StatelessWidget {
   }
 }
 
-class _PropertyCardCoverImage extends StatefulWidget {
-  const _PropertyCardCoverImage({required this.listing});
+String? _resolveListingCoverUrl(Map<String, dynamic> listing) {
+  final imageUrl = ListingData.text(
+    listing['imageUrl'] ?? listing['image_url'],
+  );
+  if (imageUrl.isNotEmpty) return imageUrl;
+
+  final coverUrl = ListingData.coverImageUrl(listing);
+  if (coverUrl.isNotEmpty) return coverUrl;
+
+  return ListingData.networkCoverUrl(listing);
+}
+
+class _PropertyCardCoverCarousel extends StatefulWidget {
+  const _PropertyCardCoverCarousel({required this.listing});
 
   final Map<String, dynamic> listing;
 
   @override
-  State<_PropertyCardCoverImage> createState() =>
-      _PropertyCardCoverImageState();
+  State<_PropertyCardCoverCarousel> createState() =>
+      _PropertyCardCoverCarouselState();
 }
 
-class _PropertyCardCoverImageState extends State<_PropertyCardCoverImage> {
-  bool _loadFailed = false;
+class _PropertyCardCoverCarouselState extends State<_PropertyCardCoverCarousel> {
+  late final PageController _pageController;
+  int _index = 0;
 
   @override
-  void didUpdateWidget(_PropertyCardCoverImage oldWidget) {
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_PropertyCardCoverCarousel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (ListingData.id(oldWidget.listing) != ListingData.id(widget.listing)) {
-      _loadFailed = false;
+      _index = 0;
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(0);
+      }
     }
   }
 
-  static String? _resolveCoverUrl(Map<String, dynamic> listing) {
-    final imageUrl = ListingData.text(
-      listing['imageUrl'] ?? listing['image_url'],
-    );
-    if (imageUrl.isNotEmpty) return imageUrl;
-
-    final coverUrl = ListingData.coverImageUrl(listing);
-    if (coverUrl.isNotEmpty) return coverUrl;
-
-    return ListingData.networkCoverUrl(listing);
+  List<String> _imageSources() {
+    final uris = ListingData.imageDataUris(widget.listing);
+    if (uris.isNotEmpty) return uris;
+    final url = _resolveListingCoverUrl(widget.listing);
+    if (url != null && url.trim().isNotEmpty) return [url];
+    return const [];
   }
 
-  static bool _hasCoverSource(Map<String, dynamic> listing) {
-    if (ListingData.coverImageDataUri(listing) != null) return true;
-    final url = _resolveCoverUrl(listing);
-    return url != null && url.trim().isNotEmpty;
-  }
+  bool _isNetworkUrl(String value) =>
+      value.startsWith('http://') || value.startsWith('https://');
 
   @override
   Widget build(BuildContext context) {
-    if (_loadFailed || !_hasCoverSource(widget.listing)) {
+    final images = _imageSources();
+    if (images.isEmpty) {
       return const _ImageAccentPlaceholder();
     }
 
-    final dataUri = ListingData.coverImageDataUri(widget.listing);
-    final bytes = dataUri == null ? null : ListingMedia.decodeDataUri(dataUri);
-    if (bytes != null) {
-      return Image.memory(
-        bytes,
+    final hasMultiple = images.length > 1;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _pageController,
+          itemCount: images.length,
+          onPageChanged: (next) => setState(() => _index = next),
+          itemBuilder: (context, index) => _buildImage(images[index]),
+        ),
+        if (hasMultiple) ...[
+          Positioned(
+            left: 4,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: ListingGalleryNavButton(
+                icon: Icons.chevron_left_rounded,
+                enabled: _index > 0,
+                onTap: () => _goTo(_index - 1),
+                compact: true,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 4,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: ListingGalleryNavButton(
+                icon: Icons.chevron_right_rounded,
+                enabled: _index < images.length - 1,
+                onTap: () => _goTo(_index + 1),
+                compact: true,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 8,
+            right: 8,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                child: Text(
+                  '${_index + 1}/${images.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildImage(String source) {
+    if (_isNetworkUrl(source)) {
+      return Image.network(
+        source,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
         gaplessPlayback: true,
+        filterQuality: FilterQuality.medium,
         errorBuilder: (_, __, ___) => const _ImageAccentPlaceholder(),
       );
     }
 
-    final url = _resolveCoverUrl(widget.listing);
-    if (url == null || url.trim().isEmpty) {
-      return const _ImageAccentPlaceholder();
-    }
-
-    return Image.network(
-      url,
+    final bytes = ListingMedia.decodeDataUri(source);
+    if (bytes == null) return const _ImageAccentPlaceholder();
+    return Image.memory(
+      bytes,
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
       gaplessPlayback: true,
-      filterQuality: FilterQuality.medium,
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return const _ImageAccentPlaceholder();
-      },
-      errorBuilder: (_, __, ___) {
-        if (!_loadFailed) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _loadFailed = true);
-          });
-        }
-        return const _ImageAccentPlaceholder();
-      },
+      errorBuilder: (_, __, ___) => const _ImageAccentPlaceholder(),
     );
+  }
+
+  void _goTo(int index) {
+    if (index < 0 || index >= _imageSources().length) return;
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+    setState(() => _index = index);
   }
 }
 

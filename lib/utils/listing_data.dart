@@ -5,6 +5,7 @@ import 'commute_profile.dart';
 import 'geo_math.dart';
 import 'listing_sample_images.dart';
 import 'profile_data.dart';
+import 'address_privacy.dart';
 import '../services/commute_scoring_service.dart';
 import 'student_track_preference.dart';
 import 'target_search_areas.dart';
@@ -82,8 +83,14 @@ abstract final class ListingData {
 
   static String price(Map<String, dynamic> item) {
     final raw = text(item['price']);
-    if (raw.isEmpty) return 'Price on request';
-    return raw.contains('/') ? raw : '$raw/day';
+    if (raw.isEmpty) return '';
+    return raw.contains('/') ? raw : '$raw/month';
+  }
+
+  static String priceDisplayLabel(Map<String, dynamic> item) {
+    final raw = price(item);
+    if (raw.isEmpty) return 'Rent not set';
+    return raw;
   }
 
   /// Parses numeric amount from price strings like `22000/month` or `₹25,000/month`.
@@ -96,6 +103,10 @@ abstract final class ListingData {
   }
 
   static String location(Map<String, dynamic> item) {
+    if (item[AddressPrivacy.hideExactAddressKey] == true) {
+      final public = text(item[AddressPrivacy.publicLocationKey]);
+      if (public.isNotEmpty) return public;
+    }
     final loc = text(item['location']);
     if (loc.isNotEmpty) return loc;
     return text(item['owner_city']);
@@ -1588,7 +1599,57 @@ abstract final class ListingData {
       if (possessionStatus(raw).isNotEmpty) 'possession_status': possessionStatus(raw),
       if (roomType(raw).isNotEmpty) 'room_type': roomType(raw),
       if (currentOccupants(raw) > 0) 'current_occupants': currentOccupants(raw),
+      if (bedrooms(raw).isNotEmpty) 'bedrooms': bedrooms(raw),
+      if (bathrooms(raw).isNotEmpty) 'bathrooms': bathrooms(raw),
+      if (scheduleType(raw).isNotEmpty) 'schedule_type': scheduleType(raw),
+      if (raw['smoking_allowed'] == true) 'smoking_allowed': true,
+      if (raw['drinking_allowed'] == true) 'drinking_allowed': true,
+      if (raw['quiet_hours'] == true) 'quiet_hours': true,
       'tenant_track_preference': tenantTrackPreference(raw).dbValue,
+      if (ProfileData.text(raw['owner_user_id']).isNotEmpty)
+        'owner_user_id': ProfileData.text(raw['owner_user_id']),
+      if (ProfileData.text(raw['landlord_id']).isNotEmpty)
+        'landlord_id': ProfileData.text(raw['landlord_id']),
+      if (ProfileData.text(raw['user_id']).isNotEmpty)
+        'user_id': ProfileData.text(raw['user_id']),
+      if (ProfileData.text(raw['owner_email']).isNotEmpty)
+        'owner_email': ProfileData.text(raw['owner_email']),
+      if (ProfileData.text(raw['ber_rating']).isNotEmpty)
+        'ber_rating': ProfileData.text(raw['ber_rating']),
+      if (ProfileData.text(raw['agreement_type']).isNotEmpty)
+        'agreement_type': ProfileData.text(raw['agreement_type']),
+      if (ProfileData.text(raw['property_sub_type']).isNotEmpty)
+        'property_sub_type': ProfileData.text(raw['property_sub_type']),
+      if (ProfileData.text(raw['available_from']).isNotEmpty)
+        'available_from': ProfileData.text(raw['available_from']),
+      if (ProfileData.text(raw['sublet_duration_value']).isNotEmpty)
+        'sublet_duration_value': ProfileData.text(raw['sublet_duration_value']),
+      if (ProfileData.text(raw['sublet_duration_unit']).isNotEmpty)
+        'sublet_duration_unit': ProfileData.text(raw['sublet_duration_unit']),
+      if (raw['neighborhood_proximity'] is Map)
+        'neighborhood_proximity': raw['neighborhood_proximity'],
+      if (ProfileData.text(raw['shared_room_architecture']).isNotEmpty)
+        'shared_room_architecture':
+            ProfileData.text(raw['shared_room_architecture']),
+      if (ProfileData.text(raw['flatmate_cohort']).isNotEmpty)
+        'flatmate_cohort': ProfileData.text(raw['flatmate_cohort']),
+      if (ProfileData.text(raw['target_tenant_preference']).isNotEmpty)
+        'target_tenant_preference':
+            ProfileData.text(raw['target_tenant_preference']),
+      if (raw['monthly_electricity_cost'] != null)
+        'monthly_electricity_cost': raw['monthly_electricity_cost'],
+      if (raw['monthly_bins_cost'] != null)
+        'monthly_bins_cost': raw['monthly_bins_cost'],
+      if (raw['monthly_internet_cost'] != null)
+        'monthly_internet_cost': raw['monthly_internet_cost'],
+      if (raw['electricity_included_in_rent'] == true)
+        'electricity_included_in_rent': true,
+      if (raw['bins_included_in_rent'] == true)
+        'bins_included_in_rent': true,
+      if (raw['internet_included_in_rent'] == true)
+        'internet_included_in_rent': true,
+      if (raw['pets_allowed'] == true) 'pets_allowed': true,
+      if (raw['wfh_friendly'] == true) 'wfh_friendly': true,
     };
   }
 
@@ -1631,8 +1692,9 @@ abstract final class ListingData {
       errors['type'] = 'Select a property type (Rent, Buy, or Share).';
     }
 
-    if (description.trim().length < 10) {
-      errors['description'] = 'Add a short description (at least 10 characters).';
+    if (description.trim().isNotEmpty && description.trim().length < 10) {
+      errors['description'] =
+          'If you add a description, use at least 10 characters.';
     }
 
     return errors;

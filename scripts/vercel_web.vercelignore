@@ -1,0 +1,4 @@
+# Exclude Vercel CLI metadata from the static upload bundle.
+.env.local
+.env*
+.vercel

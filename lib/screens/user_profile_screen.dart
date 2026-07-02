@@ -11,6 +11,7 @@ import '../utils/profile_data.dart';
 import '../utils/profile_progress.dart';
 import '../utils/target_search_areas.dart';
 import '../utils/trust_tier_tooltips.dart';
+import '../widgets/profile_completion_dialog.dart';
 import '../widgets/profile_trust_section.dart';
 import 'auth_screen.dart';
 
@@ -30,6 +31,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _loading = true;
   bool _loadFailed = false;
   int _ownedListingCount = 0;
+  bool _completionPromptShown = false;
 
   @override
   void initState() {
@@ -103,12 +105,25 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (AuthService.isAuthenticated &&
           !ProfileData.isMatchingReady(session)) {
         AuthScreen.currentUserSession = session;
+        final owned = await ListingsStorageService.ownedByCurrentUser(session);
+        if (!mounted) return;
         if (mounted) {
-          setState(() => _loading = false);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            context.go('/profile/edit', extra: session);
+          setState(() {
+            _session = session;
+            _ownedListingCount = owned.length;
+            _loading = false;
           });
+          if (!_completionPromptShown) {
+            _completionPromptShown = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              ProfileCompletionDialog.show(
+                context,
+                session: session,
+                ownedListingCount: owned.length,
+              );
+            });
+          }
         }
         return;
       }
@@ -255,9 +270,10 @@ class _IncompleteProfile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _ProfileLayout.maxWidthLg),
           child: Column(

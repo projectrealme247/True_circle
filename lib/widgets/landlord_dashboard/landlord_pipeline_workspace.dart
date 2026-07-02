@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../models/applicant_application_status.dart';
 import '../../models/landlord_applicant_card_model.dart';
+import '../../services/listing_contact_service.dart';
 import '../trust_tier_badge.dart';
 import 'affordability_multiplier_chip.dart';
 import 'landlord_dashboard_theme.dart';
@@ -17,6 +20,9 @@ class LandlordPipelineWorkspace extends StatelessWidget {
     required this.onArchive,
     this.actionLoadingId,
     this.onOptimizeListing,
+    this.hostPhoneE164,
+    this.hostPrefersWhatsapp = false,
+    this.listingTitle = '',
   });
 
   final List<LandlordApplicantCardModel> applicants;
@@ -26,6 +32,9 @@ class LandlordPipelineWorkspace extends StatelessWidget {
   final ValueChanged<LandlordApplicantCardModel> onArchive;
   final String? actionLoadingId;
   final VoidCallback? onOptimizeListing;
+  final String? hostPhoneE164;
+  final bool hostPrefersWhatsapp;
+  final String listingTitle;
 
   LandlordApplicantCardModel? get _selected {
     if (selectedId == null) return applicants.isNotEmpty ? applicants.first : null;
@@ -67,6 +76,9 @@ class LandlordPipelineWorkspace extends StatelessWidget {
                   onInvite: onInvite,
                   onArchive: onArchive,
                   actionLoadingId: actionLoadingId,
+                  hostPhoneE164: hostPhoneE164,
+                  hostPrefersWhatsapp: hostPrefersWhatsapp,
+                  listingTitle: listingTitle,
                 ),
               ),
             ],
@@ -91,6 +103,9 @@ class LandlordPipelineWorkspace extends StatelessWidget {
                 onInvite: onInvite,
                 onArchive: onArchive,
                 actionLoadingId: actionLoadingId,
+                hostPhoneE164: hostPhoneE164,
+                hostPrefersWhatsapp: hostPrefersWhatsapp,
+                listingTitle: listingTitle,
               ),
             ),
           ],
@@ -235,6 +250,23 @@ class _PreviewCard extends StatelessWidget {
                 fullWidth: true,
                 compact: true,
               ),
+              if (applicant.budgetLabel != null ||
+                  applicant.commuteLabel != null ||
+                  applicant.moveInLabel != null) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (applicant.budgetLabel != null)
+                      _ApplicantMetaChip(label: applicant.budgetLabel!),
+                    if (applicant.commuteLabel != null)
+                      _ApplicantMetaChip(label: applicant.commuteLabel!),
+                    if (applicant.moveInLabel != null)
+                      _ApplicantMetaChip(label: applicant.moveInLabel!),
+                  ],
+                ),
+              ],
               const SizedBox(height: 10),
               TrustTierBadge(
                 tier: applicant.trustTier,
@@ -254,12 +286,58 @@ class _ApplicantPassport extends StatelessWidget {
     required this.onInvite,
     required this.onArchive,
     this.actionLoadingId,
+    this.hostPhoneE164,
+    this.hostPrefersWhatsapp = false,
+    this.listingTitle = '',
   });
 
   final LandlordApplicantCardModel applicant;
   final ValueChanged<LandlordApplicantCardModel> onInvite;
   final ValueChanged<LandlordApplicantCardModel> onArchive;
   final String? actionLoadingId;
+  final String? hostPhoneE164;
+  final bool hostPrefersWhatsapp;
+  final String listingTitle;
+
+  bool get _contactUnlocked =>
+      applicant.status == ApplicantApplicationStatus.viewingScheduled ||
+      applicant.status == ApplicantApplicationStatus.accepted;
+
+  Future<void> _openWhatsAppHandoff(BuildContext context) async {
+    final phone = hostPhoneE164 ?? '';
+    final uri = ListingContactService.whatsAppHandoffUri(
+      phoneE164: phone,
+      listingTitle: listingTitle,
+      applicantName: applicant.seekerName,
+    );
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add a phone number with WhatsApp enabled in your profile.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: uri));
+    if (!context.mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Continue on WhatsApp'),
+        content: const Text(
+          'WhatsApp link copied. TrueCircle does not monitor external messages.\n\n'
+          'Open WhatsApp and paste the link, or use your usual chat app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -306,6 +384,47 @@ class _ApplicantPassport extends StatelessWidget {
                   _AffordabilityProfileCard(
                     multiplier: applicant.affordabilityMultiplier,
                   ),
+                  if (_contactUnlocked && hostPrefersWhatsapp) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFBBF7D0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Contact milestone reached',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF166534),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'You can coordinate the viewing off-platform. '
+                            'TrueCircle does not monitor external messages.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF15803D),
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () => _openWhatsAppHandoff(context),
+                            icon: const Icon(Icons.chat_outlined, size: 18),
+                            label: const Text('Copy WhatsApp link'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -374,6 +493,32 @@ class _ApplicantPassport extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ApplicantMetaChip extends StatelessWidget {
+  const _ApplicantMetaChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: LandlordDashboardTheme.canvas,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: LandlordDashboardTheme.border),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: LandlordDashboardTheme.textSecondary,
+        ),
       ),
     );
   }

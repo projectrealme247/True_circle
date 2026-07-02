@@ -7,6 +7,7 @@ import '../theme/app_typography.dart';
 import '../theme/trust_tier_design.dart';
 import '../utils/numeric_bounds.dart';
 import 'trust_tier_badge.dart';
+import '../debug/agent_log.dart';
 
 /// Discovery card overlay tokens — aligned with Trust Scale capsules.
 abstract final class ListingCardOverlayTokens {
@@ -127,8 +128,25 @@ class ListingCardInCircleOverlayBadge extends StatelessWidget {
 
   final bool frosted;
 
+  static bool _inCircleBadgeLogged = false;
+
   @override
   Widget build(BuildContext context) {
+    // #region agent log
+    if (!_inCircleBadgeLogged) {
+      _inCircleBadgeLogged = true;
+      final label = InYourCircleOverlayTokens.label;
+      agentLog(
+        location: 'listing_card_overlay_badge.dart:InCircle',
+        message: 'In-circle overlay badge rendering',
+        hypothesisId: 'C',
+        data: {
+          'label': label,
+          'hasNonAscii': label.runes.any((r) => r > 127),
+        },
+      );
+    }
+    // #endregion
     return ListingCardOverlayBadge(
       frosted: frosted,
       child: Container(

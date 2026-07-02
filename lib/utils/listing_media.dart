@@ -4,8 +4,8 @@ import 'dart:typed_data';
 /// Base64 data-URI helpers for listing photos/video in localStorage.
 abstract final class ListingMedia {
   static const maxImages = 5;
-  static const maxBytesPerImage = 1500000;
-  static const maxBytesPerVideo = 8000000;
+  static const maxBytesPerImage = 10485760; // 10 MB
+  static const maxBytesPerVideo = 31457280; // 30 MB
 
   static String? mimeFromDataUri(String dataUri) {
     final match = RegExp(r'^data:([^;]+);base64,').firstMatch(dataUri.trim());
@@ -32,6 +32,7 @@ abstract final class ListingMedia {
     final ext = (extension ?? '').toLowerCase();
     return switch (ext) {
       'png' => 'image/png',
+      'heic' => 'image/heic',
       'webp' => 'image/webp',
       'gif' => 'image/gif',
       'jpg' || 'jpeg' => 'image/jpeg',

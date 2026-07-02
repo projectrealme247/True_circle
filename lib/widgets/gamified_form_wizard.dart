@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import 'listing_creation/listing_creation_primitives.dart';
 
 /// Conversational page header for gamified multi-step forms.
 class GamifiedFormPageHeader extends StatelessWidget {
@@ -20,71 +21,134 @@ class GamifiedFormPageHeader extends StatelessWidget {
       children: [
         Text(
           title,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF1C1E21),
-          ),
+          style: listingPageTitleStyle,
         ),
         const SizedBox(height: 6),
         Text(
           subtitle,
-          style: const TextStyle(
-            color: Color(0xFF6B7280),
-            fontSize: 14,
-            height: 1.4,
-          ),
+          style: listingPageSubtitleStyle,
         ),
       ],
     );
   }
 }
 
-/// Step progress: "1/3", "2/3", or "Bonus" for the optional third page.
+/// Step progress with optional navigation to completed steps.
 class GamifiedFormProgress extends StatelessWidget {
   const GamifiedFormProgress({
     super.key,
     required this.current,
     this.total = 3,
-    this.bonusLabel = 'Bonus',
+    this.stepLabels = const ['Property', 'Location', 'Listing'],
+    this.onStepTap,
   });
 
   final int current;
   final int total;
-  final String bonusLabel;
+  final List<String> stepLabels;
+  final ValueChanged<int>? onStepTap;
 
   @override
   Widget build(BuildContext context) {
-    final isBonus = current >= total - 1;
-    final label = isBonus ? bonusLabel : '${current + 1}/$total';
-
-    return Row(
-      children: [
-        for (var i = 0; i < total; i++) ...[
-          if (i > 0) const SizedBox(width: 6),
-          Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 4,
-              decoration: BoxDecoration(
-                color: i <= current
-                    ? AppColors.accent
-                    : const Color(0xFFE5E7EB),
-                borderRadius: BorderRadius.circular(2),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 520;
+        if (compact) {
+          final label = stepLabels[current.clamp(0, stepLabels.length - 1)];
+          return Row(
+            children: [
+              _StepLink(
+                index: current,
+                label: label,
+                state: _StepVisual.active,
+                onTap: null,
               ),
-            ),
-          ),
-        ],
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: isBonus ? AppColors.accentDark : const Color(0xFF6B7280),
-          ),
+              const Spacer(),
+              Text(
+                '${current + 1} of $total',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF9CA3AF),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            for (var i = 0; i < total; i++) ...[
+              if (i > 0) const Spacer(),
+              _StepLink(
+                index: i,
+                label: stepLabels[i.clamp(0, stepLabels.length - 1)],
+                state: i < current
+                    ? _StepVisual.complete
+                    : i == current
+                        ? _StepVisual.active
+                        : _StepVisual.upcoming,
+                onTap: i < current ? () => onStepTap?.call(i) : null,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+enum _StepVisual { upcoming, active, complete }
+
+class _StepLink extends StatelessWidget {
+  const _StepLink({
+    required this.index,
+    required this.label,
+    required this.state,
+    this.onTap,
+  });
+
+  final int index;
+  final String label;
+  final _StepVisual state;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = state == _StepVisual.active;
+    final complete = state == _StepVisual.complete;
+    final prefix = complete ? '✓' : '${index + 1}';
+
+    final textColor = active
+        ? const Color(0xFF111827)
+        : complete
+            ? const Color(0xFF4B5563)
+            : const Color(0xFF9CA3AF);
+    final weight = active ? FontWeight.w600 : FontWeight.w500;
+
+    final child = Text(
+      '$prefix $label',
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: weight,
+        color: textColor,
+        decoration: onTap != null ? TextDecoration.underline : TextDecoration.none,
+        decorationColor: const Color(0xFF9CA3AF),
+      ),
+    );
+
+    if (onTap == null) return child;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+          child: child,
         ),
-      ],
+      ),
     );
   }
 }
@@ -97,8 +161,9 @@ class GamifiedFormNavBar extends StatelessWidget {
     this.onNext,
     this.onSubmit,
     this.onSkipToBonus,
-    this.nextLabel = 'Next',
-    this.submitLabel = 'Save',
+    this.nextLabel = 'Continue →',
+    this.submitLabel = 'Publish Listing 🚀',
+    this.backLabel = '← Back',
     this.skipLabel = 'Add bonus details',
     this.showBack = true,
     this.showNext = false,
@@ -115,6 +180,7 @@ class GamifiedFormNavBar extends StatelessWidget {
   final VoidCallback? onSkipToBonus;
   final String nextLabel;
   final String submitLabel;
+  final String backLabel;
   final String skipLabel;
   final bool showBack;
   final bool showNext;
@@ -157,7 +223,7 @@ class GamifiedFormNavBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('Back'),
+                child: Text(backLabel),
               ),
             if (showBack && (showNext || showSubmit)) const SizedBox(width: 12),
             if (showNext)

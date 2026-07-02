@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../config/market/dublin_commuter_hubs.dart';
@@ -14,18 +15,33 @@ import '../utils/dublin_hap_contribution_validator.dart';
 import '../services/profile_storage_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/view_preference_service.dart';
-import '../utils/listing_data.dart';
+import '../models/onboarding_user_intent.dart';
+import '../models/profile_onboarding_models.dart';
 import '../models/spoken_language_entry.dart';
+import '../services/eircode_geocoding_service.dart';
+import '../services/eircode_lookup_service.dart';
+import '../services/fast_location_service.dart';
+import '../models/irish_address_suggestion.dart';
+import '../utils/address_privacy.dart';
+import '../services/profile_onboarding_repository.dart';
+import '../services/marketplace_context_notifier.dart';
+import '../utils/phone_e164.dart';
+import '../utils/onboarding_language_inference.dart';
+import '../utils/ireland_language_catalog.dart';
 import '../utils/profile_data.dart';
 import '../utils/spoken_language_profile_codec.dart';
-import '../widgets/commute_hub_autocomplete_field.dart';
+import '../widgets/commute_destination_field.dart';
 import '../debug/agent_log.dart';
 import '../widgets/gamified_form_wizard.dart';
 import '../widgets/language_pill_chips.dart';
-import '../widgets/onboarding/live_transit_simulator_panel.dart';
+import '../widgets/onboarding/mother_tongue_typeahead_field.dart';
 import '../widgets/onboarding/onboarding_design_tokens.dart';
 import '../widgets/onboarding/onboarding_grid_shell.dart';
+import '../widgets/listing_creation/listing_creation_primitives.dart';
+import '../widgets/listing_creation/eircode_address_field.dart';
+import '../widgets/onboarding/onboarding_intent_splitter.dart';
 import '../widgets/onboarding/onboarding_premium_field.dart';
+import '../widgets/onboarding/onboarding_spoken_language_chips.dart';
 import '../widgets/onboarding/passport_preview_card.dart';
 import '../widgets/shadcn_select.dart';
 import '../widgets/truecircle_logo.dart';
@@ -48,8 +64,7 @@ abstract final class ProfileSeekerPreferences {
   };
 
   static const shareRoomLayoutOptions = [
-    'Single Room',
-    'Double Room',
+    'Single / Private Room',
     'Ensuite Room',
     'Twin / Shared Room',
   ];
@@ -87,10 +102,20 @@ abstract final class ProfileSeekerPreferences {
     Map<String, dynamic> profile,
     String preferredArrangement,
   ) {
-    final layout = ProfileData.text(profile['preferred_layout']);
+    final layout = _normalizeLayoutLabel(ProfileData.text(profile['preferred_layout']));
     if (layout.isEmpty) return null;
     final options = activeLayoutOptions(preferredArrangement);
     return options.contains(layout) ? layout : null;
+  }
+
+  static String _normalizeLayoutLabel(String layout) {
+    switch (layout) {
+      case 'Single Room':
+      case 'Double Room':
+        return 'Single / Private Room';
+      default:
+        return layout;
+    }
   }
 
   static List<String> activeLayoutOptions(String preferredArrangement) {
@@ -130,20 +155,6 @@ abstract final class ProfileSeekerPreferences {
     if (normalized.contains('non')) return 'Non-Veg';
     return 'Veg';
   }
-}
-
-/// Dublin expat languages for shared-flat roommate matching (no English).
-abstract final class ProfileSharedLanguageOptions {
-  static const languages = [
-    'Hindi',
-    'Malayalam',
-    'Telugu',
-    'Tamil',
-    'Gujarati',
-    'Kannada',
-    'Punjabi',
-    'Bengali',
-  ];
 }
 
 abstract final class ProfileCommuteOptions {
@@ -230,15 +241,27 @@ class ProfileEditScreen extends StatefulWidget {
 }
 
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
-  static const _pageCount = 2;
   int _currentPage = 0;
   bool _hydrating = true;
   Map<String, dynamic>? _baselineProfile;
 
+  int get _pageCount =>
+      _onboardingIntent == OnboardingUserIntent.seeker ? 3 : 2;
+
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
+  final _contactPhoneController = TextEditingController();
+  String _phoneCountryCode = PhoneE164.defaultCountryCode;
+  bool _prefersWhatsapp = false;
+  final _propertyLocationIdentifierController = TextEditingController();
   final _nativePlaceController = TextEditingController();
   final _locationController = TextEditingController();
+  final _propertyLocationController = TextEditingController();
+  final _propertyEircodeController = TextEditingController();
+  final _propertyAddressSearchController = TextEditingController();
+  IrishAddressSuggestion? _selectedPropertyAddress;
+  bool _hidePropertyExactAddress = false;
+  bool _fetchingPropertyLocation = false;
   final _budgetMinController = TextEditingController();
   final _budgetMaxController = TextEditingController();
   final _netMonthlyIncomeController = TextEditingController();
@@ -246,12 +269,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _hapVoucherContributionController = TextEditingController();
   final _earliestMoveInController = TextEditingController();
   String _selectedMotherTongue = 'English';
-  String _kitchenUsageTiming = ListingData.kitchenUsageTimingOptions.first;
   final List<String> _selectedLanguages = [];
   final Map<String, bool> _languageNativeFlags = {};
   final List<_CommuterDraftEntry> _commuterDrafts = [];
+  int _householdCommutersCount = 1;
   double _maxCommuteBudgetMinutes = 45;
-  DualCommutePriority _dualCommutePriority = DualCommutePriority.balanced;
   int? _preferredLeaseMonths;
   bool _hasHapVoucher = false;
   bool _hapUpliftApproved = false;
@@ -261,6 +283,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final List<String> _preferredSpokenLanguages = [];
   String _sharedFoodPref = 'Veg';
   String? _selectedAreaKey;
+  String? _providerAreaKey;
+  OnboardingUserIntent _onboardingIntent = OnboardingUserIntent.seeker;
+  bool _providerSharedSpace = false;
+  bool _providerIsFurnished = true;
+  bool _providerIsOwnerOccupier = false;
+  int _providerHousemateCount = 1;
+  final Set<String> _providerHouseRules = {'No smoking', 'No pets'};
   String? _selectedOccupantType;
   String? _selectedGenderPref;
   String? _selectedStudentType;
@@ -283,23 +312,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   int get _selectedBudgetTime => _maxCommuteBudgetMinutes.round();
 
   int get _commuterSlotCount {
-    if (_familyAdults >= 2 ||
-        _groupSize >= 2 ||
-        _selectedOccupantType == 'Family') {
-      return 2;
-    }
-    return 1;
+    if (_householdCommutersCount <= 1) return 1;
+    return 2;
   }
 
   List<String> get _languageOptions => MarketConfig.current.profileLanguageOptions;
 
-  List<String> get _otherLanguageOptions =>
-      _languageOptions.where((l) => l != _selectedMotherTongue).toList();
   static const _sharedFoodChipOptions = ['Veg', 'Non-Veg'];
   List<String> get _occupantOptions => MarketConfig.current.profileOccupantOptions;
+  List<String> get _occupantOptionsForCurrentTrack {
+    if (_selectedTrack == ProfileOnboardingTrack.seekerSharedSpace) {
+      return const ['Working Professionals', 'Students'];
+    }
+    return _occupantOptions;
+  }
 
   String get _resolvedOccupantType =>
-      _selectedOccupantType ?? _occupantOptions.first;
+      _selectedOccupantType ?? _occupantOptionsForCurrentTrack.first;
   List<String> get _genderPrefOptions =>
       MarketConfig.current.profileGenderPrefOptions;
   List<String> get _studentFundingOptions =>
@@ -309,6 +338,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         preferredArrangement,
         preferredLayout,
       );
+
+  ProfileOnboardingTrack get _selectedTrack {
+    if (_onboardingIntent == OnboardingUserIntent.provider) {
+      return _providerSharedSpace
+          ? ProfileOnboardingTrack.landlordSharedSpace
+          : ProfileOnboardingTrack.landlordEntirePlace;
+    }
+    return ProfileSeekerPreferences.isSharedRoom(preferredArrangement)
+        ? ProfileOnboardingTrack.seekerSharedSpace
+        : ProfileOnboardingTrack.seekerEntirePlace;
+  }
 
   /// Display label for the area ShadcnSelect (never the raw storage key).
   String get _locationSelectValue {
@@ -330,7 +370,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     super.initState();
     profileStateNotifier.beginEditing(widget.initialProfile, notify: false);
     _applyMarketDefaults();
+    _nameController.addListener(_onPassportFieldChanged);
+    _locationController.addListener(_onPassportFieldChanged);
+    _propertyLocationController.addListener(_onPassportFieldChanged);
+    _propertyEircodeController.addListener(_onPassportFieldChanged);
     _bootstrap();
+  }
+
+  void _onPassportFieldChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -347,15 +395,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   void _applyMarketDefaults() {
     final market = MarketConfig.current;
     _selectedMotherTongue = market.defaultMotherTongue;
-    _selectedLanguages
-      ..clear()
-      ..add(market.defaultMotherTongue);
-    _languageNativeFlags
-      ..clear()
-      ..[market.defaultMotherTongue] = true;
+    _applyMotherTongueInference(market.defaultMotherTongue);
     if (market.profileUseAreaPicker) {
       _selectedAreaKey = market.defaultAreaKey;
+      _providerAreaKey = market.defaultAreaKey;
       _locationController.text = market.defaultAreaDisplayName;
+      _propertyLocationController.text = market.defaultAreaDisplayName;
     }
     _selectedOccupantType ??= _occupantOptions.first;
   }
@@ -384,6 +429,21 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   void _hydrateFromProfile(Map<String, dynamic> profile) {
     _emailController.text = ProfileData.text(profile['email']);
     _nameController.text = ProfileData.text(profile['full_name']);
+    _contactPhoneController.text = ProfileData.text(
+      profile['contact_phone'] ?? profile['phone'],
+    );
+    final phoneSplit = PhoneE164.split(
+      ProfileData.text(profile['contact_phone_e164']),
+    );
+    if (phoneSplit != null) {
+      _phoneCountryCode = phoneSplit.countryCode;
+      _contactPhoneController.text = phoneSplit.national;
+    }
+    _prefersWhatsapp = profile['prefers_whatsapp'] == true;
+    _propertyLocationIdentifierController.text = ProfileData.text(
+      profile['property_location_identifier'] ??
+          profile['pending_listing_location'],
+    );
 
     final city = ProfileData.text(profile['detected_city']);
     if (MarketConfig.current.profileUseAreaPicker) {
@@ -410,17 +470,24 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _agencyController.text = ProfileData.text(profile['agency_name']);
 
     final mother = ProfileData.text(profile['mother_tongue']);
-    if (mother.isNotEmpty && _languageOptions.contains(mother)) {
+    if (mother.isNotEmpty) {
       _selectedMotherTongue = mother;
     }
 
     _hydrateCommutersFromProfile(profile);
 
+    final householdCommuters = profile['household_commuters_count'];
+    if (householdCommuters is int && householdCommuters > 0) {
+      _householdCommutersCount = householdCommuters;
+    } else {
+      _householdCommutersCount = _commuterDrafts.length.clamp(1, 2);
+    }
+    _syncCommuterDraftSlots();
+
     final maxCommute = profile['maximum_commute_budget_minutes'];
     if (maxCommute is num && maxCommute > 0) {
       _maxCommuteBudgetMinutes = maxCommute.toDouble();
     }
-    _dualCommutePriority = ListingData.dualCommutePriority(profile);
 
     final preferredLangs = profile['preferred_spoken_languages'];
     if (preferredLangs is List) {
@@ -428,17 +495,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ..clear()
         ..addAll(
           preferredLangs
-              .map((e) => e.toString())
-              .where(ProfileSharedLanguageOptions.languages.contains),
+              .map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty),
         );
     }
+    _ensurePreferredSpokenLanguagesSeeded();
 
     final food = ProfileData.text(profile['food_preference']);
     if (food.isNotEmpty) {
       _sharedFoodPref = ProfileSeekerPreferences.sharedFoodFromBackend(food);
     }
-
-    _kitchenUsageTiming = ListingData.hydrateKitchenUsageTiming(profile);
 
     _selectedLanguages
       ..clear()
@@ -530,15 +596,86 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         : int.tryParse(ProfileData.text(profile['preferred_lease_months']));
     _earliestMoveInController.text =
         ProfileData.text(profile['earliest_move_in_date']);
+
+    _onboardingIntent = OnboardingUserIntent.fromSession(profile);
+    final snapshot = ProfileOnboardingRepository.snapshotFromSession(profile);
+    _providerSharedSpace = snapshot.track == ProfileOnboardingTrack.landlordSharedSpace;
+    _providerIsFurnished = snapshot.listingSeed.isFurnished;
+    _providerIsOwnerOccupier = snapshot.hostProfile.isOwnerOccupier;
+    final hostHousehold =
+        snapshot.hostProfile.currentHouseholdMakeup['group_size'] ??
+            snapshot.hostProfile.currentHouseholdMakeup['current_occupants'];
+    if (hostHousehold is int && hostHousehold > 0) {
+      _providerHousemateCount = hostHousehold;
+    }
+    _providerHouseRules
+      ..clear()
+      ..addAll(snapshot.hostProfile.houseRules);
+    if (_providerHouseRules.isEmpty) {
+      _providerHouseRules.addAll({'No smoking', 'No pets'});
+    }
+
+    final pendingLocation = ProfileData.text(profile['pending_listing_location']);
+    final pendingEircode = ProfileData.text(profile['pending_listing_eircode']);
+    if (pendingLocation.isNotEmpty) {
+      if (MarketConfig.current.profileUseAreaPicker) {
+        var matched = false;
+        for (final (key, label) in MarketConfig.current.areaOptions) {
+          if (label.toLowerCase() == pendingLocation.toLowerCase() ||
+              key == pendingLocation) {
+            _providerAreaKey = key;
+            _propertyLocationController.text = label;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          _propertyLocationController.text = pendingLocation;
+        }
+      } else {
+        _propertyLocationController.text = pendingLocation;
+      }
+    }
+    if (pendingEircode.isNotEmpty) {
+      _propertyEircodeController.text =
+          EircodeGeocodingService.normalize(pendingEircode);
+    }
+    _hidePropertyExactAddress =
+        profile[AddressPrivacy.hideExactAddressKey] == true;
+    if (pendingEircode.isNotEmpty) {
+      _propertyAddressSearchController.text = pendingEircode;
+    } else if (pendingLocation.isNotEmpty) {
+      _propertyAddressSearchController.text = pendingLocation;
+    }
+    final identifier =
+        ProfileData.text(profile['property_location_identifier']);
+    if (identifier.isNotEmpty &&
+        _propertyAddressSearchController.text.isNotEmpty) {
+      _propertyAddressSearchController.text =
+          '$identifier, ${_propertyAddressSearchController.text}';
+      _propertyLocationIdentifierController.text = identifier;
+    } else if (identifier.isNotEmpty) {
+      _propertyLocationIdentifierController.text = identifier;
+      _propertyAddressSearchController.text = identifier;
+    }
   }
 
   @override
   void dispose() {
     profileStateNotifier.endEditing();
+    _nameController.removeListener(_onPassportFieldChanged);
+    _locationController.removeListener(_onPassportFieldChanged);
+    _propertyLocationController.removeListener(_onPassportFieldChanged);
+    _propertyEircodeController.removeListener(_onPassportFieldChanged);
     _emailController.dispose();
     _nameController.dispose();
+    _contactPhoneController.dispose();
+    _propertyLocationIdentifierController.dispose();
     _nativePlaceController.dispose();
     _locationController.dispose();
+    _propertyLocationController.dispose();
+    _propertyEircodeController.dispose();
+    _propertyAddressSearchController.dispose();
     _budgetMinController.dispose();
     _budgetMaxController.dispose();
     _agencyController.dispose();
@@ -719,13 +856,128 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     });
   }
 
-  void _clearSharedRoomFilters() {
-    _preferredSpokenLanguages.clear();
-    _sharedFoodPref = 'Veg';
-    _kitchenUsageTiming = ListingData.kitchenUsageTimingOptions.first;
-    _smokingOk = false;
-    _drinkingOk = false;
-    _scheduleType = null;
+  void _ensurePreferredSpokenLanguagesSeeded() {
+    if (_preferredSpokenLanguages.isNotEmpty) return;
+    for (final language in _dedupedSpokenLanguages()) {
+      if (!_preferredSpokenLanguages.contains(language)) {
+        _preferredSpokenLanguages.add(language);
+      }
+    }
+  }
+
+  List<String> get _roommateLanguageChipOptions {
+    final seen = <String>{};
+    final ordered = <String>[];
+    for (final language in [
+      ..._dedupedSpokenLanguages(),
+      ..._preferredSpokenLanguages,
+    ]) {
+      final token = language.trim();
+      if (token.isEmpty) continue;
+      if (seen.add(token.toLowerCase())) ordered.add(token);
+    }
+    return ordered;
+  }
+
+  void _syncPreferredRoommateLanguagesFromIdentity() {
+    for (final language in _dedupedSpokenLanguages()) {
+      final exists = _preferredSpokenLanguages.any(
+        (existing) => existing.toLowerCase() == language.toLowerCase(),
+      );
+      if (!exists) _preferredSpokenLanguages.add(language);
+    }
+  }
+
+  Future<void> _showAddRoommateLanguageSheet() async {
+    final controller = TextEditingController();
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        var filtered = IrelandLanguageCatalog.all
+            .where(
+              (language) => !_roommateLanguageChipOptions.any(
+                (existing) =>
+                    existing.toLowerCase() == language.toLowerCase(),
+              ),
+            )
+            .toList();
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void applyFilter(String query) {
+              setSheetState(() {
+                filtered = IrelandLanguageCatalog.filterByQuery(query)
+                    .where(
+                      (language) => !_roommateLanguageChipOptions.any(
+                        (existing) =>
+                            existing.toLowerCase() == language.toLowerCase(),
+                      ),
+                    )
+                    .toList();
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Add roommate language',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: OnboardingTokens.inputDecoration(
+                      hint: 'Search languages…',
+                    ),
+                    onChanged: applyFilter,
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final language = filtered[index];
+                        return ListTile(
+                          title: Text(language),
+                          onTap: () => Navigator.pop(ctx, language),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    if (selected == null || selected.trim().isEmpty || !mounted) return;
+    setState(() {
+      if (!_preferredSpokenLanguages.contains(selected)) {
+        _preferredSpokenLanguages.add(selected);
+      }
+    });
   }
 
   Map<String, dynamic> _commutePayloadFields() {
@@ -768,11 +1020,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
     return {
       'maximum_commute_budget_minutes': worstCaseMax,
-      'dual_commute_priority': switch (_dualCommutePriority) {
-        DualCommutePriority.personA => 'person_a',
-        DualCommutePriority.personB => 'person_b',
-        DualCommutePriority.balanced => 'balanced',
-      },
+      'dual_commute_priority': 'balanced',
+      'household_commuters_count': _householdCommutersCount,
       if (perProfileMax.isNotEmpty) 'commute_profile_max_minutes': perProfileMax,
       if (primary != null) ...{
         'commute_method': primary.method.toBackend(),
@@ -793,7 +1042,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     return {
       'food_preference':
           ProfileSeekerPreferences.sharedFoodToBackend(_sharedFoodPref),
-      'kitchen_usage_timing': _kitchenUsageTiming,
       if (_preferredSpokenLanguages.isNotEmpty) ...{
         'preferred_spoken_languages':
             List<String>.from(_preferredSpokenLanguages),
@@ -804,12 +1052,102 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   String _resolvedCity() {
+    if (_onboardingIntent == OnboardingUserIntent.provider) {
+      return '';
+    }
     if (MarketConfig.current.profileUseAreaPicker && _selectedAreaKey != null) {
       for (final (key, label) in MarketConfig.current.areaOptions) {
         if (key == _selectedAreaKey) return label;
       }
     }
     return _formatLocationDisplay(_locationController.text.trim());
+  }
+
+  String? get _composedContactPhoneE164 => PhoneE164.compose(
+        countryCode: _phoneCountryCode,
+        national: _contactPhoneController.text,
+      );
+
+  String _resolvedPropertyNeighborhood() {
+    if (_hidePropertyExactAddress && _selectedPropertyAddress != null) {
+      return _selectedPropertyAddress!.publicLocationLabel;
+    }
+    final identifier = _propertyLocationIdentifierController.text.trim();
+    if (identifier.isNotEmpty) return _formatLocationDisplay(identifier);
+    if (_selectedPropertyAddress != null) {
+      return _formatLocationDisplay(_selectedPropertyAddress!.area);
+    }
+    if (MarketConfig.current.profileUseAreaPicker && _providerAreaKey != null) {
+      for (final (key, label) in MarketConfig.current.areaOptions) {
+        if (key == _providerAreaKey) return label;
+      }
+    }
+    return _formatLocationDisplay(_propertyLocationController.text.trim());
+  }
+
+  void _onPropertyAddressSelected(IrishAddressSuggestion suggestion) {
+    setState(() {
+      _selectedPropertyAddress = suggestion;
+      _propertyLocationIdentifierController.text = suggestion.streetLine;
+      _propertyLocationController.text = suggestion.area;
+      if (suggestion.eircode != null) {
+        _propertyEircodeController.text = suggestion.eircode!;
+      }
+    });
+  }
+
+  Future<void> _usePropertyCurrentLocation() async {
+    if (_fetchingPropertyLocation) return;
+    setState(() => _fetchingPropertyLocation = true);
+    try {
+      final resolved = await FastLocationService.resolve();
+      if (resolved == null || !mounted) return;
+      final suggestion = await EircodeLookupService.resolveFromCoordinates(
+        resolved.latitude,
+        resolved.longitude,
+      );
+      if (!mounted) return;
+      if (suggestion == null) return;
+      setState(() {
+        _selectedPropertyAddress = suggestion;
+        _propertyLocationController.text = suggestion.area;
+        if (suggestion.eircode != null) {
+          _propertyEircodeController.text =
+              EircodeGeocodingService.normalize(suggestion.eircode!);
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _fetchingPropertyLocation = false);
+    }
+  }
+
+  bool _providerLocationIsSet() {
+    if (_selectedPropertyAddress != null) return true;
+    final eircode = EircodeGeocodingService.normalize(
+      _propertyEircodeController.text,
+    );
+    if (eircode.isNotEmpty) return true;
+    if (_propertyLocationIdentifierController.text.trim().length >= 2) {
+      return true;
+    }
+    if (MarketConfig.current.profileUseAreaPicker && _providerAreaKey != null) {
+      return true;
+    }
+    return _resolvedPropertyNeighborhood().length >= 2;
+  }
+
+  String get _providerLocationSelectValue {
+    if (!MarketConfig.current.profileUseAreaPicker) {
+      return _formatLocationDisplay(_propertyLocationController.text.trim());
+    }
+    final key = _providerAreaKey ?? MarketConfig.current.defaultAreaKey;
+    for (final (areaKey, label) in MarketConfig.current.areaOptions) {
+      if (areaKey == key) return label;
+    }
+    return _formatLocationDisplay(
+      dublinDistrictLabelForKey(key) ??
+          MarketConfig.current.defaultAreaDisplayName,
+    );
   }
 
   String _formatLocationDisplay(String raw) {
@@ -864,53 +1202,125 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
-  void _syncMotherTongueInLanguages(String previousMotherTongue) {
-    if (!_selectedLanguages.contains(_selectedMotherTongue)) {
-      _selectedLanguages.add(_selectedMotherTongue);
+  ProfileInheritanceSnapshot _buildTrackSnapshot() {
+    final hostLanguages = _dedupedSpokenLanguages();
+    final seekerBudget = int.tryParse(_budgetMaxController.text.trim());
+    final hostHousehold = <String, dynamic>{
+      if (_providerHousemateCount > 0) 'current_occupants': _providerHousemateCount,
+      if (_selectedOccupantType != null) 'occupant_type': _selectedOccupantType,
+      if (_groupSize > 0) 'group_size': _groupSize,
+    };
+
+    return ProfileInheritanceSnapshot(
+      track: _selectedTrack,
+      identityProfile: IdentityProfile(
+        email: _emailController.text.trim(),
+        fullName: _nameController.text.trim(),
+        companyName: _agencyController.text.trim(),
+        contactPhone: _contactPhoneController.text.trim(),
+        motherTongue: _selectedMotherTongue,
+        nativePlace: _nativePlaceController.text.trim(),
+        languages: hostLanguages,
+      ),
+      seekerProfile: SeekerProfile(
+        maxBudget: _selectedTrack == ProfileOnboardingTrack.seekerEntirePlace
+            ? seekerBudget
+            : null,
+        roomBudget: _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
+            ? seekerBudget
+            : null,
+        moveInWindow: _earliestMoveInController.text.trim(),
+        preferredLeaseMonths: _preferredLeaseMonths,
+        occupantGroupFit: _resolvedOccupantType,
+        genderPreferences: _selectedGenderPref ?? '',
+        wfhStatus: _scheduleType == null || _scheduleType == 'Flexible',
+        environmentPreferences: [
+          if (_householdHasPets) 'Pets in household',
+          if (_householdSmoker) 'Smoker in household',
+        ],
+        primaryCommute: _commuterDrafts.isNotEmpty && _commuterDrafts.first.hub != null
+            ? {
+                'commute_method': CommuteMethod.fromDisplayLabel(
+                  _commuterDrafts.first.methodLabel,
+                ).toBackend(),
+                'commute_destination_hub_id': _commuterDrafts.first.hub!.id,
+                'commute_destination': _commuterDrafts.first.hub!.label,
+                'max_commute_minutes':
+                    _commuterDrafts.first.maxCommuteMinutes.round(),
+              }
+            : const {},
+        secondaryCommute:
+            _commuterDrafts.length > 1 && _commuterDrafts[1].hub != null
+                ? {
+                    'commute_method': CommuteMethod.fromDisplayLabel(
+                      _commuterDrafts[1].methodLabel,
+                    ).toBackend(),
+                    'commute_destination_hub_id': _commuterDrafts[1].hub!.id,
+                    'commute_destination': _commuterDrafts[1].hub!.label,
+                    'max_commute_minutes':
+                        _commuterDrafts[1].maxCommuteMinutes.round(),
+                  }
+                : const {},
+      ),
+      hostProfile: HostProfile(
+        languages: hostLanguages,
+        currentHouseholdMakeup: hostHousehold,
+        isOwnerOccupier: _providerIsOwnerOccupier,
+        houseRules: _providerHouseRules.toList(),
+      ),
+      listingSeed: ListingSeed(
+        propertyNeighborhood: _resolvedPropertyNeighborhood(),
+        propertyEircode:
+            EircodeGeocodingService.normalize(_propertyEircodeController.text),
+        isFurnished: _providerIsFurnished,
+        listingMode: _selectedTrack.isSharedSpace ? 'shared_space' : 'entire_place',
+        currentHouseholdMakeup: hostHousehold,
+        houseRules: _providerHouseRules.toList(),
+      ),
+    );
+  }
+
+  void _applyMotherTongueInference(String motherTongue) {
+    final inferred = OnboardingLanguageInference.companionsFor(motherTongue);
+    _selectedLanguages.clear();
+    _selectedLanguages.addAll(inferred);
+    _languageNativeFlags.clear();
+    for (final language in inferred) {
+      _languageNativeFlags[language] =
+          language.toLowerCase() == motherTongue.toLowerCase();
     }
-    if (previousMotherTongue != _selectedMotherTongue &&
-        _selectedLanguages.contains(previousMotherTongue)) {
-      _selectedLanguages.remove(previousMotherTongue);
-    }
-    if (previousMotherTongue != _selectedMotherTongue) {
-      _languageNativeFlags.remove(previousMotherTongue);
-    }
-    _languageNativeFlags[_selectedMotherTongue] = true;
+    _languageNativeFlags[motherTongue] = true;
   }
 
   void _onMotherTongueChanged(String value) {
     setState(() {
-      final previous = _selectedMotherTongue;
       _selectedMotherTongue = value;
-      _syncMotherTongueInLanguages(previous);
+      _applyMotherTongueInference(value);
     });
   }
 
-  void _toggleLanguage(String lang) {
-    if (lang == _selectedMotherTongue) return;
+  void _removeSpokenLanguage(String language) {
+    if (_selectedLanguages.length <= 1) return;
     setState(() {
-      if (_selectedLanguages.contains(lang)) {
-        if (_selectedLanguages.length > 1) {
-          _selectedLanguages.remove(lang);
-          _languageNativeFlags.remove(lang);
-        }
-      } else {
-        _selectedLanguages.add(lang);
+      _selectedLanguages.removeWhere(
+        (l) => l.toLowerCase() == language.toLowerCase(),
+      );
+      _languageNativeFlags.remove(language);
+      if (language.toLowerCase() == _selectedMotherTongue.toLowerCase()) {
+        _selectedMotherTongue = _selectedLanguages.first;
+        _languageNativeFlags[_selectedMotherTongue] = true;
       }
     });
   }
 
-  void _toggleLanguageNative(String lang) {
-    if (lang == _selectedMotherTongue || !_selectedLanguages.contains(lang)) {
+  void _addSpokenLanguage(String language) {
+    final token = language.trim();
+    if (token.isEmpty) return;
+    if (_selectedLanguages
+        .any((l) => l.toLowerCase() == token.toLowerCase())) {
       return;
     }
-    setState(() {
-      _languageNativeFlags[lang] = !(_languageNativeFlags[lang] ?? false);
-    });
-  }
-
-  void _selectKitchenUsageTiming(String timing) {
-    setState(() => _kitchenUsageTiming = timing);
+    setState(() => _selectedLanguages.add(token));
   }
 
   bool _validatePage1() {
@@ -918,12 +1328,50 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _showMessage('Please enter your email.');
       return false;
     }
-    if (_nameController.text.trim().isEmpty || _resolvedCity().isEmpty) {
-      _showMessage('Please fill in your name and area.');
+    if (_nameController.text.trim().isEmpty) {
+      _showMessage('Please enter your full name.');
+      return false;
+    }
+    if (_onboardingIntent == OnboardingUserIntent.seeker) {
+      if (_resolvedCity().isEmpty) {
+        _showMessage('Please set your current location / base.');
+        return false;
+      }
+    } else if (!_providerLocationIsSet()) {
+      _showMessage('Enter your property Eircode or a location identifier.');
       return false;
     }
     if (_selectedLanguages.isEmpty) {
       _showMessage('Select at least one language.');
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateSeekerHousingPage() {
+    final budget = int.tryParse(_budgetMaxController.text.trim());
+    if (budget == null || budget <= 0) {
+      _showMessage('Enter your maximum monthly budget.');
+      return false;
+    }
+    if (_householdCommutersCount < 1) {
+      _showMessage('Tell us how many people in your household commute.');
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateSeekerCommutePage() {
+    final configured = _commuterDrafts
+        .take(_commuterSlotCount)
+        .where((draft) => draft.hub != null)
+        .length;
+    if (configured < _commuterSlotCount) {
+      _showMessage(
+        _commuterSlotCount == 1
+            ? 'Set your commute destination.'
+            : 'Set both priority commute destinations.',
+      );
       return false;
     }
     return true;
@@ -934,13 +1382,41 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     setState(() => _currentPage = page);
   }
 
+  void _onOnboardingBack() {
+    if (_currentPage > 0) {
+      _goToPage(_currentPage - 1);
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go('/');
+  }
+
+  String get _onboardingBackTooltip => switch (_currentPage) {
+        0 => 'Exit profile setup',
+        1 => 'Back to profile details',
+        _ => 'Back to housing preferences',
+      };
+
   bool _validate() {
     if (_emailController.text.trim().isEmpty) {
       _showMessage('Please enter your email.');
       return false;
     }
-    if (_nameController.text.trim().isEmpty || _resolvedCity().isEmpty) {
-      _showMessage('Please fill in your name and area.');
+    if (_nameController.text.trim().isEmpty) {
+      _showMessage('Please enter your full name.');
+      return false;
+    }
+    if (_onboardingIntent == OnboardingUserIntent.seeker &&
+        _resolvedCity().isEmpty) {
+      _showMessage('Please set your current location / base.');
+      return false;
+    }
+    if (_onboardingIntent == OnboardingUserIntent.provider &&
+        !_providerLocationIsSet()) {
+      _showMessage('Enter your property Eircode or a location identifier.');
       return false;
     }
     if (_selectedLanguages.isEmpty) {
@@ -970,10 +1446,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   Map<String, dynamic> _buildPayload() {
     final baseline = _baselineProfile ?? <String, dynamic>{};
-    final payload = {
+    var payload = {
       ...baseline,
       'email': _emailController.text.trim(),
       'full_name': _nameController.text.trim(),
+      'contact_phone': _contactPhoneController.text.trim(),
+      if (_composedContactPhoneE164 != null)
+        'contact_phone_e164': _composedContactPhoneE164,
+      'prefers_whatsapp': _prefersWhatsapp,
+      'active_marketplace_space':
+          MarketplaceContextNotifier.spaceFromOnboardingTrack(_selectedTrack)
+              .storageToken,
       if (_agencyController.text.trim().isNotEmpty)
         'agency_name': _agencyController.text.trim(),
       'detected_city': _resolvedCity(),
@@ -1028,6 +1511,29 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       'has_verified_guarantor': _hasVerifiedGuarantor,
       'household_has_pets': _householdHasPets,
       'household_smoker': _householdSmoker,
+      'onboarding_intent': _onboardingIntent.storageToken,
+      'profile_onboarding_track': _selectedTrack.storageToken,
+      if (_onboardingIntent == OnboardingUserIntent.provider) ...{
+        'pending_listing_location': _resolvedPropertyNeighborhood(),
+        'pending_listing_eircode': _hidePropertyExactAddress
+            ? ''
+            : EircodeGeocodingService.normalize(_propertyEircodeController.text),
+        'property_location_identifier':
+            _hidePropertyExactAddress
+                ? ''
+                : _propertyLocationIdentifierController.text.trim(),
+        AddressPrivacy.hideExactAddressKey: _hidePropertyExactAddress,
+        if (_hidePropertyExactAddress && _selectedPropertyAddress != null)
+          AddressPrivacy.publicLocationKey:
+              _selectedPropertyAddress!.publicLocationLabel,
+        if (_hidePropertyExactAddress &&
+            _propertyEircodeController.text.trim().isNotEmpty)
+          AddressPrivacy.exactEircodeKey: EircodeGeocodingService.normalize(
+            _propertyEircodeController.text,
+          ),
+        'listingSeed_isFurnished': _providerIsFurnished,
+        'is_owner_occupier': _providerIsOwnerOccupier,
+      },
       'trust_stage': ProfileData.isMatchingReady(_draftSession()) ? 1 : 0,
       'identity_trust_tier': 'Casual_Browser',
     };
@@ -1040,18 +1546,70 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ..remove('preferred_spoken_languages')
         ..remove('preferred_spoken_languages_csv');
     }
+    if (_onboardingIntent == OnboardingUserIntent.seeker) {
+      payload
+        ..remove('pending_listing_location')
+        ..remove('pending_listing_eircode');
+    }
+    payload = ProfileOnboardingRepository.applySnapshotToSession(
+      payload,
+      _buildTrackSnapshot(),
+    );
     return ApplicantSessionSync.enrich(payload);
   }
 
   Future<void> _save() async {
     if (!_validate()) return;
+    if (_onboardingIntent == OnboardingUserIntent.seeker &&
+        !_validateSeekerCommutePage()) {
+      return;
+    }
     final synced = await AuthService.persistProfileSession(_buildPayload());
     if (!mounted) return;
     setState(() {
       _baselineProfile = Map<String, dynamic>.from(synced);
     });
+    if (_onboardingIntent == OnboardingUserIntent.seeker) {
+      await ViewPreferenceService.setOverride(DashboardViewMode.seeker);
+      await marketplaceContextNotifier.syncSpaceFromOnboardingTrack(
+        _selectedTrack,
+      );
+      if (!mounted) return;
+      _showMessage('Profile saved — welcome to your feed.');
+      context.go('/?welcomeFeed=1');
+      return;
+    }
     _showMessage('Profile updated.');
     context.go('/profile', extra: synced);
+  }
+
+  Future<void> _completeProviderOnboarding() async {
+    if (!_validatePage1()) return;
+    final payload = _buildPayload();
+    payload['onboarding_intent'] = OnboardingUserIntent.provider.storageToken;
+    payload['pending_listing_location'] = _resolvedPropertyNeighborhood();
+    payload['pending_listing_eircode'] = _hidePropertyExactAddress
+        ? ''
+        : EircodeGeocodingService.normalize(_propertyEircodeController.text);
+    payload['property_location_identifier'] = _hidePropertyExactAddress
+        ? ''
+        : _propertyLocationIdentifierController.text.trim();
+    payload[AddressPrivacy.hideExactAddressKey] = _hidePropertyExactAddress;
+    payload['host_profile_complete'] = true;
+
+    final synced = await AuthService.persistProfileSession(payload);
+    await ViewPreferenceService.setOverride(DashboardViewMode.host);
+    await marketplaceContextNotifier.syncSpaceFromOnboardingTrack(
+      _selectedTrack,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _baselineProfile = Map<String, dynamic>.from(synced);
+    });
+
+    _showMessage('Host profile saved — add your first listing when ready.');
+    context.go('/?promptFirstListing=1');
   }
 
   void _showMessage(String text) {
@@ -1076,14 +1634,32 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
     // #endregion
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _onOnboardingBack();
+      },
+      child: Scaffold(
       backgroundColor: OnboardingTokens.canvasBg,
       appBar: AppBar(
         backgroundColor: OnboardingTokens.canvasBg,
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
-        titleSpacing: OnboardingTokens.gridPadding,
+        leading: Semantics(
+          label: _onboardingBackTooltip,
+          button: true,
+          child: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              color: Color(0xFF0F172A),
+            ),
+            tooltip: _onboardingBackTooltip,
+            onPressed: _onOnboardingBack,
+          ),
+        ),
+        titleSpacing: 12,
         title: const Align(
           alignment: Alignment.centerLeft,
           child: TrueCircleHomeLogoButton(markSize: 26),
@@ -1110,15 +1686,36 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      GamifiedFormProgress(current: _currentPage, total: 2),
+                      GamifiedFormProgress(
+                        current: _currentPage,
+                        total: _pageCount,
+                      ),
                       const SizedBox(height: 32),
                       Expanded(
-                        child: IndexedStack(
-                          index: _currentPage,
-                          children: [
-                            _buildPage1Grid(),
-                            _buildPage2Grid(),
-                          ],
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          child: switch (_currentPage) {
+                            0 => KeyedSubtree(
+                                key: const ValueKey('onboarding-step-1'),
+                                child: _buildPage1Grid(),
+                              ),
+                            1 when _onboardingIntent ==
+                                OnboardingUserIntent.seeker =>
+                              KeyedSubtree(
+                                key: const ValueKey('onboarding-step-2'),
+                                child: _buildSeekerHousingPageGrid(),
+                              ),
+                            2 => KeyedSubtree(
+                                key: const ValueKey('onboarding-step-3'),
+                                child: _buildSeekerCommutePageGrid(),
+                              ),
+                            _ => KeyedSubtree(
+                                key: const ValueKey('onboarding-step-2'),
+                                child: _buildPage2Grid(),
+                              ),
+                          },
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -1128,8 +1725,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
               ),
             ),
+      ),
     );
   }
+
+  bool get _showOnboardingIntentSplitter => _currentPage == 0;
 
   Widget _buildPage1Grid() {
     return OnboardingGridShell(
@@ -1165,14 +1765,49 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           ),
         ),
       ),
-      rightPane: Padding(
-        padding: const EdgeInsets.only(
-          top: OnboardingTokens.page2SimulatorTopOffset,
-        ),
+      rightPane: ColoredBox(
+        color: OnboardingTokens.panelTint,
+        child: Center(child: _buildPassportPreview()),
+      ),
+    );
+  }
+
+  Widget _buildSeekerHousingPageGrid() {
+    return OnboardingGridShell(
+      leftPane: SingleChildScrollView(
         child: Align(
-          alignment: Alignment.topCenter,
-          child: _buildLiveSearchStrategySidebar(),
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: OnboardingTokens.leftPaneMaxWidth,
+            ),
+            child: _buildSeekerHousingPageStack(),
+          ),
         ),
+      ),
+      rightPane: ColoredBox(
+        color: OnboardingTokens.panelTint,
+        child: Center(child: _buildPassportPreview()),
+      ),
+    );
+  }
+
+  Widget _buildSeekerCommutePageGrid() {
+    return OnboardingGridShell(
+      leftPane: SingleChildScrollView(
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: OnboardingTokens.leftPaneMaxWidth,
+            ),
+            child: _buildSeekerCommutePageStack(),
+          ),
+        ),
+      ),
+      rightPane: ColoredBox(
+        color: OnboardingTokens.panelTint,
+        child: Center(child: _buildPassportPreview()),
       ),
     );
   }
@@ -1186,7 +1821,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ),
         child: Row(
           children: [
-            if (_currentPage == 0)
+            if (_currentPage == 0 &&
+                _onboardingIntent == OnboardingUserIntent.seeker)
               FilledButton(
                 onPressed: () {
                   if (_validatePage1()) _goToPage(1);
@@ -1207,7 +1843,72 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                 ),
               ),
-            if (_currentPage == 1)
+            if (_currentPage == 0 &&
+                _onboardingIntent == OnboardingUserIntent.provider)
+              FilledButton(
+                onPressed: _completeProviderOnboarding,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 14,
+                  ),
+                  minimumSize: const Size(220, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Save host profile →',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
+            if (_currentPage == 1 &&
+                _onboardingIntent == OnboardingUserIntent.seeker)
+              FilledButton(
+                onPressed: () {
+                  if (!_validateSeekerHousingPage()) return;
+                  setState(_syncPreferredRoommateLanguagesFromIdentity);
+                  _goToPage(2);
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 14,
+                  ),
+                  minimumSize: const Size(220, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Next: Commute & finalize →',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
+            if (_currentPage == 2 &&
+                _onboardingIntent == OnboardingUserIntent.seeker)
+              FilledButton(
+                onPressed: _save,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 14,
+                  ),
+                  minimumSize: const Size(180, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Save changes',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
+            if (_currentPage == 1 &&
+                _onboardingIntent != OnboardingUserIntent.seeker)
               FilledButton(
                 onPressed: _save,
                 style: FilledButton.styleFrom(
@@ -1232,7 +1933,58 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
+  Widget _buildSeekerHousingPageStack() {
+    final isEntirePlace =
+        _selectedTrack == ProfileOnboardingTrack.seekerEntirePlace;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSeekerHousingPageHeader(),
+        const SizedBox(height: OnboardingTokens.fieldSpacing),
+        _buildPage2SectionAHousingBudget(),
+        if (!isEntirePlace) ...[
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+          ..._buildSeekerHousingBasicsSections(),
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+          _buildHouseholdCommutersCard(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSeekerCommutePageStack() {
+    final showDualCommute = _commuterSlotCount > 1;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSeekerCommutePageHeader(),
+        const SizedBox(height: OnboardingTokens.fieldSpacing),
+        if (_householdCommutersCount > 2) ...[
+          _groupCard(
+            title: 'Pick your two priority routes',
+            subtitle:
+                '$_householdCommutersCount people commute — choose the two destinations that matter most for matching.',
+            children: const [],
+          ),
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+        ],
+        if (_commuterDrafts.isNotEmpty) ...[
+          _buildPrimaryRouteCard(),
+          if (showDualCommute) ...[
+            const SizedBox(height: OnboardingTokens.fieldSpacing),
+            _buildSecondaryRouteCard(1),
+          ],
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+        ],
+        ..._buildSeekerFinalizeSections(),
+      ],
+    );
+  }
+
   Widget _buildPage2LeftStack() {
+    final showDualCommute =
+        _selectedTrack == ProfileOnboardingTrack.seekerEntirePlace &&
+            _commuterDrafts.length > 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1242,11 +1994,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         const SizedBox(height: OnboardingTokens.fieldSpacing),
         if (_commuterDrafts.isNotEmpty) ...[
           _buildPrimaryRouteCard(),
-          if (_commuterDrafts.length > 1) ...[
+          if (showDualCommute) ...[
             const SizedBox(height: OnboardingTokens.fieldSpacing),
             _buildSecondaryRouteCard(1),
-            const SizedBox(height: OnboardingTokens.fieldSpacing),
-            _buildCommutePriorityCheckboxRow(horizontal: true),
           ],
           const SizedBox(height: OnboardingTokens.fieldSpacing),
         ],
@@ -1256,118 +2006,95 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Widget _buildPage2SectionAHousingBudget() {
+    final isSharedTrack = _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Housing goals',
-          style: OnboardingTokens.sectionLabelStyle,
+        OnboardingPremiumField(
+          controller: _budgetMaxController,
+          label: isSharedTrack
+              ? 'Max room budget (${MarketConfig.current.currencySymbol} / month)'
+              : 'Max monthly budget (${MarketConfig.current.currencySymbol})',
+          hint: MarketConfig.current.currencySymbol == '€' ? 'e.g. 1800' : 'e.g. 25000',
+          keyboardType: TextInputType.number,
+          onChanged: () => setState(() {}),
         ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: OnboardingTokens.chipSpacing,
-          runSpacing: OnboardingTokens.chipSpacing,
-          children: ProfileSeekerPreferences.arrangementOptions.map((option) {
-            final selected = preferredArrangement == option;
-            return FilterChip(
-              label: Text(
-                option == ProfileSeekerPreferences.entirePlaceLabel
-                    ? 'Entire Place'
-                    : 'Room in Shared Flat',
-                style: TextStyle(
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 13,
-                ),
+        if (isSharedTrack)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Room budget used for shared-space matching.',
+              style: TextStyle(
+                fontSize: 12,
+                color: OnboardingTokens.subtitleColor,
               ),
-              selected: selected,
-              onSelected: (_) => setState(() {
-                preferredArrangement = option;
-                preferredLayout = null;
-                if (ProfileSeekerPreferences.isEntirePlace(option)) {
-                  _clearSharedRoomFilters();
-                }
-                _syncCommuterDraftSlots();
-              }),
-              selectedColor: const Color(0xFF0F172A),
-              checkmarkColor: Colors.white,
-              labelStyle: TextStyle(
-                color: selected ? Colors.white : const Color(0xFF334155),
-              ),
-              backgroundColor: OnboardingTokens.chipUnselected,
-              side: BorderSide(
-                color: selected
-                    ? const Color(0xFF0F172A)
-                    : OnboardingTokens.inputBorder,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        const Text(
-          'Monthly budget',
-          style: OnboardingTokens.sectionLabelStyle,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '${MarketConfig.current.currencySymbol}${_monthlyBudgetDisplay()} / month',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF0F172A),
+            ),
           ),
-        ),
-        Slider(
-          value: _monthlyBudgetSliderValue(),
-          min: _monthlyBudgetSliderMin(),
-          max: _monthlyBudgetSliderMax(),
-          divisions: 20,
-          label:
-              '${MarketConfig.current.currencySymbol}${_monthlyBudgetDisplay()}',
-          onChanged: (v) => setState(() {
-            _budgetMaxController.text = v.round().toString();
-            if (_budgetMinController.text.trim().isEmpty ||
-                (int.tryParse(_budgetMinController.text) ?? 0) > v) {
-              _budgetMinController.text =
-                  (v * 0.75).round().toString();
-            }
-          }),
-        ),
       ],
     );
   }
 
-  double _monthlyBudgetSliderMin() =>
-      MarketConfig.current.currencySymbol == '€' ? 800.0 : 5000.0;
-
-  double _monthlyBudgetSliderMax() =>
-      MarketConfig.current.currencySymbol == '€' ? 5000.0 : 80000.0;
-
-  double _monthlyBudgetSliderValue() {
-    final parsed = int.tryParse(_budgetMaxController.text.trim());
-    if (parsed == null) return _monthlyBudgetSliderMin();
-    return parsed
-        .clamp(
-          _monthlyBudgetSliderMin().round(),
-          _monthlyBudgetSliderMax().round(),
-        )
-        .toDouble();
+  Widget _buildHouseholdCommutersCard() {
+    return _groupCard(
+      title: 'Household commuters',
+      subtitle:
+          'How many people in your household need a daily commute from home?',
+      children: [
+        _counterRow(
+          label: 'People who commute',
+          value: _householdCommutersCount,
+          min: 1,
+          max: 6,
+          onChanged: (v) => setState(() {
+            _householdCommutersCount = v;
+            _syncCommuterDraftSlots();
+          }),
+        ),
+        if (_householdCommutersCount > 2)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'On the next step you will set your two most important commute routes.',
+              style: TextStyle(
+                fontSize: 12,
+                color: OnboardingTokens.subtitleColor,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
-  String _monthlyBudgetDisplay() => _monthlyBudgetSliderValue().round().toString();
-
   Widget _buildPassportPreview() {
-    final languages = [
-      _selectedMotherTongue,
-      ..._selectedLanguages.where((l) => l != _selectedMotherTongue),
-    ];
-    return PassportPreviewCard(
-      displayName: _nameController.text.trim(),
-      location: _resolvedPassportLocation(),
-      languages: languages,
+    final languages = _dedupedSpokenLanguages();
+    final isProvider = _onboardingIntent == OnboardingUserIntent.provider;
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _nameController,
+      builder: (context, nameValue, _) {
+        return PassportPreviewCard(
+          displayName: nameValue.text.trim(),
+          location: isProvider
+              ? ''
+              : _resolvedPassportLocation(),
+          languages: languages,
+          isProvider: isProvider,
+        );
+      },
     );
+  }
+
+  List<String> _dedupedSpokenLanguages() {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final language in [
+      _selectedMotherTongue,
+      ..._selectedLanguages,
+    ]) {
+      final token = language.trim();
+      if (token.isEmpty) continue;
+      if (seen.add(token.toLowerCase())) result.add(token);
+    }
+    return result;
   }
 
   String _resolvedPassportLocation() {
@@ -1377,7 +2104,90 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     return _formatLocationDisplay(_locationController.text.trim());
   }
 
+  Widget _buildTrackModeSelector() {
+    final isProvider = _onboardingIntent == OnboardingUserIntent.provider;
+    final isShared = isProvider
+        ? _providerSharedSpace
+        : ProfileSeekerPreferences.isSharedRoom(preferredArrangement);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Space track',
+          style: OnboardingTokens.sectionLabelStyle,
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: OnboardingTokens.chipSpacing,
+          runSpacing: OnboardingTokens.chipSpacing,
+          children: [
+            FilterChip(
+              label: const Text('🏠 Entire Place'),
+              selected: !isShared,
+              onSelected: (_) => setState(() {
+                if (isProvider) {
+                  _providerSharedSpace = false;
+                } else {
+                  preferredArrangement =
+                      ProfileSeekerPreferences.entirePlaceLabel;
+                }
+              }),
+              selectedColor: const Color(0xFF0F172A),
+              checkmarkColor: Colors.white,
+              labelStyle: TextStyle(
+                color: !isShared ? Colors.white : const Color(0xFF334155),
+                fontWeight: !isShared ? FontWeight.w600 : FontWeight.w500,
+              ),
+              backgroundColor: OnboardingTokens.chipUnselected,
+              side: BorderSide(
+                color: !isShared
+                    ? const Color(0xFF0F172A)
+                    : OnboardingTokens.inputBorder,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            FilterChip(
+              label: Text(
+                isProvider ? '🛏️ Shared Space' : '🛏️ Shared Space',
+              ),
+              selected: isShared,
+              onSelected: (_) => setState(() {
+                if (isProvider) {
+                  _providerSharedSpace = true;
+                } else {
+                  preferredArrangement =
+                      ProfileSeekerPreferences.sharedRoomLabel;
+                }
+              }),
+              selectedColor: const Color(0xFF0F172A),
+              checkmarkColor: Colors.white,
+              labelStyle: TextStyle(
+                color: isShared ? Colors.white : const Color(0xFF334155),
+                fontWeight: isShared ? FontWeight.w600 : FontWeight.w500,
+              ),
+              backgroundColor: OnboardingTokens.chipUnselected,
+              side: BorderSide(
+                color: isShared
+                    ? const Color(0xFF0F172A)
+                    : OnboardingTokens.inputBorder,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildPage1FormContent() {
+    final isSeeker = _onboardingIntent == OnboardingUserIntent.seeker;
+    final isProvider = !isSeeker;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1391,6 +2201,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           style: OnboardingTokens.pageSubtitleStyle,
         ),
         const SizedBox(height: OnboardingTokens.fieldSpacing),
+        if (_showOnboardingIntentSplitter) ...[
+          OnboardingIntentSplitter(
+            selected: _onboardingIntent,
+            onChanged: (intent) => setState(() => _onboardingIntent = intent),
+          ),
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+          _buildTrackModeSelector(),
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+        ],
         _buildCompletionHeader(),
         const SizedBox(height: OnboardingTokens.fieldSpacing),
         _premiumTextField(
@@ -1405,334 +2224,531 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           hint: 'As on your ID',
           onChanged: () => setState(() {}),
         ),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        if (MarketConfig.current.profileUseAreaPicker)
-          ShadcnSelect(
-            label: '🗺️ Your Current Location',
-            value: _locationSelectValue,
-            options:
-                MarketConfig.current.areaOptions.map((e) => e.$2).toList(),
-            onChanged: (label) {
-              setState(() {
-                for (final (key, areaLabel)
-                    in MarketConfig.current.areaOptions) {
-                  if (areaLabel == label) {
-                    _selectedAreaKey = key;
-                    _locationController.text = areaLabel;
-                    break;
-                  }
-                }
-              });
-            },
-          )
-        else
-          _premiumTextField(
-            _locationController,
-            label: '🗺️ Your Current Location',
-            hint: 'e.g. ${MarketConfig.current.defaultProfileLocation}',
-            onChanged: () => setState(() {
-              _locationController.text = _formatLocationDisplay(
-                _locationController.text,
-              );
-            }),
+        if (isProvider) ...[
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+          const Text(
+            '📞 Contact phone (optional)',
+            style: OnboardingTokens.sectionLabelStyle,
           ),
+          const SizedBox(height: 4),
+          const Text(
+            'Shared with shortlisted applicants only — not shown on listings.',
+            style: TextStyle(
+              fontSize: 12,
+              color: OnboardingTokens.subtitleColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 96,
+                child: ShadcnSelect(
+                  label: 'Code',
+                  value: _phoneCountryCode,
+                  options: PhoneE164.commonCountryCodes,
+                  onChanged: (v) => setState(() => _phoneCountryCode = v),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _premiumTextField(
+                  _contactPhoneController,
+                  label: 'Phone number',
+                  hint: '851234567',
+                  keyboardType: TextInputType.phone,
+                ),
+              ),
+            ],
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Reach me on WhatsApp'),
+            subtitle: const Text('Opens WhatsApp after you shortlist an applicant'),
+            value: _prefersWhatsapp,
+            onChanged: (v) => setState(() => _prefersWhatsapp = v),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'We process contact details under our privacy policy. '
+              'Phone numbers are never shown on public listings.',
+              style: TextStyle(
+                fontSize: 11,
+                color: OnboardingTokens.subtitleColor,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+          _premiumTextField(
+            _agencyController,
+            label: '🏢 Agency or company name (optional)',
+            hint: 'Only if you list as a business',
+          ),
+        ],
         const SizedBox(height: OnboardingTokens.fieldSpacing),
-        ShadcnSelect(
-          label: '🗣️ Mother tongue',
+        if (isSeeker) ...[
+          if (MarketConfig.current.profileUseAreaPicker)
+            ShadcnSelect(
+              label: '📍 Current Location / Base',
+              value: _locationSelectValue,
+              options:
+                  MarketConfig.current.areaOptions.map((e) => e.$2).toList(),
+              onChanged: (label) {
+                setState(() {
+                  for (final (key, areaLabel)
+                      in MarketConfig.current.areaOptions) {
+                    if (areaLabel == label) {
+                      _selectedAreaKey = key;
+                      _locationController.text = areaLabel;
+                      break;
+                    }
+                  }
+                });
+              },
+            )
+          else
+            _premiumTextField(
+              _locationController,
+              label: '📍 Current Location / Base',
+              hint: 'e.g. ${MarketConfig.current.defaultProfileLocation}',
+              onChanged: () => setState(() {
+                _locationController.text = _formatLocationDisplay(
+                  _locationController.text,
+                );
+              }),
+            ),
+        ],
+        if (isProvider) ...[
+          const Text(
+            'Property address',
+            style: OnboardingTokens.sectionLabelStyle,
+          ),
+          const SizedBox(height: 8),
+          EircodeAddressField(
+            controller: _propertyAddressSearchController,
+            enabled: true,
+            selected: _selectedPropertyAddress,
+            hideExactAddress: _hidePropertyExactAddress,
+            fetchingLocation: _fetchingPropertyLocation,
+            showLocationButton: true,
+            onSelected: _onPropertyAddressSelected,
+            onHideExactAddressChanged: (v) =>
+                setState(() => _hidePropertyExactAddress = v),
+            onUseCurrentLocation: _usePropertyCurrentLocation,
+          ),
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+          if (MarketConfig.current.profileUseAreaPicker)
+            ShadcnSelect(
+              label: 'Property area (fallback)',
+              value: _providerLocationSelectValue,
+              options:
+                  MarketConfig.current.areaOptions.map((e) => e.$2).toList(),
+              onChanged: (label) {
+                setState(() {
+                  for (final (key, areaLabel)
+                      in MarketConfig.current.areaOptions) {
+                    if (areaLabel == label) {
+                      _providerAreaKey = key;
+                      _propertyLocationController.text = areaLabel;
+                      break;
+                    }
+                  }
+                });
+              },
+            ),
+          const SizedBox(height: OnboardingTokens.fieldSpacing),
+          if (_providerSharedSpace) ...[
+            _groupCard(
+              title: 'Current household composition',
+              subtitle: 'Who lives in the home now.',
+              children: [
+                _counterRow(
+                  label: 'Current housemates',
+                  value: _providerHousemateCount,
+                  min: 1,
+                  max: 12,
+                  onChanged: (v) => setState(() => _providerHousemateCount = v),
+                ),
+                SwitchListTile(
+                  title: const Text('Owner occupier'),
+                  value: _providerIsOwnerOccupier,
+                  onChanged: (v) => setState(() => _providerIsOwnerOccupier = v),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+            const SizedBox(height: OnboardingTokens.fieldSpacing),
+            _groupCard(
+              title: 'House rules',
+              subtitle: 'Defaults that will carry into your room listing.',
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final entry in const [
+                      ('🚭', 'No smoking'),
+                      ('🚫', 'No pets'),
+                      ('🥦', 'Veg kitchen'),
+                      ('🧑‍💻', 'WFH friendly'),
+                    ])
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          if (_providerHouseRules.contains(entry.$2)) {
+                            _providerHouseRules.remove(entry.$2);
+                          } else {
+                            _providerHouseRules.add(entry.$2);
+                          }
+                        }),
+                        child: ListingRuleChip(
+                          emoji: entry.$1,
+                          label: entry.$2,
+                          active: _providerHouseRules.contains(entry.$2),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ] else ...[
+            _groupCard(
+              title: 'Listing defaults',
+              subtitle: 'Seeds your property form without asking twice.',
+              children: [
+                SwitchListTile(
+                  title: const Text('Property is furnished'),
+                  value: _providerIsFurnished,
+                  onChanged: (v) => setState(() => _providerIsFurnished = v),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ],
+        ],
+        const SizedBox(height: OnboardingTokens.fieldSpacing),
+        MotherTongueTypeaheadField(
           value: _selectedMotherTongue,
-          options: _languageOptions,
           onChanged: _onMotherTongueChanged,
         ),
         const SizedBox(height: OnboardingTokens.fieldSpacing),
-        const Text(
-          '🗣️ Languages spoken',
-          style: OnboardingTokens.sectionLabelStyle,
-        ),
-        const SizedBox(height: 8),
-        LanguagePillChips(
-          options: _otherLanguageOptions,
-          selected:
-              _selectedLanguages.where((l) => l != _selectedMotherTongue).toList(),
-          onToggle: _toggleLanguage,
-          nativeByLanguage: _languageNativeFlags,
-          onToggleNative: _toggleLanguageNative,
-          spacing: OnboardingTokens.chipSpacing,
-          runSpacing: OnboardingTokens.chipSpacing,
-          unselectedBackgroundColor: const Color(0xFFF1F5F9),
+        OnboardingSpokenLanguageChips(
+          languages: _dedupedSpokenLanguages(),
+          motherTongue: _selectedMotherTongue,
+          onRemove: _removeSpokenLanguage,
+          onAdd: _addSpokenLanguage,
         ),
       ],
     );
   }
 
+  Widget _buildSeekerHousingPageHeader() {
+    final title = _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
+        ? 'Shared-space housing preferences'
+        : 'Search & match preferences';
+    final subtitle = _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
+        ? 'Room budget, who you are, and how many people commute.'
+        : 'Your monthly budget — property filters apply on the live feed.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: OnboardingTokens.pageTitleStyle),
+        const SizedBox(height: 8),
+        Text(subtitle, style: OnboardingTokens.pageSubtitleStyle),
+      ],
+    );
+  }
+
+  Widget _buildSeekerCommutePageHeader() {
+    final title = _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
+        ? 'Commute & compatibility'
+        : 'Commute & finalize';
+    final subtitle = _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
+        ? 'Daily routes and roommate compatibility filters.'
+        : 'Commute routes, lease preferences, and move-in readiness.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: OnboardingTokens.pageTitleStyle),
+        const SizedBox(height: 8),
+        Text(subtitle, style: OnboardingTokens.pageSubtitleStyle),
+      ],
+    );
+  }
+
   Widget _buildPage2Header() {
-    return const Column(
+    final title = _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
+        ? 'Shared-space match preferences'
+        : 'Search & match preferences';
+    final subtitle = _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
+        ? 'Room budget, commute, and compatibility filters for shared living.'
+        : 'Budget, housing goals, and the filters that power your ideal matches.';
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Search & match preferences',
+          title,
           style: OnboardingTokens.pageTitleStyle,
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Text(
-          'Budget, housing goals, and the filters that power your ideal matches.',
+          subtitle,
           style: OnboardingTokens.pageSubtitleStyle,
         ),
       ],
     );
   }
 
+  List<Widget> _buildSeekerHousingBasicsSections() {
+    return switch (_selectedTrack) {
+      ProfileOnboardingTrack.seekerEntirePlace =>
+        _buildSeekerEntirePlaceHousingSections(),
+      ProfileOnboardingTrack.seekerSharedSpace =>
+        _buildSeekerSharedSpaceHousingSections(),
+      _ => const [],
+    };
+  }
+
+  List<Widget> _buildSeekerFinalizeSections() {
+    return switch (_selectedTrack) {
+      ProfileOnboardingTrack.seekerEntirePlace =>
+        _buildSeekerEntirePlaceFinalizeSections(),
+      ProfileOnboardingTrack.seekerSharedSpace =>
+        _buildSeekerSharedSpaceFinalizeSections(),
+      _ => const [],
+    };
+  }
+
   List<Widget> _buildPage2LowerSections() {
+    return switch (_selectedTrack) {
+      ProfileOnboardingTrack.seekerEntirePlace => _buildSeekerEntirePlaceSections(),
+      ProfileOnboardingTrack.seekerSharedSpace => _buildSeekerSharedSpaceSections(),
+      _ => const [],
+    };
+  }
+
+  List<Widget> _buildSeekerEntirePlaceHousingSections() => const [];
+
+  List<Widget> _buildSeekerEntirePlaceFinalizeSections() {
     return [
-          _groupCard(
-            title: 'Household details',
-            subtitle: 'Layout, occupant type, and household composition.',
-            children: [
-              if (ProfileSeekerPreferences.isSharedRoom(preferredArrangement))
-                ShadcnSelect(
-                  key: const ValueKey('seeker_room_layout'),
-                  label: 'Room Layout',
-                  value: ProfileSeekerPreferences.resolveLayout(
-                    preferredArrangement,
-                    preferredLayout,
-                  ),
-                  options: ProfileSeekerPreferences.shareRoomLayoutOptions,
-                  onChanged: (val) => setState(() => preferredLayout = val),
-                ),
-              if (ProfileSeekerPreferences.isEntirePlace(preferredArrangement))
-                ShadcnSelect(
-                  key: const ValueKey('seeker_property_layout'),
-                  label: 'Property Layout',
-                  value: ProfileSeekerPreferences.resolveLayout(
-                    preferredArrangement,
-                    preferredLayout,
-                  ),
-                  options: ProfileSeekerPreferences.rentPropertyLayoutOptions,
-                  onChanged: (val) => setState(() => preferredLayout = val),
-                ),
-              ShadcnSelect(
-                label: 'Occupant type',
-                value: _resolvedOccupantType,
-                options: _occupantOptions,
-                onChanged: (val) => setState(() {
-                  _selectedOccupantType = val;
-                  if (val != 'Students') _selectedStudentType = null;
-                  if (val == 'Family') {
-                    _selectedGenderPref = null;
-                    _groupSize = 1;
-                  } else {
-                    _familyAdults = 2;
-                    _familyChildren = 0;
-                  }
-                  _syncCommuterDraftSlots();
-                }),
-              ),
-              if (_selectedOccupantType == 'Family') ...[
-                _counterRow(
-                  label: 'Number of adults',
-                  value: _familyAdults,
-                  min: 1,
-                  max: 10,
-                  onChanged: (v) => setState(() {
-                    _familyAdults = v;
-                    _syncCommuterDraftSlots();
-                  }),
-                ),
-                _counterRow(
-                  label: 'Number of children',
-                  value: _familyChildren,
-                  min: 0,
-                  max: 8,
-                  onChanged: (v) => setState(() {
-                    _familyChildren = v;
-                    _syncChildrenAgesList();
-                  }),
-                ),
-                for (var i = 0; i < _familyChildren; i++)
-                  ShadcnSelect(
-                    label: 'Child ${i + 1} age',
-                    value: i < _childrenAges.length
-                        ? _childrenAges[i]
-                        : _childrenAgeOptions.first,
-                    options: _childrenAgeOptions,
-                    onChanged: (val) => setState(() {
-                      if (i < _childrenAges.length) {
-                        _childrenAges[i] = val;
-                      }
-                    }),
-                  ),
-              ],
-              if (_selectedOccupantType == 'Working Professionals' ||
-                  _selectedOccupantType == 'Students') ...[
-                ShadcnSelect(
-                  label: 'Gender preference',
-                  value: _selectedGenderPref ?? _genderPrefOptions.first,
-                  options: _genderPrefOptions,
-                  onChanged: (v) => setState(() => _selectedGenderPref = v),
-                ),
-                _counterRow(
-                  label: 'How many people',
-                  value: _groupSize,
-                  min: 1,
-                  max: 10,
-                  onChanged: (v) => setState(() {
-                    _groupSize = v;
-                    _syncCommuterDraftSlots();
-                  }),
-                ),
-              ],
-              if (_selectedOccupantType == 'Students')
-                ShadcnSelect(
-                  label: 'Student funding',
-                  value: _selectedStudentType ?? _studentFundingOptions.first,
-                  options: _studentFundingOptions,
-                  onChanged: (v) => setState(() => _selectedStudentType = v),
-                ),
-            ],
+      _groupCard(
+        title: 'Environment preferences',
+        subtitle: 'Quiet household signals and move-in readiness.',
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Household includes pets'),
+            value: _householdHasPets,
+            onChanged: (v) => setState(() => _householdHasPets = v),
           ),
-          const SizedBox(height: 16),
-          _groupCard(
-            title: 'Roots & trust',
-            subtitle: 'Optional extras that boost credibility and roommate fit.',
-            children: [
-              _textField(
-                _nativePlaceController,
-                label: 'Native place',
-                hint: MarketConfig.current.profileNativePlaceHint,
-                onChanged: () => setState(() {}),
-              ),
-              _GrandVerificationGatewayEntry(
-                linkedInVerified:
-                    _baselineProfile?['linkedin_verified'] == true,
-                company: ProfileData.text(_baselineProfile?['company']),
-                onTap: () => VerificationGatewayBottomSheet.show(context),
-              ),
-              if (_showEnterpriseFields)
-                _textField(
-                  _agencyController,
-                  label: 'Agency / company name (optional)',
-                  hint: 'For multi-listing hosts',
-                ),
-            ],
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Smoker in household'),
+            value: _householdSmoker,
+            onChanged: (v) => setState(() => _householdSmoker = v),
           ),
-          if (ProfileSeekerPreferences.isSharedRoom(preferredArrangement)) ...[
-            const SizedBox(height: 12),
-            _groupCard(
-              title: 'Shared flat filters',
-              subtitle: 'Roommate language, food, and kitchen rhythm.',
-              children: [
-                const Text(
-                  'Preferred roommate languages',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  "Languages you'd like housemates to speak (optional).",
-                  style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
-                ),
-                const SizedBox(height: 8),
-                LanguagePillChips(
-                  options: ProfileSharedLanguageOptions.languages,
-                  selected: _preferredSpokenLanguages,
-                  onToggle: _togglePreferredSpokenLanguage,
-                  spacing: 8,
-                  runSpacing: 8,
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Food preference',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _sharedFoodChipOptions.map((option) {
-                    final selected = _sharedFoodPref == option;
-                    return FilterChip(
-                      label: Text(option),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _sharedFoodPref = option),
-                      selectedColor: AppColors.accentLight,
-                      checkmarkColor: AppColors.accent,
-                      labelStyle: TextStyle(
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                        color: selected ? AppColors.accentDark : AppColors.primaryText,
-                      ),
-                      side: BorderSide(
-                        color: selected ? AppColors.accent : AppColors.divider,
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Preferred kitchen usage times',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                LanguagePillChips(
-                  options: ListingData.kitchenUsageTimingOptions,
-                  selected: [_kitchenUsageTiming],
-                  onToggle: _selectKitchenUsageTiming,
-                  spacing: 8,
-                  runSpacing: 8,
-                ),
-              ],
-            ),
-          ],
-          if (ProfileSeekerPreferences.isSharedRoom(preferredArrangement) &&
-              (_selectedOccupantType == 'Working Professionals' ||
-                  _selectedOccupantType == 'Students')) ...[
-            const SizedBox(height: 12),
-            _groupCard(
-              title: 'Shared living preferences',
-              subtitle: 'Lifestyle filters for roommate matching.',
-              children: [
-                SwitchListTile(
-                  title: const Text('OK with smoking'),
-                  value: _smokingOk,
-                  onChanged: (v) => setState(() => _smokingOk = v),
-                  contentPadding: EdgeInsets.zero,
-                ),
-                SwitchListTile(
-                  title: const Text('OK with drinking'),
-                  value: _drinkingOk,
-                  onChanged: (v) => setState(() => _drinkingOk = v),
-                  contentPadding: EdgeInsets.zero,
-                ),
-                ShadcnSelect(
-                  label: 'Work schedule',
-                  value: _scheduleType ?? 'Flexible',
-                  options: const ['Flexible', 'Day shift', 'Night shift'],
-                  onChanged: (val) => setState(() {
-                    _scheduleType = val == 'Flexible' ? null : val;
-                  }),
-                ),
-              ],
-            ),
-          ],
-          if (ProfileSeekerPreferences.isEntirePlace(preferredArrangement)) ...[
-            const SizedBox(height: 12),
-            _buildLeaseHouseholdSection(),
-          ],
+        ],
+      ),
+      const SizedBox(height: 12),
+      _buildLeaseHouseholdSection(),
     ];
   }
 
+  List<Widget> _buildSeekerEntirePlaceSections() {
+    return [
+      ..._buildSeekerEntirePlaceHousingSections(),
+      const SizedBox(height: 16),
+      ..._buildSeekerEntirePlaceFinalizeSections(),
+    ];
+  }
+
+  List<Widget> _buildSeekerSharedSpaceHousingSections() {
+    return [
+      _groupCard(
+        title: 'Roommate setup',
+        subtitle: 'Who you are and the room format you need.',
+        children: [
+          ShadcnSelect(
+            label: 'Occupant group type',
+            value: _resolvedOccupantType,
+            options: const ['Working Professionals', 'Students'],
+            onChanged: (val) => setState(() {
+              _selectedOccupantType = val;
+              if (val != 'Students') _selectedStudentType = null;
+            }),
+          ),
+          ShadcnSelect(
+            key: const ValueKey('seeker_room_layout'),
+            label: 'Room Layout',
+            value: ProfileSeekerPreferences.resolveLayout(
+              preferredArrangement,
+              preferredLayout,
+            ),
+            options: ProfileSeekerPreferences.shareRoomLayoutOptions,
+            onChanged: (val) => setState(() => preferredLayout = val),
+          ),
+          ShadcnSelect(
+            label: 'Gender preference',
+            value: _selectedGenderPref ?? _genderPrefOptions.first,
+            options: _genderPrefOptions,
+            onChanged: (v) => setState(() => _selectedGenderPref = v),
+          ),
+          _counterRow(
+            label: 'How many people',
+            value: _groupSize,
+            min: 1,
+            max: 10,
+            onChanged: (v) => setState(() => _groupSize = v),
+          ),
+          if (_selectedOccupantType == 'Students')
+            ShadcnSelect(
+              label: 'Student funding',
+              value: _selectedStudentType ?? _studentFundingOptions.first,
+              options: _studentFundingOptions,
+              onChanged: (v) => setState(() => _selectedStudentType = v),
+            ),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _buildSeekerSharedSpaceFinalizeSections() {
+    return [
+      _groupCard(
+        title: 'Shared-space compatibility',
+        subtitle: 'Language, food, and daily rhythm for room matching.',
+        children: [
+          const Text(
+            'Preferred roommate languages',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Defaults to your languages — add more if you like.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+          ),
+          const SizedBox(height: 8),
+          LanguagePillChips(
+            options: _roommateLanguageChipOptions,
+            selected: _preferredSpokenLanguages,
+            onToggle: _togglePreferredSpokenLanguage,
+            spacing: 8,
+            runSpacing: 8,
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _showAddRoommateLanguageSheet,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add another language'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Food preference',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _sharedFoodChipOptions.map((option) {
+              final selected = _sharedFoodPref == option;
+              return FilterChip(
+                label: Text(option),
+                selected: selected,
+                onSelected: (_) => setState(() => _sharedFoodPref = option),
+                selectedColor: AppColors.accentLight,
+                checkmarkColor: AppColors.accent,
+                labelStyle: TextStyle(
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? AppColors.accentDark : AppColors.primaryText,
+                ),
+                side: BorderSide(
+                  color: selected ? AppColors.accent : AppColors.divider,
+                ),
+              );
+            }).toList(),
+          ),
+          SwitchListTile(
+            title: const Text('OK with smoking'),
+            value: _smokingOk,
+            onChanged: (v) => setState(() => _smokingOk = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+          SwitchListTile(
+            title: const Text('OK with drinking'),
+            value: _drinkingOk,
+            onChanged: (v) => setState(() => _drinkingOk = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+          ShadcnSelect(
+            label: 'Work schedule',
+            value: _scheduleType ?? 'Flexible',
+            options: const ['Flexible', 'Day shift', 'Night shift'],
+            onChanged: (val) => setState(() {
+              _scheduleType = val == 'Flexible' ? null : val;
+            }),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      _buildRootsAndTrustSection(showNativePlaceField: false),
+    ];
+  }
+
+  List<Widget> _buildSeekerSharedSpaceSections() {
+    return [
+      ..._buildSeekerSharedSpaceHousingSections(),
+      const SizedBox(height: 16),
+      ..._buildSeekerSharedSpaceFinalizeSections(),
+    ];
+  }
+
+  Widget _buildRootsAndTrustSection({bool showNativePlaceField = true}) {
+    return _groupCard(
+      title: 'Roots & trust',
+      subtitle: 'Optional extras that boost credibility and matching quality.',
+      children: [
+        if (showNativePlaceField)
+          _textField(
+            _nativePlaceController,
+            label: 'Native place',
+            hint: MarketConfig.current.profileNativePlaceHint,
+            onChanged: () => setState(() {}),
+          ),
+        _GrandVerificationGatewayEntry(
+          linkedInVerified: _baselineProfile?['linkedin_verified'] == true,
+          company: ProfileData.text(_baselineProfile?['company']),
+          onTap: () => VerificationGatewayBottomSheet.show(context),
+        ),
+        if (_showEnterpriseFields)
+          _textField(
+            _agencyController,
+            label: 'Agency / company name (optional)',
+            hint: 'For multi-listing hosts',
+          ),
+      ],
+    );
+  }
+
   Widget _buildPrimaryRouteCard() {
+    final title = _householdCommutersCount > 2
+        ? 'Priority commute 1'
+        : 'Primary commuter route';
     return _condensedRouteCard(
-      title: 'Primary Commuter Route',
+      title: title,
       draft: _commuterDrafts.first,
       onMethodChanged: (v) => setState(() => _commuterDrafts.first.methodLabel = v),
       onHubSelected: (hub) => setState(() => _commuterDrafts.first.hub = hub),
@@ -1744,8 +2760,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Widget _buildSecondaryRouteCard(int index) {
+    final title = _householdCommutersCount > 2
+        ? 'Priority commute 2'
+        : 'Secondary commuter route';
     return _condensedRouteCard(
-      title: 'Secondary Commuter Route',
+      title: title,
       draft: _commuterDrafts[index],
       onMethodChanged: (v) =>
           setState(() => _commuterDrafts[index].methodLabel = v),
@@ -1791,9 +2810,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             onChanged: onMethodChanged,
           ),
           const SizedBox(height: 12),
-          CommuteHubAutocompleteField(
+          CommuteDestinationField(
             label: 'Destination',
             selectedHub: draft.hub,
+            occupantType: _resolvedOccupantType,
             onHubSelected: onHubSelected,
             onCleared: onHubCleared,
           ),
@@ -1815,206 +2835,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
-  Widget _buildCommutePriorityCheckboxRow({required bool horizontal}) {
-    const choices = [
-      (DualCommutePriority.personA, 'Commuter 1'),
-      (DualCommutePriority.personB, 'Commuter 2'),
-      (DualCommutePriority.balanced, 'Balanced'),
-    ];
-
-    return _groupCard(
-      title: 'Commute Optimization Priority',
-      subtitle:
-          'If your household has multiple commuters, whose destination anchors the matching score?',
-      children: [
-        if (!horizontal)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < choices.length; i++) ...[
-                if (i > 0) const SizedBox(height: 4),
-                _commutePriorityCheckbox(
-                  priority: choices[i].$1,
-                  label: choices[i].$2,
-                ),
-              ],
-            ],
-          )
-        else
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < choices.length; i++) ...[
-                if (i > 0)
-                  Container(
-                    width: 1,
-                    height: 28,
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    color: const Color(0xFFE2E8F0),
-                  ),
-                Expanded(
-                  child: _commutePriorityCheckbox(
-                    priority: choices[i].$1,
-                    label: choices[i].$2,
-                  ),
-                ),
-              ],
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _commutePriorityCheckbox({
-    required DualCommutePriority priority,
-    required String label,
-  }) {
-    final selected = _dualCommutePriority == priority;
-
-    return InkWell(
-      onTap: () => setState(() => _dualCommutePriority = priority),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: Checkbox(
-                value: selected,
-                onChanged: (_) =>
-                    setState(() => _dualCommutePriority = priority),
-                activeColor: const Color(0xFF2B4C7E),
-                side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected
-                      ? const Color(0xFF0F172A)
-                      : const Color(0xFF475569),
-                  height: 1.25,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLiveSearchStrategySidebar() {
-    final copy = _liveSearchStrategyCopy();
-    final hasDual = _commuterDrafts.length > 1;
-    final primary = _commuterDrafts.first;
-    final secondary = hasDual ? _commuterDrafts[1] : null;
-
-    return LiveTransitSimulatorPanel(
-      headline: copy.headline,
-      summary: copy.summary,
-      priority: _dualCommutePriority,
-      primaryMethod: primary.methodLabel,
-      secondaryMethod: secondary?.methodLabel,
-      primaryHub: _shortHubLabel(primary.hub?.label ?? 'Primary route'),
-      secondaryHub: secondary == null
-          ? null
-          : _shortHubLabel(secondary.hub?.label ?? 'Secondary route'),
-      dualCommuter: hasDual,
-    );
-  }
-
-  String _shortHubLabel(String label) {
-    if (label.length <= 28) return label;
-    return '${label.substring(0, 26)}…';
-  }
-
-  ({
-    String emoji,
-    String headline,
-    String summary,
-    List<String> routeBullets,
-  }) _liveSearchStrategyCopy() {
-    final primary = _commuterDrafts.first;
-    final primaryHub =
-        primary.hub?.label ?? 'your primary Dublin destination';
-    final primaryMethod = primary.methodLabel;
-    final budget = _selectedBudgetTime;
-    final marketLabel = MarketConfig.current.profileCityLabel.contains('Dublin')
-        ? 'Dublin'
-        : MarketConfig.current.appTitle;
-
-    if (_commuterDrafts.length == 1) {
-      return (
-        emoji: '🏎️',
-        headline: 'Single-route optimization',
-        summary:
-            'Optimizing feed for high-speed $marketLabel transit access to $primaryHub within $budget minutes.',
-        routeBullets: [
-          'Primary: $primaryMethod → $primaryHub',
-          'Household cap: $budget min door-to-door',
-        ],
-      );
-    }
-
-    final secondary = _commuterDrafts[1];
-    final secondaryHub =
-        secondary.hub?.label ?? 'your secondary destination';
-
-    return switch (_dualCommutePriority) {
-      DualCommutePriority.personA => (
-          emoji: '🏎️',
-          headline: 'Commuter 1 priority',
-          summary:
-              'Optimizing feed for high-speed $marketLabel transit links to $primaryHub — secondary route still visible but weighted lower.',
-          routeBullets: [
-            'Anchor: $primaryMethod → $primaryHub',
-            'Secondary: ${secondary.methodLabel} → $secondaryHub',
-            'Household cap: $budget min',
-          ],
-        ),
-      DualCommutePriority.personB => (
-          emoji: '🏎️',
-          headline: 'Commuter 2 priority',
-          summary:
-              'Optimizing feed for transit access to $secondaryHub — primary route still visible but weighted lower.',
-          routeBullets: [
-            'Anchor: ${secondary.methodLabel} → $secondaryHub',
-            'Secondary: $primaryMethod → $primaryHub',
-            'Household cap: $budget min',
-          ],
-        ),
-      DualCommutePriority.balanced => (
-          emoji: '⚖️',
-          headline: 'Balanced optimization',
-          summary:
-              'Balancing commute scores across both routes with gap mitigation — ideal for dual-income households across $marketLabel.',
-          routeBullets: [
-            'Route A: $primaryMethod → $primaryHub',
-            'Route B: ${secondary.methodLabel} → $secondaryHub',
-            'Household cap: $budget min',
-          ],
-        ),
-    };
-  }
-
   Widget _buildLeaseHouseholdSection() {
-    final leaseLabels = ApplicantSessionSync.leaseTermOptions
-        .map((months) => '$months months')
-        .toList();
-    final selectedLeaseLabel = _preferredLeaseMonths == null
-        ? ''
-        : '$_preferredLeaseMonths months';
+    final leaseLabels = ApplicantSessionSync.leaseTermLabels;
+    final selectedLeaseLabel =
+        ApplicantSessionSync.leaseLabelForMonths(_preferredLeaseMonths);
 
     return _groupCard(
       title: 'Lease & household (entire place)',
@@ -2042,8 +2866,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           hint: 'Select',
           options: leaseLabels,
           onChanged: (v) => setState(() {
-            _preferredLeaseMonths =
-                int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), ''));
+            _preferredLeaseMonths = ApplicantSessionSync.leaseMonthsFromLabel(v);
           }),
         ),
         _textField(

@@ -103,8 +103,13 @@ abstract final class ProfileData {
   static List<bool> _modernCompletionChecks(Map<String, dynamic> session) => [
         text(session['full_name']).isNotEmpty,
         text(session['email']).isNotEmpty,
+        text(session['detected_city']).isNotEmpty ||
+            text(session['current_area']).isNotEmpty,
         text(session['mother_tongue']).isNotEmpty,
         languageList(session['spoken_languages']).isNotEmpty,
+        session['linkedin_verified'] == true ||
+            (session['trust_stage'] is int &&
+                (session['trust_stage'] as int) >= 2),
         maximumCommuteBudgetMinutes(session) != null,
         text(session['budget_min']).isNotEmpty &&
             text(session['budget_max']).isNotEmpty,

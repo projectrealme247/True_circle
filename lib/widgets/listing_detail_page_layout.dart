@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 import '../models/marketplace_space.dart';
 import '../utils/listing_data.dart';
-import '../widgets/listing_cover_image.dart';
 import 'listing_detail_commute_section.dart';
 import 'listing_detail_tokens.dart';
+import 'listing_photo_gallery.dart';
 
 /// Dual-column (desktop) / stacked (mobile) listing detail layout.
 class ListingDetailPageLayout extends StatelessWidget {
@@ -25,6 +25,7 @@ class ListingDetailPageLayout extends StatelessWidget {
     required this.onRequestViewing,
     required this.onManage,
     required this.onStartReplacement,
+    required this.onEdit,
     required this.matchChips,
   });
 
@@ -42,6 +43,7 @@ class ListingDetailPageLayout extends StatelessWidget {
   final VoidCallback onRequestViewing;
   final VoidCallback onManage;
   final VoidCallback onStartReplacement;
+  final VoidCallback onEdit;
   final List<Widget> matchChips;
 
   @override
@@ -59,6 +61,8 @@ class ListingDetailPageLayout extends StatelessWidget {
           matchChips: matchChips,
           displayTitle: displayTitle,
           formatHighlightLabel: formatHighlightLabel,
+          isOwned: isOwned,
+          onEdit: onEdit,
         );
 
         final panel = _ActionDashboardPanel(
@@ -72,6 +76,7 @@ class ListingDetailPageLayout extends StatelessWidget {
           onRequestViewing: onRequestViewing,
           onManage: onManage,
           onStartReplacement: onStartReplacement,
+          onEdit: onEdit,
         );
 
         if (isWide) {
@@ -142,6 +147,8 @@ class _StoryColumn extends StatelessWidget {
     required this.matchChips,
     required this.displayTitle,
     required this.formatHighlightLabel,
+    required this.isOwned,
+    required this.onEdit,
   });
 
   final Map<String, dynamic> item;
@@ -151,6 +158,8 @@ class _StoryColumn extends StatelessWidget {
   final List<Widget> matchChips;
   final String displayTitle;
   final String Function(String) formatHighlightLabel;
+  final bool isOwned;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -164,12 +173,13 @@ class _StoryColumn extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ListingCoverImage(
+          ListingPhotoGallery(
             listing: item,
             height: imageHeight,
             borderRadius: const BorderRadius.all(Radius.circular(14)),
+            showQuickEdit: isOwned,
+            onQuickEdit: onEdit,
           ),
-          ...mediaExtras,
           const SizedBox(height: 20),
           Text(
             displayTitle,
@@ -225,6 +235,7 @@ class _ActionDashboardPanel extends StatelessWidget {
     required this.onRequestViewing,
     required this.onManage,
     required this.onStartReplacement,
+    required this.onEdit,
   });
 
   final Map<String, dynamic> item;
@@ -237,6 +248,7 @@ class _ActionDashboardPanel extends StatelessWidget {
   final VoidCallback onRequestViewing;
   final VoidCallback onManage;
   final VoidCallback onStartReplacement;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -287,6 +299,12 @@ class _ActionDashboardPanel extends StatelessWidget {
                   icon: const Icon(Icons.groups_outlined, size: 20),
                   label: Text(isShare ? 'View matches' : 'View applicants'),
                 ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Edit listing'),
               ),
               if (isShare) ...[
                 const SizedBox(height: 10),

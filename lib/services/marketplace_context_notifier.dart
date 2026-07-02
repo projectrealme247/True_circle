@@ -2,6 +2,7 @@
 
 import '../data/dublin_mock_data.dart';
 import '../models/marketplace_space.dart';
+import '../models/profile_onboarding_models.dart';
 import '../services/listings_storage_service.dart';
 import '../services/replacement_workflow_service.dart';
 import '../utils/numeric_bounds.dart';
@@ -76,6 +77,15 @@ class MarketplaceContextNotifier extends ChangeNotifier {
     if (token == null || token.isEmpty) return null;
     return MarketplaceSpace.fromStorageToken(token);
   }
+
+  static MarketplaceSpace spaceFromOnboardingTrack(ProfileOnboardingTrack track) {
+    return track.isSharedSpace
+        ? MarketplaceSpace.sharedSpace
+        : MarketplaceSpace.fullRental;
+  }
+
+  Future<void> syncSpaceFromOnboardingTrack(ProfileOnboardingTrack track) =>
+      setActiveSpace(spaceFromOnboardingTrack(track));
 
   double clampedMatchPercent(num value) => NumericBounds.clampPercent(value);
 }

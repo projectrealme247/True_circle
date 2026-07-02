@@ -69,11 +69,18 @@ abstract final class ListingsStorageService {
 
     final userId = ProfileData.text(session['supabase_user_id']);
     final fullName = ProfileData.text(session['full_name']).toLowerCase();
+    final email = ProfileData.text(session['email']).toLowerCase();
     final listings = await load();
 
     return [
       for (final item in listings)
-        if (_isOwnedListing(item, userId: userId, fullName: fullName)) item,
+        if (_isOwnedListing(
+          item,
+          userId: userId,
+          fullName: fullName,
+          email: email,
+        ))
+          item,
     ];
   }
 
@@ -81,12 +88,18 @@ abstract final class ListingsStorageService {
     Map<String, dynamic> item, {
     required String userId,
     required String fullName,
+    String email = '',
   }) {
-    for (final key in ['owner_user_id', 'user_id']) {
+    for (final key in ['owner_user_id', 'user_id', 'landlord_id']) {
       final ownerId = ProfileData.text(item[key]);
       if (userId.isNotEmpty && ownerId.isNotEmpty && ownerId == userId) {
         return true;
       }
+    }
+
+    final ownerEmail = ProfileData.text(item['owner_email']).toLowerCase();
+    if (email.isNotEmpty && ownerEmail.isNotEmpty && ownerEmail == email) {
+      return true;
     }
 
     final host = ListingData.hostName(item).trim().toLowerCase();
@@ -94,6 +107,43 @@ abstract final class ListingsStorageService {
       return true;
     }
     return false;
+  }
+
+  static bool isOwnedBySession(
+    Map<String, dynamic> item,
+    Map<String, dynamic>? session,
+  ) {
+    if (session == null) return false;
+    final userId = ProfileData.text(session['supabase_user_id']);
+    final fullName = ProfileData.text(session['full_name']).toLowerCase();
+    final email = ProfileData.text(session['email']).toLowerCase();
+    return _isOwnedListing(
+      item,
+      userId: userId,
+      fullName: fullName,
+      email: email,
+    );
+  }
+
+  static Future<Map<String, dynamic>> updateListing(
+    String listingId,
+    Map<String, dynamic> listing,
+  ) async {
+    final listings = await load();
+    final payload = ListingData.normalizeItem({
+      ...listing,
+      'id': listingId,
+    });
+    final index = listings.indexWhere(
+      (item) => item['id']?.toString() == listingId,
+    );
+    if (index < 0) {
+      return addListing(payload);
+    }
+    final next = List<Map<String, dynamic>>.from(listings);
+    next[index] = payload;
+    await platform.saveListings(storageKey, ListingData.normalizeList(next));
+    return payload;
   }
 
   static Future<Map<String, dynamic>?> getById(String id) async {

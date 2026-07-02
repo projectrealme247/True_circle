@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,11 +8,11 @@ import 'package:go_router/go_router.dart';
 
 import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
-import '../data/dublin_mock_data.dart';
 import '../navigation/space_gateway_navigation.dart';
 import '../services/auth_service.dart';
 import '../services/demo_auth_service.dart';
 import '../services/user_session_store.dart';
+import '../services/view_preference_service.dart';
 import '../utils/listing_data.dart';
 import '../models/spoken_language_entry.dart';
 import '../utils/profile_data.dart';
@@ -37,6 +38,7 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   bool _isLoginMode = true;
+  bool _showEmailLogin = false; // Demo-first entry — keep until user asks to remove (see .cursor/rules/demo-auth-entry.mdc)
   int _signUpStep = 1;
   bool _showAddMore = false;
   bool _authLoading = false;
@@ -445,12 +447,13 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _authLoading = true);
     try {
       await DemoAuthService.enterAsDemoLandlord();
+      await ViewPreferenceService.setOverride(DashboardViewMode.host);
       if (!mounted) return;
       if (context.canPop()) {
         context.pop(true);
       }
       if (!mounted) return;
-      context.go('/listing/${DublinMockData.listingId}/manage');
+      context.go('/?promptFirstListing=1');
     } catch (e) {
       if (!mounted) return;
       _showNotification('Could not enter demo landlord mode: $e');
@@ -464,12 +467,13 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _authLoading = true);
     try {
       await DemoAuthService.enterAsDemoSeeker();
+      await ViewPreferenceService.setOverride(DashboardViewMode.seeker);
       if (!mounted) return;
       if (context.canPop()) {
         context.pop(true);
       }
       if (!mounted) return;
-      await navigateAfterAuth(context);
+      context.go('/?welcomeFeed=1');
     } catch (e) {
       if (!mounted) return;
       _showNotification('Could not enter demo seeker mode: $e');
@@ -650,57 +654,88 @@ class _AuthScreenState extends State<AuthScreen> {
       gap: _AuthLayout.spaceY4,
       children: [
         const TrueCircleLogo(height: 96, width: null),
-        const Text(
-          'Sign in to TrueCircle',
+        Text(
+          _showEmailLogin ? 'Sign in to TrueCircle' : 'Try TrueCircle',
           textAlign: TextAlign.center,
           style: _AuthPalette.pageTitle,
         ),
-        _buildInput(
-          _emailController,
-          label: 'Email',
-          hint: 'you@company.com',
-          textInputAction: TextInputAction.next,
-        ),
-        _buildInput(
-          _passwordController,
-          label: 'Password',
-          hint: 'Enter your password',
-          isObscured: true,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _executeSignIn(),
-        ),
-        _buildPrimaryButton(
-          label: _authLoading ? 'Signing in…' : 'Sign in',
-          onPressed: _authLoading ? null : _executeSignIn,
-        ),
-        if (DemoAuthService.isEnabled) _buildDemoBypassCard(),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'New here? ',
-              style: TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
+        if (!_showEmailLogin) ...[
+          const Text(
+            'Jump in with a one-click demo — no email or password needed.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _AuthPalette.textSecondary,
+              fontSize: 14,
+              height: 1.4,
             ),
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: () => setState(() {
-                  _isLoginMode = false;
-                  _signUpStep = 1;
-                  _showAddMore = false;
-                }),
-                child: const Text(
-                  'Create an account',
-                  style: TextStyle(
-                    color: _AuthPalette.primary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
+          ),
+          _buildDemoEntrySection(compact: false),
+        ] else ...[
+          _buildInput(
+            _emailController,
+            label: 'Email',
+            hint: 'you@company.com',
+            textInputAction: TextInputAction.next,
+          ),
+          _buildInput(
+            _passwordController,
+            label: 'Password',
+            hint: 'Enter your password',
+            isObscured: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _executeSignIn(),
+          ),
+          _buildPrimaryButton(
+            label: _authLoading ? 'Signing in…' : 'Sign in',
+            onPressed: _authLoading ? null : _executeSignIn,
+          ),
+        ],
+        Center(
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => setState(() => _showEmailLogin = !_showEmailLogin),
+              child: Text(
+                _showEmailLogin
+                    ? '← Back to demo entry'
+                    : 'Sign in with email instead',
+                style: const TextStyle(
+                  color: _AuthPalette.primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
                 ),
               ),
             ),
-          ],
+          ),
         ),
+        if (!_showEmailLogin)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'New here? ',
+                style: TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
+              ),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _isLoginMode = false;
+                    _signUpStep = 1;
+                    _showAddMore = false;
+                  }),
+                  child: const Text(
+                    'Create an account',
+                    style: TextStyle(
+                      color: _AuthPalette.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -1009,7 +1044,16 @@ class _AuthScreenState extends State<AuthScreen> {
           label: _authLoading ? 'Creating account…' : 'Continue',
           onPressed: _authLoading ? null : _executeSignUpAccountStep,
         ),
-        if (DemoAuthService.isEnabled) _buildDemoBypassCard(),
+        const SizedBox(height: 4),
+        const Text(
+          'Or try a demo without signing up',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: _AuthPalette.textSecondary,
+            fontSize: 12,
+          ),
+        ),
+        _buildDemoEntrySection(compact: true),
         Center(
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -1027,69 +1071,38 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildDemoBypassCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _AuthPalette.demoBannerBackground,
-        borderRadius: BorderRadius.circular(_AuthPalette.radius2xl),
-        border: Border.all(color: _AuthPalette.demoBannerBorder),
-      ),
-      child: _spacedColumn(
-        gap: 10,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.auto_awesome_rounded,
-                  color: _AuthPalette.demoBannerText),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Demo bypass enabled',
-                  style: TextStyle(
-                    color: _AuthPalette.demoBannerText,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+  Widget _buildDemoEntrySection({required bool compact}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!compact) const SizedBox(height: 4),
+        _buildPrimaryButton(
+          label: _authLoading ? 'Loading…' : 'Demo Landlord',
+          onPressed: _authLoading ? null : _enterAsDemoLandlord,
+          backgroundColor: _AuthPalette.accent,
+          height: compact ? 46 : 52,
+        ),
+        const SizedBox(height: 10),
+        _buildPrimaryButton(
+          label: _authLoading ? 'Loading…' : 'Demo Seeker',
+          onPressed: _authLoading ? null : _enterAsDemoSeeker,
+          backgroundColor: _AuthPalette.textPrimary,
+          height: compact ? 46 : 52,
+        ),
+        if (kDebugMode && !DemoAuthService.isEnabled)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'Demo sessions run locally — no Supabase sign-in required.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _AuthPalette.textSecondary,
+                fontSize: 11,
+                height: 1.35,
               ),
-            ],
-          ),
-          const Text(
-            'Use one-click demo sessions for staging validation without Supabase auth.',
-            style: TextStyle(
-              color: _AuthPalette.demoBannerText,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              height: 1.35,
             ),
           ),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPrimaryButton(
-                  label: 'Enter as Demo Landlord',
-                  onPressed: _authLoading ? null : _enterAsDemoLandlord,
-                  backgroundColor: _AuthPalette.demoLandlord,
-                  height: 46,
-                ),
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPrimaryButton(
-                  label: 'Enter as Demo Seeker',
-                  onPressed: _authLoading ? null : _enterAsDemoSeeker,
-                  backgroundColor: _AuthPalette.demoSeeker,
-                  height: 46,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -1677,11 +1690,6 @@ abstract final class _AuthPalette {
   static const accentHover = AppColors.accentDark;
   static const accentActive = Color(0xFFC9474B);
   static const success = Color(0xFF15803D);
-  static const demoLandlord = Color(0xFFF06449);
-  static const demoSeeker = Color(0xFF2563EB);
-  static const demoBannerBackground = Color(0xFFFFF7ED);
-  static const demoBannerBorder = Color(0xFFFAC9A8);
-  static const demoBannerText = Color(0xFF7C2D12);
 
   static const canvas = Color(0xFFF7F7F7);
   static const surface = Color(0xFFFFFFFF);

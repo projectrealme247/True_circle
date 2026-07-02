@@ -9,11 +9,17 @@ class PassportPreviewCard extends StatelessWidget {
     required this.displayName,
     required this.location,
     required this.languages,
+    this.isProvider = false,
+    this.identityTrustLabel = 'Pending verification',
+    this.hostTrustTierLabel = 'Host Trust Badge — Tier 0',
   });
 
   final String displayName;
   final String location;
   final List<String> languages;
+  final bool isProvider;
+  final String identityTrustLabel;
+  final String hostTrustTierLabel;
 
   static const _tileFill = Color(0xFFF1F5F9);
   static const _tileBorder = Color(0xFFE2E8F0);
@@ -84,29 +90,59 @@ class PassportPreviewCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              _PassportMicroTile(
-                emoji: '📍',
-                title: 'Current Base',
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
-                  switchInCurve: Curves.easeOutCubic,
-                  child: Text(
-                    loc.isEmpty ? 'Current area' : loc,
-                    key: ValueKey(loc.isEmpty ? 'loc-empty' : loc),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: loc.isEmpty ? _placeholder : _subtitleMuted,
-                      height: 1.4,
+              if (isProvider)
+                _PassportMicroTile(
+                  emoji: '🛡️',
+                  title: 'Verified Identity & Host Trust',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        identityTrustLabel,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: _subtitleMuted,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        hostTrustTierLabel,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _titleColor,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _PassportMicroTile(
+                  emoji: '📍',
+                  title: 'Current Base',
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    switchInCurve: Curves.easeOutCubic,
+                    child: Text(
+                      loc.isEmpty ? 'Current area' : loc,
+                      key: ValueKey(loc.isEmpty ? 'loc-empty' : loc),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: loc.isEmpty ? _placeholder : _subtitleMuted,
+                        height: 1.4,
+                      ),
                     ),
                   ),
                 ),
-              ),
               const SizedBox(height: 10),
               _PassportMicroTile(
-                emoji: '🗣️',
+                emoji: '💬',
                 title: 'Languages',
                 child: langs.isEmpty
                     ? Text(

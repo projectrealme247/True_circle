@@ -72,7 +72,8 @@ void main() {
 
       expect(display, isNotNull);
       expect(display!.isPersonalized, isFalse);
-      expect(display.rows.first.minutes, 6);
+      expect(display.rows.first.minutes, greaterThan(0));
+      expect(display.rows.first.headline, contains('Luas Green Line'));
     });
 
     test('description walk copy falls back when proximity data absent', () {

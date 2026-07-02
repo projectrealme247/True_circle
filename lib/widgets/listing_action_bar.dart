@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart' show AppButtonStyles;
+import '../debug/agent_log.dart';
 import '../theme/app_typography.dart';
 import '../models/marketplace_space.dart';
+import '../services/listings_storage_service.dart';
 import '../services/replacement_workflow_service.dart';
 import '../utils/listing_data.dart';
 import '../utils/profile_data.dart';
@@ -39,7 +41,7 @@ class ListingActionBar extends StatelessWidget {
     if (session == null) return ListingViewerRelation.viewer;
     final userId = ProfileData.text(session['supabase_user_id']);
     final fullName = ProfileData.text(session['full_name']).toLowerCase();
-    for (final key in ['owner_user_id', 'user_id']) {
+    for (final key in ['owner_user_id', 'user_id', 'landlord_id']) {
       if (ProfileData.text(listing[key]) == userId && userId.isNotEmpty) {
         final replacement = await ReplacementWorkflowService.activeForUser(
           session,
@@ -62,16 +64,26 @@ class ListingActionBar extends StatelessWidget {
     Map<String, dynamic> listing,
     Map<String, dynamic>? session,
   ) {
-    if (session == null) return false;
-    final userId = ProfileData.text(session['supabase_user_id']);
-    final fullName = ProfileData.text(session['full_name']).toLowerCase();
-    for (final key in ['owner_user_id', 'user_id']) {
-      if (ProfileData.text(listing[key]) == userId && userId.isNotEmpty) {
-        return true;
-      }
-    }
-    final host = ListingData.hostName(listing).trim().toLowerCase();
-    return fullName.isNotEmpty && host == fullName;
+    final owned = ListingsStorageService.isOwnedBySession(listing, session);
+    // #region agent log
+    agentLog(
+      location: 'listing_action_bar.dart:isOwnedListing',
+      message: 'Ownership resolution',
+      hypothesisId: 'H4',
+      data: {
+        'owned': owned,
+        'sessionUserId': ProfileData.text(session?['supabase_user_id']),
+        'sessionEmail': ProfileData.text(session?['email']),
+        'sessionName': ProfileData.text(session?['full_name']),
+        'ownerUserId': ProfileData.text(listing['owner_user_id']),
+        'landlordId': ProfileData.text(listing['landlord_id']),
+        'ownerEmail': ProfileData.text(listing['owner_email']),
+        'hostName': ListingData.hostName(listing),
+        'listingId': ListingData.id(listing),
+      },
+    );
+    // #endregion
+    return owned;
   }
 
   @override
@@ -115,6 +127,19 @@ class ListingActionBar extends StatelessWidget {
             ),
             label: Text(session == null ? 'Sign in to apply' : applyLabel),
           ),
+          if (session != null) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Your profile and match score are shared with this landlord. '
+              'Contact details stay private until they shortlist you.',
+              style: TextStyle(
+                fontSize: 11,
+                color: Color(0xFF6B7280),
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ],
       ],
     );
