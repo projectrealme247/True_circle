@@ -1,0 +1,38 @@
+---
+description: Phase 1 add-listing baseline — pin-drop location, 3-step wizard, calm premium UI
+alwaysApply: false
+globs: lib/widgets/listing_creation/**,lib/screens/add_listing_screen.dart,lib/services/nominatim_*,lib/services/overpass_*,lib/services/eircode_*,lib/services/fast_location_*,lib/services/neighborhood_*
+---
+
+# Add listing Phase 1 baseline
+
+**Reference tag:** `ref/add-listing-phase-1-baseline` (commit `06fe038`)  
+**Full doc:** `plans/add-listing-phase-1-baseline.md`
+
+Do **not** regress or remove these without explicit user request.
+
+## Wizard structure
+
+- 3 steps: Property → Location → Listing (`ListingCreationForm`, `_stepCount = 3`)
+- Step 3 content order differs: Entire place vs Shared room (see baseline doc)
+- Clickable completed step links in `GamifiedFormProgress`
+
+## Location step (critical)
+
+- **Coordinate source:** map pin (`LocationPinField`) or GPS — not Eircode forward geocode
+- `flutter_map` + tap/search pin + "Use current location"
+- Reverse geocode for display only; filter DED noise (`_isNoisyPart`)
+- Eircode field is optional text-only (stored, not geocoded)
+- Proximity from `OverpassAmenitiesService.fetchNearby` at pin coords (with retry)
+- Pin confirmation UX: green badge + checkmark when address search locks pin
+
+## UI / design
+
+- Selected tiles: grey border (`#6B7280`) + `listingChoiceSelectedShadow` elevation — not black borders
+- No coral/pink selection fills
+- Primitives live in `listing_creation_primitives.dart`
+
+## When refactoring
+
+- Read `plans/add-listing-phase-1-baseline.md` before large changes
+- To restore: `git checkout ref/add-listing-phase-1-baseline`
