@@ -9,6 +9,20 @@ enum MarketplaceSpace { fullRental, sharedSpace;
         MarketplaceSpace.sharedSpace => 'Shared Living',
       };
 
+  /// Hero segmented control label — onboarding emoji primitives.
+  String get option2HeroLabel => switch (this) {
+        MarketplaceSpace.fullRental => '🏡 Independent Places',
+        MarketplaceSpace.sharedSpace => '👥 Shared Living',
+      };
+
+  String get option2HeroEmoji => switch (this) {
+        MarketplaceSpace.fullRental => '🏠',
+        MarketplaceSpace.sharedSpace => '👥',
+      };
+
+  /// Hero segmented control text without leading emoji.
+  String get option2HeroText => option2Title;
+
   /// Option 2 subtitle under each tower title.
   String get option2Subtitle => switch (this) {
         MarketplaceSpace.fullRental => 'Whole Flat/House',

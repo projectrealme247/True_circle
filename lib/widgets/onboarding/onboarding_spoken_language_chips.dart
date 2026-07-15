@@ -107,10 +107,13 @@ class OnboardingSpokenLanguageChips extends StatelessWidget {
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         final language = filtered[index];
-                        return ListTile(
-                          dense: true,
-                          title: Text(language),
-                          onTap: () => Navigator.pop(ctx, language),
+                        return Material(
+                          color: Colors.white,
+                          child: ListTile(
+                            dense: true,
+                            title: Text(language),
+                            onTap: () => Navigator.pop(ctx, language),
+                          ),
                         );
                       },
                     ),

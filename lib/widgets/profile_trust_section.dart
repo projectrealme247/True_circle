@@ -6,7 +6,7 @@ import '../services/trust_service.dart';
 import '../theme/trust_tier_design.dart';
 import '../utils/viewer_profile.dart';
 import 'profile_invite_code_section.dart';
-import 'trust_tier_badge.dart';
+import 'trust_badge.dart';
 import 'verification_gateway_bottom_sheet.dart';
 
 /// Trust stage summary for the user profile screen.
@@ -48,8 +48,8 @@ class ProfileTrustSection extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            TrustTierBadge(
-              tier: TrustTierDesign.fromTrustStage(stage),
+            TrustBadge.fromTrustStage(
+              stage,
               tooltip: badgeTooltip,
             ),
             const Spacer(),
@@ -81,6 +81,7 @@ class ProfileTrustSection extends StatelessWidget {
             lightTrust: lightTrust,
             preArrival: preArrival,
             actionColor: actionColor,
+            session: session,
           ),
         ],
         if (stage.level >= TrustStage.idVerified.level && lightTrust) ...[
@@ -97,7 +98,7 @@ class ProfileTrustSection extends StatelessWidget {
   }) {
     final tier = TrustTierDesign.fromTrustStage(stage);
     final label = TrustTierDesign.labelFor(tier);
-    return tooltipForLabel?.call(label) ?? TrustTierBadge.tooltipFor(tier);
+    return tooltipForLabel?.call(label) ?? TrustBadge.tooltipFor(tier);
   }
 
   static String _resolveSubtitle({
@@ -177,12 +178,14 @@ class _VerifyCtaRow extends StatelessWidget {
     required this.lightTrust,
     required this.preArrival,
     required this.actionColor,
+    required this.session,
   });
 
   final TrustStage stage;
   final bool lightTrust;
   final bool preArrival;
   final Color actionColor;
+  final Map<String, dynamic> session;
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +207,10 @@ class _VerifyCtaRow extends StatelessWidget {
 
     if (stage.level < TrustStage.socialVerified.level) {
       return FilledButton.icon(
-        onPressed: () => VerificationGatewayBottomSheet.show(context),
+        onPressed: () => VerificationGatewayBottomSheet.show(
+          context,
+          session: session,
+        ),
         icon: const Icon(Icons.workspace_premium_outlined, size: 18),
         label: const Text('Upgrade to Grand'),
         style: FilledButton.styleFrom(

@@ -69,3 +69,32 @@ class DropdownScrollBehavior extends AppScrollBehavior {
     return const ClampingScrollPhysics();
   }
 }
+
+/// Onboarding form columns — vertical scroll without visible scrollbar rails.
+class OnboardingFormScrollBehavior extends MaterialScrollBehavior {
+  const OnboardingFormScrollBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
+  }
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    if (kIsWeb ||
+        switch (defaultTargetPlatform) {
+          TargetPlatform.windows ||
+          TargetPlatform.linux ||
+          TargetPlatform.macOS =>
+            true,
+          _ => false,
+        }) {
+      return const ClampingScrollPhysics();
+    }
+    return super.getScrollPhysics(context);
+  }
+}

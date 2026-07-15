@@ -27,6 +27,31 @@ abstract final class TransitExtractionService {
     );
   }
 
+  /// Nearest stop within [maxKm] when strict 1 km walking envelope has no match.
+  static Map<String, dynamic>? extractNearest({
+    required double latitude,
+    required double longitude,
+    double maxKm = 5.0,
+  }) {
+    if (MarketConfig.current.id != MarketId.dublin) return null;
+
+    final location = LatLng(latitude, longitude);
+    final nearest = DublinTransitNetwork.nearestTo(location);
+    final km = GeoMath.haversineKm(location, nearest.position);
+    if (km > maxKm) return null;
+
+    return _proximityPayload(
+      latitude: latitude,
+      longitude: longitude,
+      match: TransitProximityMatch(
+        node: nearest,
+        walkMinutes: GeoMath.walkingMinutes(km),
+        distanceKm: km,
+      ),
+      source: 'path_b_nearest',
+    );
+  }
+
   /// Invokes the serverless PostGIS routing hook (best-effort; local fallback on failure).
   static Future<Map<String, dynamic>?> enrichViaEdgeFunction({
     required double latitude,

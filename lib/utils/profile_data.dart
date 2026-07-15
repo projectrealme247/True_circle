@@ -209,7 +209,11 @@ abstract final class ProfileData {
   }
 
   static bool hasCommutePreferences(Map<String, dynamic>? session) =>
+      !commuteDestinationUnknown(session) &&
       commuteProfiles(session).isNotEmpty;
+
+  static bool commuteDestinationUnknown(Map<String, dynamic>? session) =>
+      session?['commute_destination_unknown'] == true;
 
   static List<CommuteProfileEntry> commuteProfiles(
     Map<String, dynamic>? session,

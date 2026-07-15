@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/applicant_trust_tier.dart';
-import '../theme/trust_tier_design.dart';
+import 'trust_badge.dart';
 
-/// Trust Scale badge — soft-slate capsule + emoji dot for every surface.
+export 'trust_badge.dart' show TrustBadge;
+
+/// @deprecated Use [TrustBadge] directly.
 class TrustTierBadge extends StatelessWidget {
   const TrustTierBadge({
     super.key,
@@ -16,55 +18,23 @@ class TrustTierBadge extends StatelessWidget {
   final bool compact;
   final String? tooltip;
 
-  static String labelFor(ApplicantTrustTier tier) =>
-      TrustTierDesign.labelFor(tier);
+  static String labelFor(ApplicantTrustTier tier) => TrustBadge.labelFor(tier);
 
   static String emojiDotFor(ApplicantTrustTier tier) =>
-      TrustTierDesign.emojiDotFor(tier);
+      TrustBadge.emojiLabelFor(tier).split(' ').first;
 
   static String emojiLabelFor(ApplicantTrustTier tier) =>
-      TrustTierDesign.trustScaleEmojiLabel(tier);
+      TrustBadge.emojiLabelFor(tier);
 
-  static String tooltipFor(ApplicantTrustTier tier) => switch (tier) {
-        ApplicantTrustTier.justLanded =>
-          'Just Landed tier requires:\n'
-          'Verified arrival intent signal\n'
-          'Pre-arrival housing circle profile\n'
-          'Funding capacity token on file',
-        ApplicantTrustTier.grand =>
-          'Grand tier requires:\n'
-          'Active .ac.ie institutional domain check\n'
-          'Identity and document hash verification\n'
-          'On-campus student status confirmation',
-        ApplicantTrustTier.sound =>
-          'Sound tier requires:\n'
-          'Gov API identity match token\n'
-          'Income verified >3.5x rent target\n'
-          'Fully vouched by community references',
-      };
+  static String tooltipFor(ApplicantTrustTier tier) =>
+      TrustBadge.tooltipFor(tier);
 
   @override
   Widget build(BuildContext context) {
-    final message = tooltip ?? tooltipFor(tier);
-
-    return Tooltip(
-      message: message,
-      waitDuration: const Duration(milliseconds: 350),
-      preferBelow: false,
-      child: Container(
-        padding: TrustTierDesign.trustScaleCapsulePadding,
-        decoration: BoxDecoration(
-          color: TrustTierDesign.trustScaleCapsuleBg,
-          borderRadius:
-              BorderRadius.circular(TrustTierDesign.trustScaleCapsuleRadius),
-        ),
-        child: Text(
-          TrustTierDesign.trustScaleEmojiLabel(tier),
-          style: TrustTierDesign.trustScaleLabelStyle(compact: compact),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
+    return TrustBadge(
+      tier: tier,
+      compact: compact,
+      tooltip: tooltip,
     );
   }
 }

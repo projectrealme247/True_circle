@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+import '../debug/debug_session_log.dart';
 import 'listing_data.dart';
 import 'listing_match_engine.dart';
 import 'listing_search_intent.dart';
 import 'target_search_areas.dart';
 import 'viewer_profile.dart';
+import 'weighted_listing_matcher.dart';
 
 /// Output of the unified marketplace pipeline (parse → filter → rank → display).
 class MarketplaceListingPipelineResult {
@@ -17,6 +19,7 @@ class MarketplaceListingPipelineResult {
     this.relaxedConstraints = const [],
     this.usedClosestMatchFallback = false,
     this.isCommuteDivergent = false,
+    this.requiresOnboarding = false,
   });
 
   final SearchIntent requestedIntent;
@@ -29,6 +32,9 @@ class MarketplaceListingPipelineResult {
 
   /// Path B — opposite-side commute hubs exceed max budget (zero-match feed).
   final bool isCommuteDivergent;
+
+  /// Viewer has a profile shell but lacks fields required for ranking.
+  final bool requiresOnboarding;
 
   bool get hasActiveSearch => !requestedIntent.isEmpty;
 
@@ -73,73 +79,97 @@ abstract final class MarketplaceListingPipeline {
     required Map<String, dynamic>? userSession,
     String searchQuery = '',
   }) {
-    final normalized = filters.pipelineQueryText(searchText: searchQuery);
+    final normalized = filters.pipelineQueryText(
+      searchText: searchQuery,
+      towerPropertyType: towerPropertyType,
+    );
+    final scopedFilters = filters.scopedForTower(towerPropertyType);
+    final weightedCriteria = WeightedFilterCriteria.fromSearchContext(
+      filters: scopedFilters,
+      userSession: userSession,
+      towerPropertyType: towerPropertyType,
+    );
 
     final result = run(
       allListings: allListings,
       towerPropertyType: towerPropertyType,
       searchQuery: normalized,
       userSession: userSession,
-      searchIntent: filters.toSearchIntent(mergeQuery: normalized),
+      searchIntent: scopedFilters.toSearchIntent(
+        mergeQuery: normalized,
+        towerPropertyType: towerPropertyType,
+      ),
+      weightedCriteria: weightedCriteria,
+      searchFilters: scopedFilters,
     );
 
-    final areaTokens = filters.effectiveAreaTokens;
+    // #region agent log
+    debugSessionLog(
+      location: 'marketplace_listing_pipeline.dart:runWithFilters',
+      message: 'pipeline stage counts',
+      hypothesisId: 'A,E',
+      data: {
+        'tower': towerPropertyType,
+        'pipelineQuery': normalized,
+        'filterOccupant': filters.occupantType,
+        'filterGender': filters.genderPreference,
+        'filterBudgetMax': filters.budgetMax,
+        'afterTower': result.afterTower.length,
+        'afterFilters': result.afterFilters.length,
+        'ranked': result.ranked.length,
+        'searchIntentOccupant': result.requestedIntent.occupant,
+        'hasStrongFilters': result.requestedIntent.hasStrongFilters,
+      },
+    );
+    // #endregion
+
+    final resolution = scopedFilters.resolvedAreaSearch;
     var filtered = result.afterFilters;
-    if (areaTokens.isNotEmpty &&
-        !TargetSearchAreas.hasAllDublin(areaTokens)) {
+    if (!resolution.isAllDublin) {
       filtered = [
         for (final item in filtered)
-          if (TargetSearchAreas.listingMatchesTargets(areaTokens, item)) item,
+          if (TargetSearchAreas.listingMatchesResolved(resolution, item)) item,
+      ];
+    } else if (scopedFilters.effectiveAreaRefinements.isNotEmpty) {
+      filtered = [
+        for (final item in filtered)
+          if (TargetSearchAreas.listingMatchesTargets(
+            scopedFilters.effectiveAreaTokens,
+            item,
+            refinementTokens: scopedFilters.effectiveAreaRefinements,
+          ))
+            item,
       ];
     }
 
-    if (filters.budgetMin == null && filters.budgetMax == null) {
-      if (identical(filtered, result.afterFilters)) return result;
-      final rankOutcome = ListingMatchEngine.rank(
-        filtered,
-        userSession,
-        searchIntent: result.requestedIntent.hasStructuredFilters
-            ? result.requestedIntent
-            : null,
-        appliedSearchIntent: result.appliedIntent,
-        filtersWereRelaxed: result.filtersWereRelaxed,
-      );
-      return MarketplaceListingPipelineResult(
-        requestedIntent: result.requestedIntent,
-        appliedIntent: result.appliedIntent,
-        afterTower: result.afterTower,
-        afterFilters: filtered,
-        ranked: rankOutcome.ranked,
-        relaxedConstraints: result.relaxedConstraints,
-        usedClosestMatchFallback: result.usedClosestMatchFallback,
-        isCommuteDivergent: rankOutcome.isCommuteDivergent,
-      );
-    }
-
-    final budgetFiltered = [
-      for (final item in filtered)
-        if (filters.matchesListing(item)) item,
-    ];
+    final weightedPool = WeightedListingMatcher.fetchScoredListings(
+      listings: filtered,
+      criteria: weightedCriteria,
+      filters: scopedFilters,
+      towerPropertyType: towerPropertyType,
+    );
 
     final rankOutcome = ListingMatchEngine.rank(
-      budgetFiltered,
+      weightedPool,
       userSession,
       searchIntent: result.requestedIntent.hasStructuredFilters
           ? result.requestedIntent
           : null,
       appliedSearchIntent: result.appliedIntent,
       filtersWereRelaxed: result.filtersWereRelaxed,
+      weightedCriteria: weightedCriteria,
     );
 
     return MarketplaceListingPipelineResult(
       requestedIntent: result.requestedIntent,
       appliedIntent: result.appliedIntent,
       afterTower: result.afterTower,
-      afterFilters: budgetFiltered,
+      afterFilters: weightedPool,
       ranked: rankOutcome.ranked,
       relaxedConstraints: result.relaxedConstraints,
       usedClosestMatchFallback: result.usedClosestMatchFallback,
       isCommuteDivergent: rankOutcome.isCommuteDivergent,
+      requiresOnboarding: rankOutcome.requiresOnboarding,
     );
   }
 
@@ -149,6 +179,8 @@ abstract final class MarketplaceListingPipeline {
     required String searchQuery,
     required Map<String, dynamic>? userSession,
     SearchIntent? searchIntent,
+    WeightedFilterCriteria? weightedCriteria,
+    ListingSearchFilters? searchFilters,
   }) {
     final afterTower = [
       for (final item in allListings)
@@ -164,62 +196,54 @@ abstract final class MarketplaceListingPipeline {
       intent: requestedIntent,
     );
 
-    var pool = filterOutcome.listings;
+    final criteria = weightedCriteria ??
+        (searchFilters != null
+            ? WeightedFilterCriteria.fromSearchContext(
+                filters: searchFilters,
+                userSession: userSession,
+                towerPropertyType: towerPropertyType,
+              )
+            : WeightedFilterCriteria.fromSearchContext(
+                filters: ListingSearchFilters.fromIntent(requestedIntent),
+                userSession: userSession,
+                towerPropertyType: towerPropertyType,
+              ));
 
-    if (requestedIntent.food != null) {
-      pool = _enforceFoodFilter(pool, requestedIntent.food);
-    }
+    final activeFilters = searchFilters ??
+        ListingSearchFilters.fromIntent(requestedIntent)
+            .scopedForTower(towerPropertyType);
+
+    final pool = WeightedListingMatcher.fetchScoredListings(
+      listings: filterOutcome.listings,
+      criteria: criteria,
+      filters: activeFilters,
+      towerPropertyType: towerPropertyType,
+    );
 
     final searchIntentForRanking = requestedIntent.hasStructuredFilters
         ? requestedIntent
         : null;
 
-    var rankOutcome = ListingMatchEngine.rank(
+    final rankOutcome = ListingMatchEngine.rank(
       pool,
       userSession,
       searchIntent: searchIntentForRanking,
       appliedSearchIntent: filterOutcome.appliedIntent,
       filtersWereRelaxed: filterOutcome.wasRelaxed,
+      weightedCriteria: criteria,
     );
-    var ranked = rankOutcome.ranked;
-
-    if (requestedIntent.food != null) {
-      ranked = _enforceFoodOnRanked(ranked, requestedIntent.food);
-    }
 
     return MarketplaceListingPipelineResult(
       requestedIntent: requestedIntent,
       appliedIntent: filterOutcome.appliedIntent,
       afterTower: afterTower,
       afterFilters: pool,
-      ranked: ranked,
+      ranked: rankOutcome.ranked,
       relaxedConstraints: filterOutcome.relaxedConstraints,
       usedClosestMatchFallback: filterOutcome.usedClosestMatchFallback,
       isCommuteDivergent: rankOutcome.isCommuteDivergent,
+      requiresOnboarding: rankOutcome.requiresOnboarding,
     );
-  }
-
-  static List<Map<String, dynamic>> _enforceFoodFilter(
-    List<Map<String, dynamic>> listings,
-    String? foodToken,
-  ) {
-    if (foodToken == null) return listings;
-    return [
-      for (final item in listings)
-        if (ListingData.matchesFoodPreference(item, foodToken)) item,
-    ];
-  }
-
-  static List<ScoredListing> _enforceFoodOnRanked(
-    List<ScoredListing> ranked,
-    String? foodToken,
-  ) {
-    if (foodToken == null) return ranked;
-    return [
-      for (final scored in ranked)
-        if (ListingData.matchesFoodPreference(scored.listing, foodToken))
-          scored,
-    ];
   }
 
   static void debugLog(

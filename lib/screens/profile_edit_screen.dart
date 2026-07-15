@@ -6,6 +6,8 @@ import '../config/market/dublin_commuter_hubs.dart';
 import '../config/market/dublin_districts.dart';
 import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
+import '../debug/agent_log.dart';
+import '../navigation/navigate_after_identity.dart';
 import '../services/auth_service.dart';
 import '../services/profile_state_notifier.dart';
 import '../services/commute_scoring_service.dart';
@@ -15,8 +17,10 @@ import '../utils/dublin_hap_contribution_validator.dart';
 import '../services/profile_storage_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/view_preference_service.dart';
+import '../models/move_in_timing.dart';
 import '../models/onboarding_user_intent.dart';
 import '../models/profile_onboarding_models.dart';
+import '../models/seeker_onboarding_enums.dart';
 import '../models/spoken_language_entry.dart';
 import '../services/eircode_geocoding_service.dart';
 import '../services/eircode_lookup_service.dart';
@@ -29,22 +33,26 @@ import '../utils/phone_e164.dart';
 import '../utils/onboarding_language_inference.dart';
 import '../utils/ireland_language_catalog.dart';
 import '../utils/profile_data.dart';
+import '../utils/seeker_primary_language_locale.dart';
 import '../utils/spoken_language_profile_codec.dart';
 import '../widgets/commute_destination_field.dart';
-import '../debug/agent_log.dart';
 import '../widgets/gamified_form_wizard.dart';
 import '../widgets/language_pill_chips.dart';
-import '../widgets/onboarding/mother_tongue_typeahead_field.dart';
 import '../widgets/onboarding/onboarding_design_tokens.dart';
-import '../widgets/onboarding/onboarding_grid_shell.dart';
-import '../widgets/listing_creation/listing_creation_primitives.dart';
-import '../widgets/listing_creation/eircode_address_field.dart';
-import '../widgets/onboarding/onboarding_intent_splitter.dart';
+import '../widgets/onboarding/onboarding_content_shell.dart';
+import '../widgets/onboarding/seeker/seeker_onboarding_basics_screen.dart';
+import '../widgets/onboarding/seeker/seeker_onboarding_preferences_screen.dart';
+import '../widgets/onboarding/seeker/seeker_onboarding_destination_screen.dart';
+import '../widgets/onboarding/seeker/seeker_onboarding_step_tracker.dart';
 import '../widgets/onboarding/onboarding_premium_field.dart';
-import '../widgets/onboarding/onboarding_spoken_language_chips.dart';
-import '../widgets/onboarding/passport_preview_card.dart';
+import '../widgets/onboarding/onboarding_field_block.dart';
+import '../widgets/onboarding/onboarding_move_in_window_field.dart';
+import '../widgets/onboarding/onboarding_grid_shell.dart';
+import '../utils/contextual_passport_snapshot.dart';
+import '../widgets/onboarding/contextual_passport_card.dart';
 import '../widgets/shadcn_select.dart';
 import '../widgets/truecircle_logo.dart';
+import '../services/verification_gateway_recommendation.dart';
 import '../widgets/verification_gateway_bottom_sheet.dart';
 import 'auth_screen.dart';
 
@@ -245,8 +253,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   bool _hydrating = true;
   Map<String, dynamic>? _baselineProfile;
 
-  int get _pageCount =>
-      _onboardingIntent == OnboardingUserIntent.seeker ? 3 : 2;
+  int get _pageCount => 3;
+
+  DublinLocationContext? _dublinLocationContext;
+  GuarantorStatus? _guarantorStatus;
+  SeekerMoveInWindow? _moveInWindow;
+  SeekerPersona? _seekerPersona;
+  int _pageTransitionDirection = 1;
 
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
@@ -267,13 +280,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _netMonthlyIncomeController = TextEditingController();
   final _partnerNetMonthlyIncomeController = TextEditingController();
   final _hapVoucherContributionController = TextEditingController();
-  final _earliestMoveInController = TextEditingController();
-  String _selectedMotherTongue = 'English';
+  String _selectedMotherTongue = '';
   final List<String> _selectedLanguages = [];
+  final List<String> _suggestedSecondaryLanguages = [];
+  final List<String> _extraSecondaryLanguages = [];
+  final Set<String> _selectedSecondaryLanguages = {};
   final Map<String, bool> _languageNativeFlags = {};
   final List<_CommuterDraftEntry> _commuterDrafts = [];
   int _householdCommutersCount = 1;
-  double _maxCommuteBudgetMinutes = 45;
+  bool _commuteDestinationUnknown = false;
+  double _maxCommuteBudgetMinutes =
+      SeekerCommuteTimeOptions.defaultMinutes.toDouble();
   int? _preferredLeaseMonths;
   bool _hasHapVoucher = false;
   bool _hapUpliftApproved = false;
@@ -282,6 +299,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   bool _householdSmoker = false;
   final List<String> _preferredSpokenLanguages = [];
   String _sharedFoodPref = 'Veg';
+  bool _hasSetFoodPreference = false;
+  bool _hasSetMoveInWindow = false;
+  String? _familySharedLivingTip;
   String? _selectedAreaKey;
   String? _providerAreaKey;
   OnboardingUserIntent _onboardingIntent = OnboardingUserIntent.seeker;
@@ -308,6 +328,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _agencyController = TextEditingController();
 
   static const _childrenAgeOptions = ['Below 5', '5 - 12', '13 - 18'];
+  static const _familySharedLivingTipMessage =
+      "Shared Living isn't typically available for families — try Independent Place instead";
 
   int get _selectedBudgetTime => _maxCommuteBudgetMinutes.round();
 
@@ -368,12 +390,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   @override
   void initState() {
     super.initState();
+    _onboardingIntent = OnboardingUserIntent.seeker;
     profileStateNotifier.beginEditing(widget.initialProfile, notify: false);
     _applyMarketDefaults();
     _nameController.addListener(_onPassportFieldChanged);
     _locationController.addListener(_onPassportFieldChanged);
     _propertyLocationController.addListener(_onPassportFieldChanged);
     _propertyEircodeController.addListener(_onPassportFieldChanged);
+    _budgetMaxController.addListener(_onPassportFieldChanged);
     _bootstrap();
   }
 
@@ -394,8 +418,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   void _applyMarketDefaults() {
     final market = MarketConfig.current;
-    _selectedMotherTongue = market.defaultMotherTongue;
-    _applyMotherTongueInference(market.defaultMotherTongue);
+    if (_onboardingIntent == OnboardingUserIntent.provider) {
+      _selectedMotherTongue = market.defaultMotherTongue;
+      _applyMotherTongueInference(market.defaultMotherTongue);
+    }
     if (market.profileUseAreaPicker) {
       _selectedAreaKey = market.defaultAreaKey;
       _providerAreaKey = market.defaultAreaKey;
@@ -419,6 +445,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _commuterDrafts.add(_CommuterDraftEntry());
       _syncCommuterDraftSlots();
     }
+    _seedSeekerPrimaryLanguageFromLocale();
     setState(() {
       _ownedListingCount = owned.length;
       _hydrating = false;
@@ -475,6 +502,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     }
 
     _hydrateCommutersFromProfile(profile);
+    _commuteDestinationUnknown =
+        ProfileData.commuteDestinationUnknown(profile);
 
     final householdCommuters = profile['household_commuters_count'];
     if (householdCommuters is int && householdCommuters > 0) {
@@ -486,7 +515,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
     final maxCommute = profile['maximum_commute_budget_minutes'];
     if (maxCommute is num && maxCommute > 0) {
-      _maxCommuteBudgetMinutes = maxCommute.toDouble();
+      _maxCommuteBudgetMinutes =
+          SeekerCommuteTimeOptions.snap(maxCommute).toDouble();
     }
 
     final preferredLangs = profile['preferred_spoken_languages'];
@@ -509,9 +539,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _selectedLanguages
       ..clear()
       ..addAll(ProfileData.languageList(profile['spoken_languages']));
-    if (_selectedLanguages.isEmpty) {
-      _selectedLanguages.add(_languageOptions.first);
-    }
+
+    _hydrateSeekerSecondaryLanguageState();
 
     _languageNativeFlags
       ..clear()
@@ -594,10 +623,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _preferredLeaseMonths = profile['preferred_lease_months'] is int
         ? profile['preferred_lease_months'] as int
         : int.tryParse(ProfileData.text(profile['preferred_lease_months']));
-    _earliestMoveInController.text =
-        ProfileData.text(profile['earliest_move_in_date']);
+    _moveInWindow = SeekerMoveInWindow.fromSession(profile);
+    _hasSetMoveInWindow = _moveInWindow != null;
 
-    _onboardingIntent = OnboardingUserIntent.fromSession(profile);
+    _onboardingIntent = OnboardingUserIntent.seeker;
     final snapshot = ProfileOnboardingRepository.snapshotFromSession(profile);
     _providerSharedSpace = snapshot.track == ProfileOnboardingTrack.landlordSharedSpace;
     _providerIsFurnished = snapshot.listingSeed.isFurnished;
@@ -658,15 +687,140 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _propertyLocationIdentifierController.text = identifier;
       _propertyAddressSearchController.text = identifier;
     }
+
+    _dublinLocationContext = DublinLocationContext.fromSession(profile);
+    _guarantorStatus = GuarantorStatus.fromSession(profile);
+    _seekerPersona = SeekerPersona.fromSession(profile);
+    if (_seekerPersona == SeekerPersona.relocating) {
+      _seekerPersona = SeekerPersona.professional;
+    }
+    if (_seekerPersona?.requiresGuarantorQuestion == true &&
+        _guarantorStatus == null) {
+      _guarantorStatus = GuarantorStatus.notSureYet;
+    }
+    if (_seekerPersona != null) {
+      _selectedOccupantType = _seekerPersona!.occupantType;
+    }
+  }
+
+  void _seedSeekerPrimaryLanguageFromLocale() {
+    if (_onboardingIntent != OnboardingUserIntent.seeker) return;
+    if (_selectedMotherTongue.trim().isNotEmpty) return;
+    final inferred = SeekerPrimaryLanguageLocale.fromLocale(
+      WidgetsBinding.instance.platformDispatcher.locale,
+    );
+    if (inferred == null) return;
+    _selectedMotherTongue = inferred;
+    _languageNativeFlags[inferred] = true;
+    _refreshSuggestedSecondaryLanguages(inferred);
+    _syncSelectedLanguagesFromSeekerTiers();
+  }
+
+  void _hydrateSeekerSecondaryLanguageState() {
+    _suggestedSecondaryLanguages.clear();
+    _extraSecondaryLanguages.clear();
+    _selectedSecondaryLanguages.clear();
+
+    if (_selectedMotherTongue.isEmpty && _selectedLanguages.isNotEmpty) {
+      _selectedMotherTongue = _selectedLanguages.first;
+    }
+
+    if (_selectedMotherTongue.isNotEmpty) {
+      _suggestedSecondaryLanguages.addAll(
+        OnboardingLanguageInference.suggestedLanguagesFor(_selectedMotherTongue),
+      );
+      for (final lang in _selectedLanguages) {
+        if (lang.toLowerCase() == _selectedMotherTongue.toLowerCase()) {
+          continue;
+        }
+        _selectedSecondaryLanguages.add(lang);
+        if (!_suggestedSecondaryLanguages.any(
+          (suggested) => suggested.toLowerCase() == lang.toLowerCase(),
+        )) {
+          _extraSecondaryLanguages.add(lang);
+        }
+      }
+    }
+  }
+
+  List<String> _secondaryDisplayLanguages() {
+    final seen = <String>{};
+    final display = <String>[];
+    void addLanguage(String language) {
+      if (_selectedMotherTongue.isNotEmpty &&
+          language.toLowerCase() == _selectedMotherTongue.toLowerCase()) {
+        return;
+      }
+      final key = language.toLowerCase();
+      if (seen.add(key)) display.add(language);
+    }
+
+    for (final language in _suggestedSecondaryLanguages) {
+      addLanguage(language);
+    }
+    for (final language in _extraSecondaryLanguages) {
+      addLanguage(language);
+    }
+    return display;
+  }
+
+  void _refreshSuggestedSecondaryLanguages(String primaryLanguage) {
+    _suggestedSecondaryLanguages
+      ..clear()
+      ..addAll(OnboardingLanguageInference.suggestedLanguagesFor(primaryLanguage));
+
+    _extraSecondaryLanguages.removeWhere(
+      (language) => _suggestedSecondaryLanguages.any(
+        (suggested) => suggested.toLowerCase() == language.toLowerCase(),
+      ),
+    );
+
+    final display = _secondaryDisplayLanguages();
+    _selectedSecondaryLanguages.removeWhere(
+      (language) =>
+          language.toLowerCase() == primaryLanguage.toLowerCase() ||
+          !display.any(
+            (candidate) => candidate.toLowerCase() == language.toLowerCase(),
+          ),
+    );
+  }
+
+  List<String> _seekerSpokenLanguagesForPayload() {
+    final ordered = <String>[];
+    for (final language in _secondaryDisplayLanguages()) {
+      if (_selectedSecondaryLanguages.any(
+        (selected) => selected.toLowerCase() == language.toLowerCase(),
+      )) {
+        ordered.add(language);
+      }
+    }
+    return [
+      if (_selectedMotherTongue.trim().isNotEmpty) _selectedMotherTongue.trim(),
+      ...ordered,
+    ];
+  }
+
+  void _syncSelectedLanguagesFromSeekerTiers() {
+    if (_onboardingIntent != OnboardingUserIntent.seeker) return;
+    _selectedLanguages
+      ..clear()
+      ..addAll(
+        OnboardingLanguageInference.withEnglishFoundation(
+          _seekerSpokenLanguagesForPayload(),
+        ),
+      );
   }
 
   @override
   void dispose() {
-    profileStateNotifier.endEditing();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      profileStateNotifier.endEditing();
+    });
     _nameController.removeListener(_onPassportFieldChanged);
     _locationController.removeListener(_onPassportFieldChanged);
     _propertyLocationController.removeListener(_onPassportFieldChanged);
     _propertyEircodeController.removeListener(_onPassportFieldChanged);
+    _budgetMaxController.removeListener(_onPassportFieldChanged);
     _emailController.dispose();
     _nameController.dispose();
     _contactPhoneController.dispose();
@@ -709,7 +863,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         'budget_min': int.tryParse(_budgetMinController.text.trim()),
       if (_budgetMaxController.text.trim().isNotEmpty)
         'budget_max': int.tryParse(_budgetMaxController.text.trim()),
-      'occupant_type': _resolvedOccupantType,
+      'occupant_type': _seekerPersona?.occupantType ?? _resolvedOccupantType,
       if (_agencyController.text.trim().isNotEmpty)
         'agency_name': _agencyController.text.trim(),
       if (_selectedOccupantType == 'Family') ...{
@@ -725,49 +879,85 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     };
   }
 
-  Widget _buildCompletionHeader() {
-    final draft = _draftSession();
-    final percent = ProfileData.calculateProfileCompletionPercentage(draft);
-    final missing = ProfileData.missingFieldsForCompletion(draft);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: OnboardingTokens.progressCoral,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFECDD3)),
+  Map<String, dynamic> _passportPreviewSession() {
+    final session = {
+      ..._draftSession(),
+      'onboarding_intent': _onboardingIntent.storageToken,
+      'profile_onboarding_track': _selectedTrack.storageToken,
+      ...ProfileSeekerPreferences.persistFields(
+        preferredArrangement: preferredArrangement,
+        preferredLayout: _resolvedPreferredLayout,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Profile $percent% complete',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-              color: Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Complete identity, commute, and search preferences to reach 100%.',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: OnboardingTokens.subtitleColor,
-            ),
-          ),
-          if (missing.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Still needed: ${missing.take(3).join(', ')}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFFBE123C),
-              ),
-            ),
-          ],
-        ],
+      ..._seekerPersonaPayloadFields(),
+      ..._seekerLocationPayloadFields(),
+      ..._guarantorPayloadFields(),
+      ..._moveInPayloadFields(),
+      if (_scheduleType != null) 'schedule_type': _scheduleType,
+      if (ProfileSeekerPreferences.isSharedRoom(preferredArrangement)) ...{
+        ..._sharedRoomPayloadFields(),
+        'smoking_ok': _smokingOk,
+        'drinking_ok': _drinkingOk,
+        if (_selectedGenderPref != null) 'gender_preference': _selectedGenderPref,
+      },
+      if (_preferredLeaseMonths != null)
+        'preferred_lease_months': _preferredLeaseMonths,
+    };
+    if (!_hasSetFoodPreference) {
+      session.remove('food_preference');
+    }
+    if (!_hasSetMoveInWindow) {
+      session
+        ..remove('earliest_move_in_date')
+        ..remove('move_in_window')
+        ..remove('move_in_timing_version');
+    }
+    return session;
+  }
+
+  String _passportPreviewFingerprint() {
+    final session = _passportPreviewSession();
+    final languages = ProfileData.languageList(session['spoken_languages']);
+    final preferred = ProfileData.languageList(
+      session['preferred_spoken_languages'],
+    );
+    return [
+      ProfileData.text(session['full_name']),
+      ProfileData.text(session['profile_onboarding_track']),
+      ProfileData.text(session['seeker_persona']),
+      ProfileData.text(session['dublin_location_context']),
+      ProfileData.text(session['guarantor_status']),
+      session['budget_max']?.toString() ?? '',
+      _moveInWindow?.storageToken ?? '',
+      ProfileData.text(session['food_preference']),
+      ProfileData.text(session['schedule_type']),
+      ProfileData.text(session['commute_destination']),
+      ProfileData.text(session['commute_destination_hub_id']),
+      session['commute_destination_unknown']?.toString() ?? '',
+      session['maximum_commute_budget_minutes']?.toString() ?? '',
+      languages.join(','),
+      preferred.join(','),
+    ].join('|');
+  }
+
+  Widget _buildPassportPreviewPane() {
+    // #region agent log
+    agentLog(
+      'H4',
+      'profile_edit_screen.dart:_buildPassportPreviewPane',
+      'passport preview pane build',
+      {'currentPage': _currentPage},
+    );
+    // #endregion
+
+    final session = _passportPreviewSession();
+    final snapshot = ContextualPassportSnapshot.fromSession(session);
+    return OnboardingPanelFrame(
+      maxWidth: OnboardingTokens.passportWidth,
+      child: ContextualPassportCard(
+        key: ValueKey(_passportPreviewFingerprint()),
+        snapshot: snapshot,
+        omitOuterFrame: true,
+        useOnboardingSeekerPreview: true,
       ),
     );
   }
@@ -981,6 +1171,18 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Map<String, dynamic> _commutePayloadFields() {
+    if (_commuteDestinationUnknown) {
+      return {
+        'commute_destination_unknown': true,
+        'commute_destination': '',
+        'primary_commute_destination': '',
+        'commute_destination_hub_id': '',
+        'destination_latitude': null,
+        'destination_longitude': null,
+        'commute_profiles': <Map<String, dynamic>>[],
+      };
+    }
+
     final profiles = <CommuteProfileEntry>[];
     final profileMaps = <Map<String, dynamic>>[];
     final perProfileMax = <String, int>{};
@@ -1019,6 +1221,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         : perProfileMax.values.reduce((a, b) => a > b ? a : b);
 
     return {
+      'commute_destination_unknown': false,
       'maximum_commute_budget_minutes': worstCaseMax,
       'dual_commute_priority': 'balanced',
       'household_commuters_count': _householdCommutersCount,
@@ -1040,8 +1243,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   Map<String, dynamic> _sharedRoomPayloadFields() {
     return {
-      'food_preference':
-          ProfileSeekerPreferences.sharedFoodToBackend(_sharedFoodPref),
+      if (_hasSetFoodPreference)
+        'food_preference':
+            ProfileSeekerPreferences.sharedFoodToBackend(_sharedFoodPref),
       if (_preferredSpokenLanguages.isNotEmpty) ...{
         'preferred_spoken_languages':
             List<String>.from(_preferredSpokenLanguages),
@@ -1187,8 +1391,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Map<String, dynamic> _spokenLanguageSessionFields() {
+    final languages = _onboardingIntent == OnboardingUserIntent.seeker
+        ? _seekerSpokenLanguagesForPayload()
+        : _selectedLanguages;
     final entries = [
-      for (final language in _selectedLanguages)
+      for (final language in languages)
         SpokenLanguageEntry(
           language: language,
           isNative: language == _selectedMotherTongue ||
@@ -1203,6 +1410,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   ProfileInheritanceSnapshot _buildTrackSnapshot() {
+    if (_onboardingIntent == OnboardingUserIntent.provider) {
+      return ProfileInheritanceSnapshot(
+        track: _selectedTrack,
+        identityProfile: IdentityProfile(
+          email: _emailController.text.trim(),
+          fullName: _nameController.text.trim(),
+        ),
+        seekerProfile: const SeekerProfile(),
+        hostProfile: const HostProfile(),
+        listingSeed: ListingSeed(
+          listingMode:
+              _selectedTrack.isSharedSpace ? 'shared_space' : 'entire_place',
+        ),
+      );
+    }
+
     final hostLanguages = _dedupedSpokenLanguages();
     final seekerBudget = int.tryParse(_budgetMaxController.text.trim());
     final hostHousehold = <String, dynamic>{
@@ -1229,9 +1452,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         roomBudget: _selectedTrack == ProfileOnboardingTrack.seekerSharedSpace
             ? seekerBudget
             : null,
-        moveInWindow: _earliestMoveInController.text.trim(),
+        moveInWindow: _moveInWindow?.storageToken ?? '',
         preferredLeaseMonths: _preferredLeaseMonths,
-        occupantGroupFit: _resolvedOccupantType,
+        occupantGroupFit:
+            _seekerPersona?.occupantType ?? _resolvedOccupantType,
         genderPreferences: _selectedGenderPref ?? '',
         wfhStatus: _scheduleType == null || _scheduleType == 'Flexible',
         environmentPreferences: [
@@ -1324,6 +1548,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   bool _validatePage1() {
+    if (_onboardingIntent == OnboardingUserIntent.provider) {
+      if (_nameController.text.trim().isEmpty) {
+        _showMessage('Please enter your full name.');
+        return false;
+      }
+      return true;
+    }
     if (_emailController.text.trim().isEmpty) {
       _showMessage('Please enter your email.');
       return false;
@@ -1332,54 +1563,137 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _showMessage('Please enter your full name.');
       return false;
     }
-    if (_onboardingIntent == OnboardingUserIntent.seeker) {
-      if (_resolvedCity().isEmpty) {
-        _showMessage('Please set your current location / base.');
-        return false;
-      }
-    } else if (!_providerLocationIsSet()) {
-      _showMessage('Enter your property Eircode or a location identifier.');
+    return true;
+  }
+
+  bool _validateSeekerBasics() {
+    if (_emailController.text.trim().isEmpty) {
+      _showMessage('Please enter your email.');
       return false;
     }
-    if (_selectedLanguages.isEmpty) {
-      _showMessage('Select at least one language.');
+    if (!onboardingEmailRegex.hasMatch(_emailController.text.trim())) {
+      _showMessage('Please enter a valid email address.');
+      return false;
+    }
+    if (_nameController.text.trim().isEmpty) {
+      _showMessage('Please enter your full name.');
+      return false;
+    }
+    if (_seekerPersona == null) {
+      _showMessage('Select what best describes you.');
+      return false;
+    }
+    if (_selectedMotherTongue.trim().isEmpty) {
+      _showMessage('Select your native/primary language.');
       return false;
     }
     return true;
   }
 
-  bool _validateSeekerHousingPage() {
+  bool _validateSeekerPreferences() {
     final budget = int.tryParse(_budgetMaxController.text.trim());
     if (budget == null || budget <= 0) {
       _showMessage('Enter your maximum monthly budget.');
       return false;
     }
-    if (_householdCommutersCount < 1) {
-      _showMessage('Tell us how many people in your household commute.');
+    if (_dublinLocationContext == null) {
+      _showMessage('Tell us whether you are already in Dublin or arriving soon.');
       return false;
     }
     return true;
   }
 
-  bool _validateSeekerCommutePage() {
-    final configured = _commuterDrafts
-        .take(_commuterSlotCount)
-        .where((draft) => draft.hub != null)
-        .length;
-    if (configured < _commuterSlotCount) {
+  bool _validateSeekerDestination() {
+    final hasHub =
+        _commuterDrafts.isNotEmpty && _commuterDrafts.first.hub != null;
+    if (!_commuteDestinationUnknown && !hasHub) {
       _showMessage(
-        _commuterSlotCount == 1
-            ? 'Set your commute destination.'
-            : 'Set both priority commute destinations.',
+        'Set your main daily destination or choose Not sure yet.',
       );
       return false;
     }
+    if (_seekerPersona?.requiresGuarantorQuestion == true &&
+        _guarantorStatus == null) {
+      _showMessage('Let us know about your Irish guarantor status.');
+      return false;
+    }
+    if (!_hasSetMoveInWindow || _moveInWindow == null) {
+      _showMessage('Select when you want to move in.');
+      return false;
+    }
     return true;
+  }
+
+  void _setMoveInWindow(SeekerMoveInWindow window) {
+    setState(() {
+      _hasSetMoveInWindow = true;
+      _moveInWindow = window;
+    });
+  }
+
+  void _selectSeekerEntirePlace() {
+    setState(() {
+      preferredArrangement = ProfileSeekerPreferences.entirePlaceLabel;
+      _familySharedLivingTip = null;
+    });
+  }
+
+  void _selectSeekerSharedSpace() {
+    setState(() {
+      if (_seekerPersona == SeekerPersona.family) {
+        preferredArrangement = ProfileSeekerPreferences.entirePlaceLabel;
+        _familySharedLivingTip = _familySharedLivingTipMessage;
+      } else {
+        preferredArrangement = ProfileSeekerPreferences.sharedRoomLabel;
+        _familySharedLivingTip = null;
+      }
+    });
+  }
+
+  void _onSeekerStepTap(int step) {
+    if (step >= _currentPage) return;
+    _goToPage(step);
   }
 
   void _goToPage(int page) {
     if (page < 0 || page >= _pageCount) return;
-    setState(() => _currentPage = page);
+    setState(() {
+      _pageTransitionDirection = page > _currentPage ? 1 : -1;
+      _currentPage = page;
+    });
+  }
+
+  void _applySeekerPersona(SeekerPersona persona) {
+    setState(() {
+      _seekerPersona = persona;
+      _selectedOccupantType = persona.occupantType;
+      if (!persona.requiresGuarantorQuestion) {
+        _guarantorStatus = null;
+      } else {
+        _guarantorStatus ??= GuarantorStatus.notSureYet;
+      }
+      if (persona == SeekerPersona.student) {
+        _selectedStudentType ??= _studentFundingOptions.first;
+      }
+      if (persona == SeekerPersona.family &&
+          ProfileSeekerPreferences.isSharedRoom(preferredArrangement)) {
+        preferredArrangement = ProfileSeekerPreferences.entirePlaceLabel;
+        _familySharedLivingTip = _familySharedLivingTipMessage;
+      } else if (persona != SeekerPersona.family) {
+        _familySharedLivingTip = null;
+      }
+    });
+  }
+
+  Map<String, dynamic> _seekerPersonaPayloadFields() {
+    final persona = _seekerPersona;
+    if (persona == null) return {};
+    return {
+      'seeker_persona': persona.storageToken,
+      'occupant_type': persona.occupantType,
+      if (persona == SeekerPersona.student && _selectedStudentType != null)
+        'student_type': _selectedStudentType,
+    };
   }
 
   void _onOnboardingBack() {
@@ -1391,36 +1705,35 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       context.pop();
       return;
     }
-    context.go('/');
+    context.go('/welcome');
   }
 
   String get _onboardingBackTooltip => switch (_currentPage) {
         0 => 'Exit profile setup',
-        1 => 'Back to profile details',
-        _ => 'Back to housing preferences',
+        1 => 'Back to basics',
+        2 => 'Back to preferences',
+        _ => 'Back',
       };
 
   bool _validate() {
+    if (_onboardingIntent == OnboardingUserIntent.seeker) {
+      return _validateSeekerBasics() &&
+          _validateSeekerPreferences() &&
+          _validateSeekerDestination();
+    }
+    if (_onboardingIntent == OnboardingUserIntent.provider) {
+      if (_nameController.text.trim().isEmpty) {
+        _showMessage('Please enter your full name.');
+        return false;
+      }
+      return true;
+    }
     if (_emailController.text.trim().isEmpty) {
       _showMessage('Please enter your email.');
       return false;
     }
     if (_nameController.text.trim().isEmpty) {
       _showMessage('Please enter your full name.');
-      return false;
-    }
-    if (_onboardingIntent == OnboardingUserIntent.seeker &&
-        _resolvedCity().isEmpty) {
-      _showMessage('Please set your current location / base.');
-      return false;
-    }
-    if (_onboardingIntent == OnboardingUserIntent.provider &&
-        !_providerLocationIsSet()) {
-      _showMessage('Enter your property Eircode or a location identifier.');
-      return false;
-    }
-    if (_selectedLanguages.isEmpty) {
-      _showMessage('Select at least one language.');
       return false;
     }
     if (_hasHapVoucher) {
@@ -1444,6 +1757,127 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     return true;
   }
 
+  Map<String, dynamic> _seekerLocationPayloadFields() {
+    final context = _dublinLocationContext;
+    if (context == DublinLocationContext.alreadyInDublin) {
+      return {
+        'dublin_location_context':
+            DublinLocationContext.alreadyInDublin.storageToken,
+        'detected_city': 'Dublin',
+        'pre_arrival_seeker': false,
+      };
+    }
+    if (context == DublinLocationContext.arrivingSoon) {
+      return {
+        'dublin_location_context':
+            DublinLocationContext.arrivingSoon.storageToken,
+        'pre_arrival_seeker': true,
+      };
+    }
+    return {};
+  }
+
+  Map<String, dynamic> _guarantorPayloadFields() {
+    if (_seekerPersona?.requiresGuarantorQuestion != true) {
+      return {};
+    }
+    return switch (_guarantorStatus) {
+      GuarantorStatus.yes => {
+          'guarantor_status': 'yes',
+          'has_guarantor': true,
+          'has_verified_guarantor': false,
+        },
+      GuarantorStatus.no => {
+          'guarantor_status': 'no',
+          'has_guarantor': false,
+        },
+      GuarantorStatus.notSureYet => {
+          'guarantor_status': 'not_sure_yet',
+          'has_guarantor': false,
+        },
+      null => <String, dynamic>{},
+    };
+  }
+
+  Map<String, dynamic> _moveInPayloadFields() {
+    if (!_hasSetMoveInWindow || _moveInWindow == null) return {};
+    return MoveInTimingMigration.seekerPayload(_moveInWindow!);
+  }
+
+  void _onSeekerPrimaryLanguageChanged(String value) {
+    setState(() {
+      _selectedMotherTongue = value;
+      _languageNativeFlags[value] = true;
+      _refreshSuggestedSecondaryLanguages(value);
+      _syncSelectedLanguagesFromSeekerTiers();
+    });
+  }
+
+  void _toggleSeekerSecondaryLanguage(String language) {
+    setState(() {
+      if (_selectedMotherTongue.toLowerCase() == language.toLowerCase()) {
+        return;
+      }
+      final existing = _selectedSecondaryLanguages.where(
+        (selected) => selected.toLowerCase() == language.toLowerCase(),
+      );
+      if (existing.isNotEmpty) {
+        _selectedSecondaryLanguages.remove(existing.first);
+      } else {
+        _selectedSecondaryLanguages.add(language);
+      }
+      _syncSelectedLanguagesFromSeekerTiers();
+    });
+  }
+
+  void _addSeekerSecondaryLanguage(String language) {
+    setState(() {
+      if (_selectedMotherTongue.toLowerCase() == language.toLowerCase()) {
+        return;
+      }
+      final inSuggested = _suggestedSecondaryLanguages.any(
+        (suggested) => suggested.toLowerCase() == language.toLowerCase(),
+      );
+      if (!inSuggested &&
+          !_extraSecondaryLanguages.any(
+            (extra) => extra.toLowerCase() == language.toLowerCase(),
+          )) {
+        _extraSecondaryLanguages.add(language);
+      }
+      _selectedSecondaryLanguages.add(language);
+      _syncSelectedLanguagesFromSeekerTiers();
+    });
+  }
+
+  Map<String, dynamic> _buildProviderOnboardingPayload() {
+    final baseline = Map<String, dynamic>.from(
+      _baselineProfile ?? AuthScreen.currentUserSession ?? {},
+    );
+    final listingMode =
+        _selectedTrack.isSharedSpace ? 'shared_space' : 'entire_place';
+    final fullName = _nameController.text.trim();
+
+    var payload = {
+      ...baseline,
+      'full_name': fullName,
+      'onboarding_intent': OnboardingUserIntent.provider.storageToken,
+      'profile_onboarding_track': _selectedTrack.storageToken,
+      'active_marketplace_space':
+          MarketplaceContextNotifier.spaceFromOnboardingTrack(_selectedTrack)
+              .storageToken,
+      'host_profile_complete': true,
+      'listingSeed_listingMode': listingMode,
+      'identityProfile': {
+        'email': ProfileData.text(baseline['email']),
+        'fullName': fullName,
+      },
+      'listingSeed': {
+        'listingMode': listingMode,
+      },
+    };
+    return ApplicantSessionSync.enrich(payload);
+  }
+
   Map<String, dynamic> _buildPayload() {
     final baseline = _baselineProfile ?? <String, dynamic>{};
     var payload = {
@@ -1459,17 +1893,25 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               .storageToken,
       if (_agencyController.text.trim().isNotEmpty)
         'agency_name': _agencyController.text.trim(),
-      'detected_city': _resolvedCity(),
+      if (_onboardingIntent == OnboardingUserIntent.seeker)
+        ..._seekerLocationPayloadFields()
+      else
+        'detected_city': _resolvedCity(),
       'native_place': _nativePlaceController.text.trim(),
       ..._spokenLanguageSessionFields(),
       ..._commutePayloadFields(),
+      if (_onboardingIntent == OnboardingUserIntent.seeker) ...{
+        ..._seekerPersonaPayloadFields(),
+        ..._guarantorPayloadFields(),
+        ..._moveInPayloadFields(),
+      },
       ...ProfileSeekerPreferences.persistFields(
         preferredArrangement: preferredArrangement,
         preferredLayout: _resolvedPreferredLayout,
       ),
       if (ProfileSeekerPreferences.isSharedRoom(preferredArrangement))
         ..._sharedRoomPayloadFields(),
-      'occupant_type': _resolvedOccupantType,
+      'occupant_type': _seekerPersona?.occupantType ?? _resolvedOccupantType,
       if (_selectedGenderPref != null) 'gender_preference': _selectedGenderPref,
       if (_selectedStudentType != null) 'student_type': _selectedStudentType,
       if (_selectedOccupantType == 'Family') ...{
@@ -1501,8 +1943,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             double.tryParse(_partnerNetMonthlyIncomeController.text.trim()),
       if (_preferredLeaseMonths != null)
         'preferred_lease_months': _preferredLeaseMonths,
-      if (_earliestMoveInController.text.trim().isNotEmpty)
-        'earliest_move_in_date': _earliestMoveInController.text.trim(),
+      if (_hasSetMoveInWindow && _moveInWindow != null)
+        ...MoveInTimingMigration.seekerPayload(_moveInWindow!),
       'has_hap_voucher': _hasHapVoucher,
       'hap_uplift_approved': _hapUpliftApproved,
       if (_hapVoucherContributionController.text.trim().isNotEmpty)
@@ -1513,27 +1955,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       'household_smoker': _householdSmoker,
       'onboarding_intent': _onboardingIntent.storageToken,
       'profile_onboarding_track': _selectedTrack.storageToken,
-      if (_onboardingIntent == OnboardingUserIntent.provider) ...{
-        'pending_listing_location': _resolvedPropertyNeighborhood(),
-        'pending_listing_eircode': _hidePropertyExactAddress
-            ? ''
-            : EircodeGeocodingService.normalize(_propertyEircodeController.text),
-        'property_location_identifier':
-            _hidePropertyExactAddress
-                ? ''
-                : _propertyLocationIdentifierController.text.trim(),
-        AddressPrivacy.hideExactAddressKey: _hidePropertyExactAddress,
-        if (_hidePropertyExactAddress && _selectedPropertyAddress != null)
-          AddressPrivacy.publicLocationKey:
-              _selectedPropertyAddress!.publicLocationLabel,
-        if (_hidePropertyExactAddress &&
-            _propertyEircodeController.text.trim().isNotEmpty)
-          AddressPrivacy.exactEircodeKey: EircodeGeocodingService.normalize(
-            _propertyEircodeController.text,
-          ),
-        'listingSeed_isFurnished': _providerIsFurnished,
-        'is_owner_occupier': _providerIsOwnerOccupier,
-      },
+      if (_onboardingIntent == OnboardingUserIntent.provider)
+        'listingSeed_listingMode':
+            _selectedTrack.isSharedSpace ? 'shared_space' : 'entire_place',
       'trust_stage': ProfileData.isMatchingReady(_draftSession()) ? 1 : 0,
       'identity_trust_tier': 'Casual_Browser',
     };
@@ -1560,56 +1984,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   Future<void> _save() async {
     if (!_validate()) return;
-    if (_onboardingIntent == OnboardingUserIntent.seeker &&
-        !_validateSeekerCommutePage()) {
-      return;
-    }
     final synced = await AuthService.persistProfileSession(_buildPayload());
     if (!mounted) return;
     setState(() {
       _baselineProfile = Map<String, dynamic>.from(synced);
     });
     if (_onboardingIntent == OnboardingUserIntent.seeker) {
-      await ViewPreferenceService.setOverride(DashboardViewMode.seeker);
       await marketplaceContextNotifier.syncSpaceFromOnboardingTrack(
         _selectedTrack,
       );
       if (!mounted) return;
       _showMessage('Profile saved — welcome to your feed.');
-      context.go('/?welcomeFeed=1');
+      await navigateAfterIdentity(context, force: true);
       return;
     }
     _showMessage('Profile updated.');
     context.go('/profile', extra: synced);
-  }
-
-  Future<void> _completeProviderOnboarding() async {
-    if (!_validatePage1()) return;
-    final payload = _buildPayload();
-    payload['onboarding_intent'] = OnboardingUserIntent.provider.storageToken;
-    payload['pending_listing_location'] = _resolvedPropertyNeighborhood();
-    payload['pending_listing_eircode'] = _hidePropertyExactAddress
-        ? ''
-        : EircodeGeocodingService.normalize(_propertyEircodeController.text);
-    payload['property_location_identifier'] = _hidePropertyExactAddress
-        ? ''
-        : _propertyLocationIdentifierController.text.trim();
-    payload[AddressPrivacy.hideExactAddressKey] = _hidePropertyExactAddress;
-    payload['host_profile_complete'] = true;
-
-    final synced = await AuthService.persistProfileSession(payload);
-    await ViewPreferenceService.setOverride(DashboardViewMode.host);
-    await marketplaceContextNotifier.syncSpaceFromOnboardingTrack(
-      _selectedTrack,
-    );
-    if (!mounted) return;
-
-    setState(() {
-      _baselineProfile = Map<String, dynamic>.from(synced);
-    });
-
-    _showMessage('Host profile saved — add your first listing when ready.');
-    context.go('/?promptFirstListing=1');
   }
 
   void _showMessage(String text) {
@@ -1620,20 +2010,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // #region agent log
-    agentLog(
-      location: 'profile_edit_screen.dart:build',
-      message: 'scaffold viewport',
-      data: {
-        'viewportH': MediaQuery.sizeOf(context).height,
-        'viewportW': MediaQuery.sizeOf(context).width,
-        'currentPage': _currentPage,
-        'hydrating': _hydrating,
-      },
-      hypothesisId: 'B',
-    );
-    // #endregion
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -1676,261 +2052,198 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF2B4C7E)),
             )
-          : Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: OnboardingTokens.gridMaxWidth,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(OnboardingTokens.gridPadding),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      GamifiedFormProgress(
-                        current: _currentPage,
-                        total: _pageCount,
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: OnboardingTokens.gridMaxWidth,
                       ),
-                      const SizedBox(height: 32),
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 220),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          child: switch (_currentPage) {
-                            0 => KeyedSubtree(
-                                key: const ValueKey('onboarding-step-1'),
-                                child: _buildPage1Grid(),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          OnboardingTokens.gridPadding,
+                          32,
+                          OnboardingTokens.gridPadding,
+                          16,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: OnboardingTokens.contentMaxWidth,
+                                ),
+                                child: SeekerOnboardingStepTracker(
+                                  current: _currentPage,
+                                  onStepTap: _onSeekerStepTap,
+                                ),
                               ),
-                            1 when _onboardingIntent ==
-                                OnboardingUserIntent.seeker =>
-                              KeyedSubtree(
-                                key: const ValueKey('onboarding-step-2'),
-                                child: _buildSeekerHousingPageGrid(),
+                            ),
+                            const SizedBox(height: 20),
+                            Expanded(
+                              child: OnboardingGridShell(
+                                leftPane: OnboardingPanelFrame(
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 220),
+                                    switchInCurve: Curves.easeOutCubic,
+                                    switchOutCurve: Curves.easeInCubic,
+                                    transitionBuilder: (child, animation) {
+                                      final begin = _pageTransitionDirection >= 0
+                                          ? const Offset(0.06, 0)
+                                          : const Offset(-0.06, 0);
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: begin,
+                                            end: Offset.zero,
+                                          ).animate(animation),
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                                    child: KeyedSubtree(
+                                      key: ValueKey('seeker-step-$_currentPage'),
+                                      child: _buildSeekerPage(_currentPage),
+                                    ),
+                                  ),
+                                ),
+                                rightPane: _buildPassportPreviewPane(),
                               ),
-                            2 => KeyedSubtree(
-                                key: const ValueKey('onboarding-step-3'),
-                                child: _buildSeekerCommutePageGrid(),
-                              ),
-                            _ => KeyedSubtree(
-                                key: const ValueKey('onboarding-step-2'),
-                                child: _buildPage2Grid(),
-                              ),
-                          },
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 32),
-                      _buildNavBar(),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+                _buildSeekerNavBar(),
+              ],
             ),
       ),
     );
   }
 
-  bool get _showOnboardingIntentSplitter => _currentPage == 0;
+  void _handleSeekerNext() {
+    switch (_currentPage) {
+      case 0:
+        if (_validateSeekerBasics()) _goToPage(1);
+      case 1:
+        if (!_validateSeekerPreferences()) return;
+        _goToPage(2);
+      default:
+        break;
+    }
+  }
 
-  Widget _buildPage1Grid() {
-    return OnboardingGridShell(
-      stretchRightPane: true,
-      leftPane: SingleChildScrollView(
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: OnboardingTokens.leftPaneMaxWidth,
-            ),
-            child: _buildPage1FormContent(),
+  Widget _buildSeekerNavBar() {
+    return GamifiedFormNavBar(
+      floating: true,
+      showBack: _currentPage > 0,
+      showNext: _currentPage < _pageCount - 1,
+      showSubmit: _currentPage == _pageCount - 1,
+      nextLabel: 'Continue →',
+      submitLabel: 'Save & find matches',
+      onBack: () => _goToPage(_currentPage - 1),
+      onNext: _handleSeekerNext,
+      onSubmit: _save,
+    );
+  }
+
+  Widget _buildSeekerPage(int page) {
+    // #region agent log
+    agentLog(
+      page == 0 ? 'H3' : (page == 1 ? 'H2' : 'H5'),
+      'profile_edit_screen.dart:_buildSeekerPage',
+      'seeker page build',
+      {'page': page},
+    );
+    // #endregion
+
+    switch (page) {
+      case 0:
+        return SeekerOnboardingBasicsScreen(
+          emailController: _emailController,
+          nameController: _nameController,
+          isSharedTrack: ProfileSeekerPreferences.isSharedRoom(
+            preferredArrangement,
           ),
-        ),
-      ),
-      rightPane: ColoredBox(
-        color: OnboardingTokens.panelTint,
-        child: Center(child: _buildPassportPreview()),
-      ),
-    );
-  }
-
-  Widget _buildPage2Grid() {
-    return OnboardingGridShell(
-      leftPane: SingleChildScrollView(
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: OnboardingTokens.leftPaneMaxWidth,
-            ),
-            child: _buildPage2LeftStack(),
+          onSelectEntirePlace: _selectSeekerEntirePlace,
+          onSelectSharedSpace: _selectSeekerSharedSpace,
+          persona: _seekerPersona,
+          onPersonaChanged: _applySeekerPersona,
+          familySharedLivingTip: _familySharedLivingTip,
+          primaryLanguage: _selectedMotherTongue,
+          onPrimaryLanguageChanged: _onSeekerPrimaryLanguageChanged,
+          suggestedLanguages: _secondaryDisplayLanguages(),
+          selectedSecondaryLanguages: _selectedSecondaryLanguages,
+          onToggleSecondaryLanguage: _toggleSeekerSecondaryLanguage,
+          onAddSecondaryLanguage: _addSeekerSecondaryLanguage,
+        );
+      case 1:
+        return SeekerOnboardingPreferencesScreen(
+          budgetController: _budgetMaxController,
+          isSharedTrack: ProfileSeekerPreferences.isSharedRoom(
+            preferredArrangement,
           ),
-        ),
-      ),
-      rightPane: ColoredBox(
-        color: OnboardingTokens.panelTint,
-        child: Center(child: _buildPassportPreview()),
-      ),
-    );
-  }
-
-  Widget _buildSeekerHousingPageGrid() {
-    return OnboardingGridShell(
-      leftPane: SingleChildScrollView(
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: OnboardingTokens.leftPaneMaxWidth,
-            ),
-            child: _buildSeekerHousingPageStack(),
-          ),
-        ),
-      ),
-      rightPane: ColoredBox(
-        color: OnboardingTokens.panelTint,
-        child: Center(child: _buildPassportPreview()),
-      ),
-    );
-  }
-
-  Widget _buildSeekerCommutePageGrid() {
-    return OnboardingGridShell(
-      leftPane: SingleChildScrollView(
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: OnboardingTokens.leftPaneMaxWidth,
-            ),
-            child: _buildSeekerCommutePageStack(),
-          ),
-        ),
-      ),
-      rightPane: ColoredBox(
-        color: OnboardingTokens.panelTint,
-        child: Center(child: _buildPassportPreview()),
-      ),
-    );
-  }
-
-  Widget _buildNavBar() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: OnboardingTokens.leftPaneMaxWidth,
-        ),
-        child: Row(
-          children: [
-            if (_currentPage == 0 &&
-                _onboardingIntent == OnboardingUserIntent.seeker)
-              FilledButton(
-                onPressed: () {
-                  if (_validatePage1()) _goToPage(1);
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 14,
-                  ),
-                  minimumSize: const Size(220, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Next: Set Match Preferences →',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
-              ),
-            if (_currentPage == 0 &&
-                _onboardingIntent == OnboardingUserIntent.provider)
-              FilledButton(
-                onPressed: _completeProviderOnboarding,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 14,
-                  ),
-                  minimumSize: const Size(220, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Save host profile →',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
-              ),
-            if (_currentPage == 1 &&
-                _onboardingIntent == OnboardingUserIntent.seeker)
-              FilledButton(
-                onPressed: () {
-                  if (!_validateSeekerHousingPage()) return;
-                  setState(_syncPreferredRoommateLanguagesFromIdentity);
-                  _goToPage(2);
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 14,
-                  ),
-                  minimumSize: const Size(220, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Next: Commute & finalize →',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
-              ),
-            if (_currentPage == 2 &&
-                _onboardingIntent == OnboardingUserIntent.seeker)
-              FilledButton(
-                onPressed: _save,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 14,
-                  ),
-                  minimumSize: const Size(180, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Save changes',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
-              ),
-            if (_currentPage == 1 &&
-                _onboardingIntent != OnboardingUserIntent.seeker)
-              FilledButton(
-                onPressed: _save,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 14,
-                  ),
-                  minimumSize: const Size(180, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Save changes',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
+          locationContext: _dublinLocationContext,
+          onLocationContextChanged: (v) =>
+              setState(() => _dublinLocationContext = v),
+        );
+      case 2:
+        final draft = _commuterDrafts.isNotEmpty
+            ? _commuterDrafts.first
+            : _CommuterDraftEntry();
+        final commuteMinutes = SeekerCommuteTimeOptions.snap(
+          draft.maxCommuteMinutes,
+        );
+        return SeekerOnboardingDestinationScreen(
+          persona: _seekerPersona,
+          selectedHub: draft.hub,
+          commuteDestinationUnknown: _commuteDestinationUnknown,
+          maxCommuteMinutes: commuteMinutes,
+          onHubSelected: (hub) => setState(() {
+            _commuteDestinationUnknown = false;
+            if (_commuterDrafts.isEmpty) {
+              _commuterDrafts.add(_CommuterDraftEntry(hub: hub));
+            } else {
+              _commuterDrafts.first.hub = hub;
+            }
+          }),
+          onHubCleared: () => setState(() {
+            _commuteDestinationUnknown = false;
+            if (_commuterDrafts.isNotEmpty) {
+              _commuterDrafts.first.hub = null;
+            }
+          }),
+          onCommuteDestinationUnknown: () => setState(() {
+            _commuteDestinationUnknown = true;
+            if (_commuterDrafts.isNotEmpty) {
+              _commuterDrafts.first.hub = null;
+            }
+          }),
+          onCommuteMinutesChanged: (v) => setState(() {
+            if (_commuterDrafts.isEmpty) {
+              _commuterDrafts.add(
+                _CommuterDraftEntry(maxCommuteMinutes: v.toDouble()),
+              );
+            } else {
+              _commuterDrafts.first.maxCommuteMinutes = v.toDouble();
+            }
+            _maxCommuteBudgetMinutes = v.toDouble();
+          }),
+          moveInWindow: _hasSetMoveInWindow ? _moveInWindow : null,
+          onMoveInWindowChanged: _setMoveInWindow,
+          guarantorStatus: _guarantorStatus,
+          onGuarantorChanged: (v) => setState(() => _guarantorStatus = v),
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildSeekerHousingPageStack() {
@@ -2065,31 +2378,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
-  Widget _buildPassportPreview() {
-    final languages = _dedupedSpokenLanguages();
-    final isProvider = _onboardingIntent == OnboardingUserIntent.provider;
-    return ValueListenableBuilder<TextEditingValue>(
-      valueListenable: _nameController,
-      builder: (context, nameValue, _) {
-        return PassportPreviewCard(
-          displayName: nameValue.text.trim(),
-          location: isProvider
-              ? ''
-              : _resolvedPassportLocation(),
-          languages: languages,
-          isProvider: isProvider,
-        );
-      },
-    );
-  }
-
   List<String> _dedupedSpokenLanguages() {
+    final source = _onboardingIntent == OnboardingUserIntent.seeker
+        ? _seekerSpokenLanguagesForPayload()
+        : [
+            _selectedMotherTongue,
+            ..._selectedLanguages,
+          ];
     final seen = <String>{};
     final result = <String>[];
-    for (final language in [
-      _selectedMotherTongue,
-      ..._selectedLanguages,
-    ]) {
+    for (final language in source) {
       final token = language.trim();
       if (token.isEmpty) continue;
       if (seen.add(token.toLowerCase())) result.add(token);
@@ -2102,346 +2400,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       return _locationSelectValue;
     }
     return _formatLocationDisplay(_locationController.text.trim());
-  }
-
-  Widget _buildTrackModeSelector() {
-    final isProvider = _onboardingIntent == OnboardingUserIntent.provider;
-    final isShared = isProvider
-        ? _providerSharedSpace
-        : ProfileSeekerPreferences.isSharedRoom(preferredArrangement);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Space track',
-          style: OnboardingTokens.sectionLabelStyle,
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: OnboardingTokens.chipSpacing,
-          runSpacing: OnboardingTokens.chipSpacing,
-          children: [
-            FilterChip(
-              label: const Text('🏠 Entire Place'),
-              selected: !isShared,
-              onSelected: (_) => setState(() {
-                if (isProvider) {
-                  _providerSharedSpace = false;
-                } else {
-                  preferredArrangement =
-                      ProfileSeekerPreferences.entirePlaceLabel;
-                }
-              }),
-              selectedColor: const Color(0xFF0F172A),
-              checkmarkColor: Colors.white,
-              labelStyle: TextStyle(
-                color: !isShared ? Colors.white : const Color(0xFF334155),
-                fontWeight: !isShared ? FontWeight.w600 : FontWeight.w500,
-              ),
-              backgroundColor: OnboardingTokens.chipUnselected,
-              side: BorderSide(
-                color: !isShared
-                    ? const Color(0xFF0F172A)
-                    : OnboardingTokens.inputBorder,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            FilterChip(
-              label: Text(
-                isProvider ? '🛏️ Shared Space' : '🛏️ Shared Space',
-              ),
-              selected: isShared,
-              onSelected: (_) => setState(() {
-                if (isProvider) {
-                  _providerSharedSpace = true;
-                } else {
-                  preferredArrangement =
-                      ProfileSeekerPreferences.sharedRoomLabel;
-                }
-              }),
-              selectedColor: const Color(0xFF0F172A),
-              checkmarkColor: Colors.white,
-              labelStyle: TextStyle(
-                color: isShared ? Colors.white : const Color(0xFF334155),
-                fontWeight: isShared ? FontWeight.w600 : FontWeight.w500,
-              ),
-              backgroundColor: OnboardingTokens.chipUnselected,
-              side: BorderSide(
-                color: isShared
-                    ? const Color(0xFF0F172A)
-                    : OnboardingTokens.inputBorder,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPage1FormContent() {
-    final isSeeker = _onboardingIntent == OnboardingUserIntent.seeker;
-    final isProvider = !isSeeker;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Let\'s get to know you',
-          style: OnboardingTokens.pageTitleStyle,
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Set up your core profile details to help find your ideal match.',
-          style: OnboardingTokens.pageSubtitleStyle,
-        ),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        if (_showOnboardingIntentSplitter) ...[
-          OnboardingIntentSplitter(
-            selected: _onboardingIntent,
-            onChanged: (intent) => setState(() => _onboardingIntent = intent),
-          ),
-          const SizedBox(height: OnboardingTokens.fieldSpacing),
-          _buildTrackModeSelector(),
-          const SizedBox(height: OnboardingTokens.fieldSpacing),
-        ],
-        _buildCompletionHeader(),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        _premiumTextField(
-          _emailController,
-          label: '✉️ Email',
-          hint: 'you@company.com',
-        ),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        _premiumTextField(
-          _nameController,
-          label: '📝 Full name',
-          hint: 'As on your ID',
-          onChanged: () => setState(() {}),
-        ),
-        if (isProvider) ...[
-          const SizedBox(height: OnboardingTokens.fieldSpacing),
-          const Text(
-            '📞 Contact phone (optional)',
-            style: OnboardingTokens.sectionLabelStyle,
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Shared with shortlisted applicants only — not shown on listings.',
-            style: TextStyle(
-              fontSize: 12,
-              color: OnboardingTokens.subtitleColor,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 96,
-                child: ShadcnSelect(
-                  label: 'Code',
-                  value: _phoneCountryCode,
-                  options: PhoneE164.commonCountryCodes,
-                  onChanged: (v) => setState(() => _phoneCountryCode = v),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _premiumTextField(
-                  _contactPhoneController,
-                  label: 'Phone number',
-                  hint: '851234567',
-                  keyboardType: TextInputType.phone,
-                ),
-              ),
-            ],
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Reach me on WhatsApp'),
-            subtitle: const Text('Opens WhatsApp after you shortlist an applicant'),
-            value: _prefersWhatsapp,
-            onChanged: (v) => setState(() => _prefersWhatsapp = v),
-          ),
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Text(
-              'We process contact details under our privacy policy. '
-              'Phone numbers are never shown on public listings.',
-              style: TextStyle(
-                fontSize: 11,
-                color: OnboardingTokens.subtitleColor,
-                height: 1.4,
-              ),
-            ),
-          ),
-          const SizedBox(height: OnboardingTokens.fieldSpacing),
-          _premiumTextField(
-            _agencyController,
-            label: '🏢 Agency or company name (optional)',
-            hint: 'Only if you list as a business',
-          ),
-        ],
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        if (isSeeker) ...[
-          if (MarketConfig.current.profileUseAreaPicker)
-            ShadcnSelect(
-              label: '📍 Current Location / Base',
-              value: _locationSelectValue,
-              options:
-                  MarketConfig.current.areaOptions.map((e) => e.$2).toList(),
-              onChanged: (label) {
-                setState(() {
-                  for (final (key, areaLabel)
-                      in MarketConfig.current.areaOptions) {
-                    if (areaLabel == label) {
-                      _selectedAreaKey = key;
-                      _locationController.text = areaLabel;
-                      break;
-                    }
-                  }
-                });
-              },
-            )
-          else
-            _premiumTextField(
-              _locationController,
-              label: '📍 Current Location / Base',
-              hint: 'e.g. ${MarketConfig.current.defaultProfileLocation}',
-              onChanged: () => setState(() {
-                _locationController.text = _formatLocationDisplay(
-                  _locationController.text,
-                );
-              }),
-            ),
-        ],
-        if (isProvider) ...[
-          const Text(
-            'Property address',
-            style: OnboardingTokens.sectionLabelStyle,
-          ),
-          const SizedBox(height: 8),
-          EircodeAddressField(
-            controller: _propertyAddressSearchController,
-            enabled: true,
-            selected: _selectedPropertyAddress,
-            hideExactAddress: _hidePropertyExactAddress,
-            fetchingLocation: _fetchingPropertyLocation,
-            showLocationButton: true,
-            onSelected: _onPropertyAddressSelected,
-            onHideExactAddressChanged: (v) =>
-                setState(() => _hidePropertyExactAddress = v),
-            onUseCurrentLocation: _usePropertyCurrentLocation,
-          ),
-          const SizedBox(height: OnboardingTokens.fieldSpacing),
-          if (MarketConfig.current.profileUseAreaPicker)
-            ShadcnSelect(
-              label: 'Property area (fallback)',
-              value: _providerLocationSelectValue,
-              options:
-                  MarketConfig.current.areaOptions.map((e) => e.$2).toList(),
-              onChanged: (label) {
-                setState(() {
-                  for (final (key, areaLabel)
-                      in MarketConfig.current.areaOptions) {
-                    if (areaLabel == label) {
-                      _providerAreaKey = key;
-                      _propertyLocationController.text = areaLabel;
-                      break;
-                    }
-                  }
-                });
-              },
-            ),
-          const SizedBox(height: OnboardingTokens.fieldSpacing),
-          if (_providerSharedSpace) ...[
-            _groupCard(
-              title: 'Current household composition',
-              subtitle: 'Who lives in the home now.',
-              children: [
-                _counterRow(
-                  label: 'Current housemates',
-                  value: _providerHousemateCount,
-                  min: 1,
-                  max: 12,
-                  onChanged: (v) => setState(() => _providerHousemateCount = v),
-                ),
-                SwitchListTile(
-                  title: const Text('Owner occupier'),
-                  value: _providerIsOwnerOccupier,
-                  onChanged: (v) => setState(() => _providerIsOwnerOccupier = v),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ],
-            ),
-            const SizedBox(height: OnboardingTokens.fieldSpacing),
-            _groupCard(
-              title: 'House rules',
-              subtitle: 'Defaults that will carry into your room listing.',
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final entry in const [
-                      ('🚭', 'No smoking'),
-                      ('🚫', 'No pets'),
-                      ('🥦', 'Veg kitchen'),
-                      ('🧑‍💻', 'WFH friendly'),
-                    ])
-                      GestureDetector(
-                        onTap: () => setState(() {
-                          if (_providerHouseRules.contains(entry.$2)) {
-                            _providerHouseRules.remove(entry.$2);
-                          } else {
-                            _providerHouseRules.add(entry.$2);
-                          }
-                        }),
-                        child: ListingRuleChip(
-                          emoji: entry.$1,
-                          label: entry.$2,
-                          active: _providerHouseRules.contains(entry.$2),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ] else ...[
-            _groupCard(
-              title: 'Listing defaults',
-              subtitle: 'Seeds your property form without asking twice.',
-              children: [
-                SwitchListTile(
-                  title: const Text('Property is furnished'),
-                  value: _providerIsFurnished,
-                  onChanged: (v) => setState(() => _providerIsFurnished = v),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ],
-            ),
-          ],
-        ],
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        MotherTongueTypeaheadField(
-          value: _selectedMotherTongue,
-          onChanged: _onMotherTongueChanged,
-        ),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        OnboardingSpokenLanguageChips(
-          languages: _dedupedSpokenLanguages(),
-          motherTongue: _selectedMotherTongue,
-          onRemove: _removeSpokenLanguage,
-          onAdd: _addSpokenLanguage,
-        ),
-      ],
-    );
   }
 
   Widget _buildSeekerHousingPageHeader() {
@@ -2668,7 +2626,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               return FilterChip(
                 label: Text(option),
                 selected: selected,
-                onSelected: (_) => setState(() => _sharedFoodPref = option),
+                onSelected: (_) => setState(() {
+                  _sharedFoodPref = option;
+                  _hasSetFoodPreference = true;
+                }),
                 selectedColor: AppColors.accentLight,
                 checkmarkColor: AppColors.accent,
                 labelStyle: TextStyle(
@@ -2731,7 +2692,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         _GrandVerificationGatewayEntry(
           linkedInVerified: _baselineProfile?['linkedin_verified'] == true,
           company: ProfileData.text(_baselineProfile?['company']),
-          onTap: () => VerificationGatewayBottomSheet.show(context),
+          session: _baselineProfile ?? AuthScreen.currentUserSession,
+          onTap: () => VerificationGatewayBottomSheet.show(
+            context,
+            session: _baselineProfile ?? AuthScreen.currentUserSession,
+          ),
         ),
         if (_showEnterpriseFields)
           _textField(
@@ -2869,11 +2834,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             _preferredLeaseMonths = ApplicantSessionSync.leaseMonthsFromLabel(v);
           }),
         ),
-        _textField(
-          _earliestMoveInController,
-          label: 'Earliest move-in date',
-          hint: 'YYYY-MM-DD',
-          onChanged: () => setState(() {}),
+        OnboardingFieldBlock(
+          label: 'Move-in window',
+          child: OnboardingMoveInWindowField(
+            selected: _moveInWindow,
+            onChanged: (window) => setState(() {
+              _hasSetMoveInWindow = true;
+              _moveInWindow = window;
+            }),
+          ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -3023,7 +2992,9 @@ class _CommuterDraftEntry {
     double? maxCommuteMinutes,
   })  : methodLabel =
             methodLabel ?? ProfileCommuteOptions.methodLabels.first,
-        maxCommuteMinutes = maxCommuteMinutes ?? 45;
+        maxCommuteMinutes = SeekerCommuteTimeOptions.snap(
+          maxCommuteMinutes ?? SeekerCommuteTimeOptions.defaultMinutes,
+        ).toDouble();
 
   String methodLabel;
   DublinCommuterHub? hub;
@@ -3035,17 +3006,20 @@ class _GrandVerificationGatewayEntry extends StatelessWidget {
     required this.linkedInVerified,
     required this.company,
     required this.onTap,
+    this.session,
   });
 
   final bool linkedInVerified;
   final String company;
   final VoidCallback onTap;
+  final Map<String, dynamic>? session;
 
   @override
   Widget build(BuildContext context) {
+    final recommendation = getVerificationLabel(session);
     final subtitle = linkedInVerified
-        ? 'Connected — $company · tap to manage verification paths'
-        : 'Upgrade to 👍 Grand via corporate docs or instant bank link';
+        ? 'Connected — $company · ${recommendation.suffixTag}'
+        : '${recommendation.suffixTag} · ${recommendation.pathTitle}';
 
     return Material(
       color: AppColors.surface,
@@ -3123,7 +3097,20 @@ class _GrandVerificationGatewayEntry extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         subtitle,
-                        style: AppTypography.caption.copyWith(height: 1.4),
+                        style: AppTypography.caption.copyWith(
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: AppTypography.fontFamily,
+                          fontFamilyFallback: AppTypography.emojiFontFallback,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        recommendation.description,
+                        style: AppTypography.caption.copyWith(
+                          height: 1.45,
+                          color: AppColors.secondaryText,
+                        ),
                       ),
                     ],
                   ),

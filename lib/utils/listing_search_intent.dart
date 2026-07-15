@@ -1,8 +1,10 @@
 import '../config/market/market_config.dart';
 import 'city_area_match.dart';
 import 'listing_data.dart';
+import 'rental_date_format.dart';
 import 'dublin_macro_search.dart';
 import 'target_search_areas.dart';
+import 'tower_filter_policy.dart';
 
 /// Structured filters parsed from a natural-language search query.
 class SearchIntent {
@@ -129,12 +131,23 @@ class AppliedFilterPill {
   final String label;
 }
 
+String _householdTypePillLabel(String occupantType) {
+  return switch (occupantType) {
+    'Students' => '🎓 Students',
+    'Working Professionals' => '💼 Professionals',
+    'Mixed Household' => '🌍 Mixed Household',
+    'Family' => '👨‍👩‍👧‍👦 Family',
+    _ => occupantType,
+  };
+}
+
 /// Explicit marketplace search filters (passed directly into search, not via delayed state).
 class ListingSearchFilters {
   const ListingSearchFilters({
     this.foodPreference,
     this.city,
     this.targetSearchAreas = const [],
+    this.targetSearchAreaRefinements = const [],
     this.occupantType,
     this.genderPreference,
     this.budgetMin,
@@ -142,6 +155,7 @@ class ListingSearchFilters {
     this.preferredLeaseMonths,
     this.moveInWindow,
     this.wfhFriendly,
+    this.householdLanguages = const [],
     this.keywords = const [],
   });
 
@@ -150,8 +164,11 @@ class ListingSearchFilters {
   /// Legacy single city key — prefer [targetSearchAreas] when set.
   final String? city;
 
-  /// Area tokens (`dublin4`, `ALL_DUBLIN`, …) — matches [TargetSearchAreas].
+  /// Macro area tokens (`ALL_DUBLIN`, `MACRO_*`) — area-first filter v2.
   final List<String> targetSearchAreas;
+
+  /// Optional postcode / district refinements (More Filters → Refine Area).
+  final List<String> targetSearchAreaRefinements;
 
   final String? occupantType;
   final String? genderPreference;
@@ -161,16 +178,32 @@ class ListingSearchFilters {
   final String? moveInWindow;
   final bool? wfhFriendly;
 
+  /// Shared Living — match listings with ≥1 overlapping household language.
+  final List<String> householdLanguages;
+
   /// Free-text tokens (e.g. `2bhk`, `furnished`) from the search box.
   final List<String> keywords;
 
   List<String> get effectiveAreaTokens {
     if (targetSearchAreas.isNotEmpty) {
-      return TargetSearchAreas.normalizeTokens(targetSearchAreas);
+      return TargetSearchAreas.normalizeMacroTokens(targetSearchAreas);
     }
-    if (city != null && city!.isNotEmpty) return [city!];
+    if (city != null && city!.isNotEmpty) {
+      return [TargetSearchAreas.allDublinToken];
+    }
     return const [];
   }
+
+  List<String> get effectiveAreaRefinements =>
+      TargetSearchAreas.normalizeRefinementTokens(targetSearchAreaRefinements);
+
+  ResolvedAreaSearch get resolvedAreaSearch => TargetSearchAreas.resolveSearch(
+        macroTokens: effectiveAreaTokens,
+        refinementTokens: effectiveAreaRefinements,
+      );
+
+  bool get hasAreaConstraint =>
+      !resolvedAreaSearch.isAllDublin;
 
   bool get isAllDublinMacro =>
       TargetSearchAreas.hasAllDublin(effectiveAreaTokens);
@@ -187,7 +220,8 @@ class ListingSearchFilters {
 
   bool get isEmpty =>
       foodPreference == null &&
-      effectiveAreaTokens.isEmpty &&
+      !hasAreaConstraint &&
+      effectiveAreaRefinements.isEmpty &&
       occupantType == null &&
       genderPreference == null &&
       budgetMin == null &&
@@ -195,12 +229,14 @@ class ListingSearchFilters {
       preferredLeaseMonths == null &&
       (moveInWindow == null || moveInWindow!.isEmpty) &&
       wfhFriendly == null &&
+      householdLanguages.isEmpty &&
       keywords.isEmpty;
 
   ListingSearchFilters copyWith({
     Object? foodPreference = _filterUnset,
     Object? city = _filterUnset,
     List<String>? targetSearchAreas,
+    List<String>? targetSearchAreaRefinements,
     Object? occupantType = _filterUnset,
     Object? genderPreference = _filterUnset,
     Object? budgetMin = _filterUnset,
@@ -208,6 +244,7 @@ class ListingSearchFilters {
     Object? preferredLeaseMonths = _filterUnset,
     Object? moveInWindow = _filterUnset,
     Object? wfhFriendly = _filterUnset,
+    List<String>? householdLanguages,
     List<String>? keywords,
   }) {
     return ListingSearchFilters(
@@ -216,6 +253,8 @@ class ListingSearchFilters {
           : foodPreference as String?,
       city: identical(city, _filterUnset) ? this.city : city as String?,
       targetSearchAreas: targetSearchAreas ?? this.targetSearchAreas,
+      targetSearchAreaRefinements:
+          targetSearchAreaRefinements ?? this.targetSearchAreaRefinements,
       occupantType: identical(occupantType, _filterUnset)
           ? this.occupantType
           : occupantType as String?,
@@ -235,21 +274,27 @@ class ListingSearchFilters {
       wfhFriendly: identical(wfhFriendly, _filterUnset)
           ? this.wfhFriendly
           : wfhFriendly as bool?,
+      householdLanguages: householdLanguages ?? this.householdLanguages,
       keywords: keywords ?? this.keywords,
     );
   }
 
+  /// Returns filters with tower-incompatible dimensions removed.
+  ListingSearchFilters scopedForTower(String towerPropertyType) =>
+      TowerFilterPolicy.scopeFilters(this, towerPropertyType);
+
   static String areaChipLabel(List<String> tokens) {
-    if (tokens.isEmpty) return '';
-    if (TargetSearchAreas.hasAllDublin(tokens)) {
+    if (tokens.isEmpty ||
+        TargetSearchAreas.hasAllDublin(tokens)) {
       return 'Area: ${TargetSearchAreas.allDublinLabel}';
     }
-    return 'Area: ${ListingSearchIntent.cityDisplayName(tokens.first)}';
+    return 'Area: ${TargetSearchAreas.displaySummary(tokens)}';
   }
 
   /// Human-readable active filters for the chip bar pills row.
-  List<AppliedFilterPill> appliedPills() {
+  List<AppliedFilterPill> appliedPills({String? towerPropertyType}) {
     final pills = <AppliedFilterPill>[];
+    final isShare = towerPropertyType == TowerFilterPolicy.sharedTower;
     final areaTokens = effectiveAreaTokens;
     if (areaTokens.isNotEmpty) {
       pills.add(AppliedFilterPill(
@@ -257,14 +302,36 @@ class ListingSearchFilters {
         label: areaChipLabel(areaTokens),
       ));
     }
+    if (effectiveAreaRefinements.isNotEmpty) {
+      pills.add(AppliedFilterPill(
+        id: 'area_refinement',
+        label:
+            'Refine: ${TargetSearchAreas.refinementSummary(effectiveAreaRefinements)}',
+      ));
+    }
     if (foodPreference != null) {
       pills.add(AppliedFilterPill(
         id: 'food',
-        label: foodPreference == 'veg' ? 'Veg' : 'Non-veg',
+        label: isShare
+            ? (foodPreference == 'veg' ? 'Veg pref.' : 'Non-veg pref.')
+            : (foodPreference == 'veg' ? 'Veg' : 'Non-veg'),
       ));
     }
     if (occupantType != null) {
-      pills.add(AppliedFilterPill(id: 'occupant', label: occupantType!));
+      pills.add(AppliedFilterPill(
+        id: 'occupant',
+        label: isShare
+            ? '${_householdTypePillLabel(occupantType!)} pref.'
+            : _householdTypePillLabel(occupantType!),
+      ));
+    }
+    if (householdLanguages.isNotEmpty) {
+      pills.add(AppliedFilterPill(
+        id: 'household_language',
+        label: isShare
+            ? 'Lang pref.: ${householdLanguages.join(', ')}'
+            : 'Language: ${householdLanguages.join(', ')}',
+      ));
     }
     if (genderPreference != null) {
       pills.add(AppliedFilterPill(
@@ -287,7 +354,8 @@ class ListingSearchFilters {
     if (moveInWindow != null && moveInWindow!.isNotEmpty) {
       pills.add(AppliedFilterPill(
         id: 'movein',
-        label: 'Move-in: $moveInWindow',
+        label:
+            'Move-in: ${RentalDateFormat.formatMoveInWindowDisplay(moveInWindow)}',
       ));
     }
     if (wfhFriendly == true) {
@@ -330,10 +398,20 @@ class ListingSearchFilters {
 
   ListingSearchFilters withoutPill(String pillId) {
     if (pillId == 'city') {
-      return copyWith(city: null, targetSearchAreas: const []);
+      return copyWith(
+        city: null,
+        targetSearchAreas: const [],
+        targetSearchAreaRefinements: const [],
+      );
+    }
+    if (pillId == 'area_refinement') {
+      return copyWith(targetSearchAreaRefinements: const []);
     }
     if (pillId == 'food') return copyWith(foodPreference: null);
     if (pillId == 'occupant') return copyWith(occupantType: null);
+    if (pillId == 'household_language') {
+      return copyWith(householdLanguages: const []);
+    }
     if (pillId == 'gender') return copyWith(genderPreference: null);
     if (pillId == 'budget') {
       return copyWith(budgetMin: null, budgetMax: null);
@@ -369,7 +447,13 @@ class ListingSearchFilters {
     for (final (id, label) in MarketConfig.current.dwellingFilterOptions) {
       if (id == keyword) return label;
     }
-    return null;
+    return switch (keyword) {
+      'smoking' => 'Smoking allowed',
+      'no-smoking' => 'No smoking',
+      'pets' => 'Pets allowed',
+      'no-pets' => 'No pets',
+      _ => null,
+    };
   }
 
   factory ListingSearchFilters.fromIntent(SearchIntent intent) {
@@ -385,26 +469,34 @@ class ListingSearchFilters {
   }
 
   /// Merges explicit filters with a full query parse (keywords, BHK, etc.).
-  SearchIntent toSearchIntent({String? mergeQuery}) {
+  SearchIntent toSearchIntent({
+    String? mergeQuery,
+    String? towerPropertyType,
+  }) {
     final areaTokens = effectiveAreaTokens;
     final areaCity = areaTokens.isEmpty || isAllDublinMacro
         ? null
         : areaTokens.first;
 
+    SearchIntent build(SearchIntent base) {
+      if (towerPropertyType == null) return base;
+      return TowerFilterPolicy.scopeSearchIntent(base, towerPropertyType);
+    }
+
     if (mergeQuery == null || mergeQuery.trim().isEmpty) {
-      return SearchIntent(
+      return build(SearchIntent(
         food: foodPreference,
         city: areaCity,
         occupant: occupantType,
         gender: genderPreference,
         remainingKeywords: keywords,
-      );
+      ));
     }
 
     final parsed = isAllDublinMacro
         ? const SearchIntent()
         : ListingSearchIntent.parseQuery(mergeQuery);
-    return SearchIntent(
+    return build(SearchIntent(
       food: foodPreference ?? parsed.food,
       city: isAllDublinMacro ? null : (areaCity ?? parsed.city),
       occupant: occupantType ?? parsed.occupant,
@@ -412,7 +504,7 @@ class ListingSearchFilters {
       remainingKeywords: isAllDublinMacro
           ? keywords
           : _mergeKeywords(keywords, parsed.remainingKeywords),
-    );
+    ));
   }
 
   static List<String> _mergeKeywords(
@@ -431,29 +523,33 @@ class ListingSearchFilters {
   }
 
   /// Normalized query string for the listing pipeline.
-  String toPipelineQuery() {
+  String toPipelineQuery({String? towerPropertyType}) {
     final parts = <String>[];
-    if (foodPreference != null) parts.add(foodPreference!);
+    final isShare = towerPropertyType == TowerFilterPolicy.sharedTower;
+    if (!isShare && foodPreference != null) parts.add(foodPreference!);
     final tokens = effectiveAreaTokens;
     if (tokens.isNotEmpty && !isAllDublinMacro) {
       parts.add(tokens.first);
     }
-    // ALL_DUBLIN is carried only in [targetSearchAreas] — never as query text
-    // (parsing "all of dublin" incorrectly extracts a micro district like dublin4).
-    if (occupantType != null) parts.add(occupantType!.toLowerCase());
+    if (!isShare && occupantType != null) {
+      parts.add(occupantType!.toLowerCase());
+    }
     if (genderPreference != null) parts.add(genderPreference!);
     parts.addAll(keywords);
     return ListingSearchIntent.normalizeQuery(parts.join(' '));
   }
 
   /// Query string for the listing pipeline — never emits macro area text.
-  String pipelineQueryText({String searchText = ''}) {
+  String pipelineQueryText({
+    String searchText = '',
+    String? towerPropertyType,
+  }) {
     final trimmed = searchText.trim();
     if (trimmed.isNotEmpty) {
       return ListingSearchIntent.normalizeQuery(trimmed);
     }
     if (isAllDublinMacro) return '';
-    return toPipelineQuery();
+    return toPipelineQuery(towerPropertyType: towerPropertyType);
   }
 
   @override
@@ -463,25 +559,18 @@ class ListingSearchFilters {
       'preferredLeaseMonths: $preferredLeaseMonths, moveInWindow: $moveInWindow, '
       'wfhFriendly: $wfhFriendly, keywords: $keywords)';
 
-  /// Flexible AND filter — city uses substring; food/occupant use case-insensitive match.
+  /// Structural hard filters only — lifestyle prefs (incl. move-in, WFH) are scored in [WeightedListingMatcher].
   bool matchesListing(Map<String, dynamic> listing) {
-    final tokens = effectiveAreaTokens;
-    if (tokens.isNotEmpty &&
-        !TargetSearchAreas.listingMatchesTargets(tokens, listing)) {
-      return false;
-    }
-    if (foodPreference != null &&
-        !ListingData.matchesFoodPreferenceFilter(listing, foodPreference!)) {
-      return false;
-    }
-    if (occupantType != null &&
-        !ListingData.matchesOccupantTypeFilter(listing, occupantType!)) {
-      return false;
-    }
-    if (genderPreference != null &&
-        !ListingSearchIntent.listingMatchesGender(
+    final resolution = resolvedAreaSearch;
+    if (!resolution.isAllDublin) {
+      if (!TargetSearchAreas.listingMatchesResolved(resolution, listing)) {
+        return false;
+      }
+    } else if (effectiveAreaRefinements.isNotEmpty &&
+        !TargetSearchAreas.listingMatchesTargets(
+          effectiveAreaTokens,
           listing,
-          genderPreference!,
+          refinementTokens: effectiveAreaRefinements,
         )) {
       return false;
     }
@@ -489,7 +578,10 @@ class ListingSearchFilters {
       final amount = ListingData.listingPriceAmount(listing);
       if (amount == null) return false;
       if (budgetMin != null && amount < budgetMin!) return false;
-      if (budgetMax != null && amount > budgetMax!) return false;
+      if (budgetMax != null) {
+        final hardCap = (budgetMax! * _budgetHardCapRatio).round();
+        if (amount > hardCap) return false;
+      }
     }
     if (preferredLeaseMonths != null) {
       final leaseLength = int.tryParse(
@@ -499,27 +591,50 @@ class ListingSearchFilters {
         return false;
       }
     }
-    if (moveInWindow != null && moveInWindow!.isNotEmpty) {
-      final requestedMoveIn = DateTime.tryParse(moveInWindow!);
-      final availableFrom = DateTime.tryParse(
-        ListingData.text(listing['available_from']),
-      );
-      if (requestedMoveIn != null &&
-          availableFrom != null &&
-          availableFrom.isAfter(requestedMoveIn)) {
-        return false;
-      }
-    }
-    if (wfhFriendly == true) {
-      final schedule = ListingData.scheduleType(listing).toLowerCase();
-      final supportsWfh = listing['wfh_friendly'] == true || schedule == 'flexible';
-      if (!supportsWfh) return false;
-    }
     if (keywords.isNotEmpty &&
         !ListingSearchIntent.matchesKeywords(listing, keywords)) {
       return false;
     }
     return true;
+  }
+
+  /// Dublin-market 25% budget relaxation buffer for hard exclusion.
+  static const _budgetHardCapRatio = 1.25;
+
+  /// Timing is ranking-only — never hard-excludes inventory.
+  bool passesMoveInWindow(Map<String, dynamic> listing) => true;
+
+  static bool _isMoveInBucketToken(String token) {
+    return const {
+      'this_month',
+      'next_month',
+      'within_3_months',
+      'flexible',
+      'immediately',
+      'within_1_3_months',
+    }.contains(token);
+  }
+
+  static bool _listingMatchesMoveInBucket(
+    Map<String, dynamic> listing,
+    String bucket,
+  ) {
+    if (bucket == 'flexible') return true;
+    final availableFrom = DateTime.tryParse(
+      ListingData.text(listing['available_from']),
+    );
+    if (availableFrom == null) return true;
+    final now = DateTime.now();
+    return switch (bucket) {
+      'this_month' || 'immediately' =>
+        !availableFrom.isAfter(now.add(const Duration(days: 31))),
+      'next_month' => !availableFrom.isAfter(
+          DateTime(now.year, now.month + 2, 0),
+        ),
+      'within_3_months' || 'within_1_3_months' =>
+        !availableFrom.isAfter(now.add(const Duration(days: 90))),
+      _ => true,
+    };
   }
 }
 
@@ -772,8 +887,22 @@ abstract final class ListingSearchIntent {
     List<String> keywords,
   ) {
     if (keywords.isEmpty) return true;
-    final blob = ListingData.searchText(listing);
-    return keywords.every((k) => _keywordMatches(blob, k));
+    return keywords.every((k) => _keywordMatchesListing(listing, k));
+  }
+
+  static bool _keywordMatchesListing(Map<String, dynamic> listing, String keyword) {
+    switch (keyword) {
+      case 'smoking':
+        return ListingData.smokingAllowed(listing);
+      case 'no-smoking':
+        return !ListingData.smokingAllowed(listing);
+      case 'pets':
+        return ListingData.petsAllowed(listing);
+      case 'no-pets':
+        return !ListingData.petsAllowed(listing);
+      default:
+        return _keywordMatches(ListingData.searchText(listing), keyword);
+    }
   }
 
   /// Strict occupant filter — listing must have the exact occupant type set.
@@ -1122,16 +1251,18 @@ abstract final class ListingSearchIntent {
 
   static bool _shareRoomKindMatches(String blob, String term) {
     return switch (term) {
-      'ensuite' => blob.contains('ensuite'),
+      'ensuite' || 'private_ensuite' => blob.contains('ensuite'),
       'double_ensuite' =>
         blob.contains('double ensuite') || blob.contains('ensuite double'),
-      'bed_shared' =>
+      'bed_shared' || 'shared_bed' =>
         blob.contains('bed in shared') ||
         blob.contains('bed_shared') ||
+        blob.contains('shared_bed') ||
         blob.contains('sharing room') ||
         blob.contains('bed space'),
-      'private_bath' =>
+      'private_bath' || 'private_shared_bath' =>
         blob.contains('private_bath') ||
+        blob.contains('private_shared_bath') ||
         (blob.contains('private room') &&
             (blob.contains('bathroom') || blob.contains('own bath'))),
       'student_room' =>

@@ -164,12 +164,14 @@ class _CodeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final exhausted = record.isExhausted;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
+    // Material (not DecoratedBox) so ListTile ink/tile colors stay visible.
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        side: const BorderSide(color: Color(0xFFE5E7EB)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../models/landlord_applicant_card_model.dart';
 import '../../utils/landlord_dashboard_helpers.dart';
 import 'landlord_dashboard_theme.dart';
@@ -47,24 +48,21 @@ class LandlordKpiMetricsRow extends StatelessWidget {
               _PoolMetricCard(
                 label: 'Sound',
                 value: _candidateLabel(metrics.soundCount),
-                subtext: 'Vouched & Secured (Blue)',
-                accent: const Color(0xFF2563EB),
+                subtext: 'Vouched & Secured',
                 selected: selectedFilter == LandlordTrustFilter.sound,
                 onTap: () => _toggleFilter(LandlordTrustFilter.sound),
               ),
               _PoolMetricCard(
                 label: 'Grand',
                 value: _candidateLabel(metrics.grandCount),
-                subtext: 'Verified Intent (Green)',
-                accent: const Color(0xFF10B981),
+                subtext: 'Verified Intent',
                 selected: selectedFilter == LandlordTrustFilter.grand,
                 onTap: () => _toggleFilter(LandlordTrustFilter.grand),
               ),
               _PoolMetricCard(
                 label: 'Just Landed',
                 value: _candidateLabel(metrics.justLandedCount),
-                subtext: 'Casual / Inbound (Yellow)',
-                accent: const Color(0xFFEAB308),
+                subtext: 'Casual / Inbound',
                 selected: selectedFilter == LandlordTrustFilter.justLanded,
                 onTap: () => _toggleFilter(LandlordTrustFilter.justLanded),
               ),
@@ -178,7 +176,6 @@ class _PoolMetricCard extends StatefulWidget {
     required this.label,
     required this.value,
     required this.subtext,
-    required this.accent,
     required this.selected,
     required this.onTap,
   });
@@ -186,7 +183,6 @@ class _PoolMetricCard extends StatefulWidget {
   final String label;
   final String value;
   final String subtext;
-  final Color accent;
   final bool selected;
   final VoidCallback onTap;
 
@@ -200,6 +196,7 @@ class _PoolMetricCardState extends State<_PoolMetricCard> {
   @override
   Widget build(BuildContext context) {
     final active = widget.selected || _hovered;
+    final neutralAccent = AppColors.secondaryText;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -210,8 +207,8 @@ class _PoolMetricCardState extends State<_PoolMetricCard> {
         child: InkWell(
           onTap: widget.onTap,
           borderRadius: BorderRadius.circular(14),
-          hoverColor: widget.accent.withValues(alpha: 0.06),
-          splashColor: widget.accent.withValues(alpha: 0.12),
+          hoverColor: AppColors.surface2,
+          splashColor: AppColors.divider,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             curve: Curves.easeOut,
@@ -220,40 +217,24 @@ class _PoolMetricCardState extends State<_PoolMetricCard> {
             ).copyWith(
               border: Border.all(
                 color: widget.selected
-                    ? widget.accent
+                    ? neutralAccent
                     : active
-                        ? widget.accent.withValues(alpha: 0.45)
+                        ? AppColors.divider
                         : LandlordDashboardTheme.border,
                 width: widget.selected ? 1.5 : 1,
               ),
-              color: active
-                  ? widget.accent.withValues(alpha: 0.04)
-                  : LandlordDashboardTheme.surface,
+              color: active ? AppColors.surface2 : LandlordDashboardTheme.surface,
             ),
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.label,
-                        style: LandlordDashboardTheme.cardLabel(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: widget.accent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ],
+                Text(
+                  widget.label,
+                  style: LandlordDashboardTheme.cardLabel(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -267,7 +248,7 @@ class _PoolMetricCardState extends State<_PoolMetricCard> {
                   widget.subtext,
                   style: LandlordDashboardTheme.cardSubtext().copyWith(
                     color: widget.selected
-                        ? widget.accent.withValues(alpha: 0.85)
+                        ? neutralAccent
                         : LandlordDashboardTheme.textMuted,
                   ),
                   maxLines: 2,

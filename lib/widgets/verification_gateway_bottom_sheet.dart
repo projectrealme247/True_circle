@@ -2,34 +2,54 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme/app_theme.dart';
+import '../screens/auth_screen.dart';
+import '../services/profile_state_notifier.dart';
+import '../services/verification_gateway_recommendation.dart';
+import 'emoji_leading_row.dart';
 
-/// Premium verification path picker — upgrades users toward the 👍 Grand tier.
-class VerificationGatewayBottomSheet extends StatelessWidget {
-  const VerificationGatewayBottomSheet({super.key});
+/// Premium verification path picker — persona-driven Grand-tier recommendations.
+class VerificationGatewayBottomSheet extends StatefulWidget {
+  const VerificationGatewayBottomSheet({
+    super.key,
+    this.session,
+  });
 
-  static Future<void> show(BuildContext context) {
+  final Map<String, dynamic>? session;
+
+  static Future<void> show(
+    BuildContext context, {
+    Map<String, dynamic>? session,
+  }) {
+    final resolved = session ??
+        profileStateNotifier.session ??
+        AuthScreen.currentUserSession;
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => const VerificationGatewayBottomSheet(),
+      builder: (ctx) => VerificationGatewayBottomSheet(session: resolved),
     );
   }
 
-  void _openCorporate(BuildContext context) {
-    Navigator.pop(context);
-    context.push('/verify/social');
-  }
+  @override
+  State<VerificationGatewayBottomSheet> createState() =>
+      _VerificationGatewayBottomSheetState();
+}
 
-  void _openBankLink(BuildContext context) {
+class _VerificationGatewayBottomSheetState
+    extends State<VerificationGatewayBottomSheet> {
+  void _openRoute(BuildContext context, String route) {
     Navigator.pop(context);
-    context.push('/verify/open-banking');
+    context.push(route);
   }
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final sheetHeight = MediaQuery.sizeOf(context).height * 0.88;
+    final layout = verificationGatewayLayoutForSession(widget.session);
+    final recommendedDef =
+        verificationGatewayCatalog[layout.recommended]!;
 
     return SafeArea(
       child: Padding(
@@ -60,82 +80,114 @@ class VerificationGatewayBottomSheet extends StatelessWidget {
                   ),
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(20, 20, 20, 16 + bottomInset),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
+                      padding:
+                          EdgeInsets.fromLTRB(20, 20, 20, 16 + bottomInset),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 600),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.accentLight,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: AppColors.accent.withValues(alpha: 0.35),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentLight,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: AppColors.accent
+                                            .withValues(alpha: 0.35),
+                                      ),
+                                    ),
+                                    child: const EmojiLeadingRow(
+                                      emoji: '👍',
+                                      text: 'Grand',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.accentDark,
+                                      ),
+                                      emojiWidth: 18,
+                                      emojiFontSize: 13,
+                                      gap: 4,
+                                    ),
                                   ),
-                                ),
-                                child: const Text(
-                                  '👍 Grand',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.accentDark,
+                                  const Spacer(),
+                                  IconButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    icon: const Icon(Icons.close_rounded),
+                                    color: AppColors.secondaryText,
                                   ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Verification Gateway',
+                                style: AppTypography.h2.copyWith(
+                                  fontSize: 22,
+                                  letterSpacing: -0.4,
                                 ),
                               ),
-                              const Spacer(),
-                              IconButton(
-                                onPressed: () => Navigator.pop(context),
-                                icon: const Icon(Icons.close_rounded),
-                                color: AppColors.secondaryText,
+                              const SizedBox(height: 8),
+                              Text(
+                                layout.subtitle,
+                                style: AppTypography.bodySecondary.copyWith(
+                                  height: 1.45,
+                                ),
                               ),
+                              const SizedBox(height: 24),
+                              _GatewayChoiceCard(
+                                icon: recommendedDef.icon,
+                                leadingEmoji: recommendedDef.leadingEmoji,
+                                title: recommendedDef.pathTitle,
+                                description: recommendedDef.description,
+                                highlighted: true,
+                                onTap: () => _openRoute(
+                                  context,
+                                  recommendedDef.route,
+                                ),
+                              ),
+                              if (layout.alternates.isNotEmpty) ...[
+                                const SizedBox(height: 24),
+                                Text(
+                                  'Other verification paths',
+                                  style: AppTypography.caption.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.secondaryText,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                for (final path in layout.alternates) ...[
+                                  _GatewayChoiceCard(
+                                    icon: verificationGatewayCatalog[path]!
+                                        .icon,
+                                    leadingEmoji:
+                                        verificationGatewayCatalog[path]!
+                                            .leadingEmoji,
+                                    title: verificationGatewayCatalog[path]!
+                                        .pathTitle,
+                                    description:
+                                        verificationGatewayCatalog[path]!
+                                            .description,
+                                    onTap: () => _openRoute(
+                                      context,
+                                      verificationGatewayCatalog[path]!.route,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
+                              ],
+                              const SizedBox(height: 12),
+                              const _PrivacyShieldFooter(),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Verification Gateway',
-                            style: AppTypography.h2.copyWith(
-                              fontSize: 22,
-                              letterSpacing: -0.4,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Choose a secure path to upgrade your trust tier. '
-                            'Both options unlock the Grand badge for hosts and seekers.',
-                            style: AppTypography.bodySecondary.copyWith(
-                              height: 1.45,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          _GatewayChoiceCard(
-                            icon: Icons.work_outline_rounded,
-                            badge: 'Recommended · Pre-Arrival & International',
-                            title: 'Corporate Verification',
-                            subtitle:
-                                'Connect LinkedIn or upload your corporate employment '
-                                'contract / offer letter. Perfect for international '
-                                'relocators arriving from abroad.',
-                            onTap: () => _openCorporate(context),
-                          ),
-                          const SizedBox(height: 14),
-                          _GatewayChoiceCard(
-                            icon: Icons.account_balance_rounded,
-                            badge: 'Recommended · Local Residents',
-                            title: 'Instant Bank Link',
-                            subtitle:
-                                'Securely connect your Irish/EU bank account '
-                                '(AIB, BOI, Revolut) via Open Banking. Zero paperwork, '
-                                'instant approval.',
-                            onTap: () => _openBankLink(context),
-                          ),
-                          const SizedBox(height: 22),
-                          const _PrivacyShieldFooter(),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -152,23 +204,19 @@ class VerificationGatewayBottomSheet extends StatelessWidget {
 class _GatewayChoiceCard extends StatefulWidget {
   const _GatewayChoiceCard({
     required this.icon,
-    required this.badge,
+    required this.leadingEmoji,
     required this.title,
-    required this.subtitle,
+    required this.description,
     required this.onTap,
+    this.highlighted = false,
   });
 
   final IconData icon;
-  final String badge;
+  final String leadingEmoji;
   final String title;
-  final String subtitle;
+  final String description;
   final VoidCallback onTap;
-
-  static const _cardFill = Color(0xFFF8FAFC);
-  static const _borderRest = Color(0xFFE2E8F0);
-  static const _badgeFill = Color(0xFFEDF2F7);
-  static const _badgeText = Color(0xFF4A5568);
-  static const _iconFill = Color(0xFFEDF2F7);
+  final bool highlighted;
 
   @override
   State<_GatewayChoiceCard> createState() => _GatewayChoiceCardState();
@@ -195,88 +243,67 @@ class _GatewayChoiceCardState extends State<_GatewayChoiceCard> {
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
           decoration: BoxDecoration(
-            color: _GatewayChoiceCard._cardFill,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _active ? AppColors.accent : _GatewayChoiceCard._borderRest,
-              width: 1.5,
+              color: widget.highlighted
+                  ? AppColors.accent.withValues(alpha: 0.45)
+                  : _active
+                      ? Colors.grey.shade300
+                      : Colors.grey.shade200,
+              width: widget.highlighted ? 1.5 : 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                offset: const Offset(0, 2),
+                blurRadius: 12,
+                color: Colors.black.withValues(alpha: _active ? 0.06 : 0.04),
+              ),
+            ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
+            padding: const EdgeInsets.all(24),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _GatewayChoiceCard._iconFill,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        widget.icon,
-                        color: _GatewayChoiceCard._badgeText,
-                        size: 26,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _GatewayChoiceCard._badgeFill,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              widget.badge,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: _GatewayChoiceCard._badgeText,
-                                height: 1.2,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            widget.title,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primaryText,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 16,
-                      color: _active
-                          ? AppColors.accent
-                          : const Color(0xFF94A3B8),
-                    ),
-                  ],
+                Icon(
+                  widget.icon,
+                  color: Colors.grey.shade500,
+                  size: 24,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  widget.subtitle,
-                  style: AppTypography.caption.copyWith(
-                    fontSize: 13,
-                    color: AppColors.secondaryText,
-                    height: 1.5,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      EmojiLeadingRow(
+                        emoji: widget.leadingEmoji,
+                        text: widget.title,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryText,
+                          letterSpacing: -0.2,
+                        ),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.description,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: _active ? AppColors.primaryText : Colors.grey.shade400,
                 ),
               ],
             ),
@@ -290,38 +317,31 @@ class _GatewayChoiceCardState extends State<_GatewayChoiceCard> {
 class _PrivacyShieldFooter extends StatelessWidget {
   const _PrivacyShieldFooter();
 
-  static const _bodyColor = Color(0xFF4A5568);
-  static const _surfaceTint = Color(0xFFF8FAFC);
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _surfaceTint,
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.shield_outlined,
-            size: 20,
-            color: _bodyColor,
+            size: 18,
+            color: Colors.grey.shade500,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '🔒 Dublin Data Privacy Shield: TrueCircle utilizes zero-retention '
+              'Dublin Data Privacy Shield: TrueCircle utilizes zero-retention '
               'ephemeral processing. Your private documentation and banking records '
               'are read strictly in memory to verify trust signals and instantly '
               'destroyed. We never store your raw files, transaction histories, or '
               'log data on our servers.',
-              style: AppTypography.caption.copyWith(
+              style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w400,
-                color: _bodyColor,
-                height: 1.55,
+                color: Colors.grey[600],
+                height: 1.5,
               ),
             ),
           ),

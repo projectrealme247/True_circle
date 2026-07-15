@@ -6,6 +6,8 @@ import '../screens/space_continue_screen.dart';
 import '../screens/space_gateway_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/profile_edit_screen.dart';
+import '../screens/welcome_gate_screen.dart';
+import '../screens/landlord_onboarding_screen.dart';
 import '../screens/lease_replacement_wizard_screen.dart';
 import '../screens/landlord_dashboard_screen.dart';
 import '../screens/listing_detail_screen.dart';
@@ -90,10 +92,23 @@ final GoRouter appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: '/welcome',
+      builder: (context, state) => const WelcomeGateScreen(),
+    ),
+    GoRoute(
       path: '/profile/edit',
       builder: (context, state) {
         final initial = state.extra;
         return ProfileEditScreen(
+          initialProfile: initial is Map<String, dynamic> ? initial : null,
+        );
+      },
+    ),
+    GoRoute(
+      path: '/profile/edit/host',
+      builder: (context, state) {
+        final initial = state.extra;
+        return LandlordOnboardingScreen(
           initialProfile: initial is Map<String, dynamic> ? initial : null,
         );
       },

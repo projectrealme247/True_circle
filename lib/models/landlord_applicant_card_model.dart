@@ -1,3 +1,4 @@
+import '../utils/rental_date_format.dart';
 import 'applicant_application_status.dart';
 import 'applicant_trust_tier.dart';
 import 'independent_places_applicant_stream.dart';
@@ -129,7 +130,7 @@ class LandlordApplicantCardModel {
           : null,
       commuteLabel: _commuteLabel(row.verifiedTransitDurationSeconds),
       moveInLabel: row.earliestMoveInDate?.trim().isNotEmpty == true
-          ? 'Move-in ${row.earliestMoveInDate}'
+          ? 'Move-in ${RentalDateFormat.formatRentalAvailabilityDate(row.earliestMoveInDate)}'
           : null,
     );
   }

@@ -14,6 +14,7 @@ class AppColors {
 
   static const Color background = Color(0xFFFAFAFA);
   static const Color surface = Color(0xFFFFFFFF);
+  static const Color surface2 = Color(0xFFF0F0F0);
   static const Color primaryText = Color(0xFF222222);
   static const Color secondaryText = Color(0xFF717171);
   static const Color accent = Color(0xFFFF5A5F);
@@ -53,54 +54,90 @@ class AppTypography {
 
   static const String fontFamily = 'PlusJakartaSans';
 
-  static TextStyle get display => GoogleFonts.plusJakartaSans(
+  /// Bundled color emoji font — registered in pubspec.yaml.
+  static const String emojiFontFamily = 'Noto Color Emoji';
+
+  /// CanvasKit/web-safe alias (no spaces) for the same bundled TTF.
+  static const String emojiFontFamilyAlias = 'NotoColorEmoji';
+
+  /// Fallback chain for mixed Latin + emoji copy (onboarding chips, labels, trust badges).
+  static const List<String> emojiFontFallback = <String>[
+    emojiFontFamilyAlias,
+    emojiFontFamily,
+    'Segoe UI Emoji',
+    'Apple Color Emoji',
+    'Noto Color Emoji',
+  ];
+
+  /// Text style for strings that start with emoji + Latin label (e.g. lifestyle chips).
+  static TextStyle emojiMixedTextStyle({
+    double fontSize = 13,
+    FontWeight fontWeight = FontWeight.w600,
+    Color color = AppColors.primaryText,
+    double height = 1.2,
+  }) =>
+      TextStyle(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        height: height,
+        fontFamily: fontFamily,
+        fontFamilyFallback: emojiFontFallback,
+      );
+
+  /// Applies [emojiFontFallback] to any text style that may render emoji glyphs.
+  static TextStyle withEmojiFallback(TextStyle style) => style.copyWith(
+        fontFamilyFallback: emojiFontFallback,
+      );
+
+  static TextStyle get display => withEmojiFallback(GoogleFonts.plusJakartaSans(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         height: 1.2,
         color: AppColors.primaryText,
-      );
+      ));
 
-  static TextStyle get h1 => GoogleFonts.plusJakartaSans(
+  static TextStyle get h1 => withEmojiFallback(GoogleFonts.plusJakartaSans(
         fontSize: 26,
         fontWeight: FontWeight.w700,
         height: 1.25,
         color: AppColors.primaryText,
-      );
+      ));
 
-  static TextStyle get h2 => GoogleFonts.plusJakartaSans(
+  static TextStyle get h2 => withEmojiFallback(GoogleFonts.plusJakartaSans(
         fontSize: 20,
         fontWeight: FontWeight.w600,
         height: 1.3,
         color: AppColors.primaryText,
-      );
+      ));
 
-  static TextStyle get h3 => GoogleFonts.plusJakartaSans(
+  static TextStyle get h3 => withEmojiFallback(GoogleFonts.plusJakartaSans(
         fontSize: 17,
         fontWeight: FontWeight.w600,
         height: 1.35,
         color: AppColors.primaryText,
-      );
+      ));
 
-  static TextStyle get body => GoogleFonts.plusJakartaSans(
+  static TextStyle get body => withEmojiFallback(GoogleFonts.plusJakartaSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
         height: 1.5,
         color: AppColors.primaryText,
-      );
+      ));
 
-  static TextStyle get bodySecondary => GoogleFonts.plusJakartaSans(
+  static TextStyle get bodySecondary => withEmojiFallback(GoogleFonts.plusJakartaSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
         height: 1.5,
         color: AppColors.secondaryText,
-      );
+      ));
 
-  static TextStyle get caption => GoogleFonts.plusJakartaSans(
+  static TextStyle get caption => withEmojiFallback(GoogleFonts.plusJakartaSans(
         fontSize: 13,
         fontWeight: FontWeight.w500,
         height: 1.4,
         color: AppColors.secondaryText,
-      );
+      ));
 
   static TextStyle get button => GoogleFonts.plusJakartaSans(
         fontSize: 15,
@@ -175,12 +212,11 @@ class AppTheme {
   AppTheme._();
 
   static ThemeData get light {
-    final fontFamily = GoogleFonts.plusJakartaSans().fontFamily;
-
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      fontFamily: fontFamily,
+      fontFamily: AppTypography.fontFamily,
+      fontFamilyFallback: AppTypography.emojiFontFallback,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: const ColorScheme.light(
         primary: AppColors.accent,

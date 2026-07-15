@@ -6,10 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../navigation/home_explore_reset_notifier.dart';
+import '../navigation/navigate_after_identity.dart';
 import '../router/app_router.dart';
 
 import '../navigation/space_gateway_navigation.dart';
+import '../services/active_mode_service.dart';
 import '../data/dublin_mock_data.dart';
+import '../debug/agent_log.dart';
+import '../debug/debug_session_log.dart';
 import '../services/auth_service.dart';
 import '../services/application_service.dart';
 import '../services/listings_storage_service.dart';
@@ -26,18 +30,22 @@ import '../utils/listing_search_suggestions.dart';
 import '../utils/marketplace_listing_pipeline.dart';
 import '../utils/numeric_bounds.dart';
 import '../config/market/market_config.dart';
-import '../utils/profile_data.dart';
-import 'profile_edit_screen.dart';
 import '../utils/dublin_macro_search.dart';
+import '../utils/profile_data.dart';
+import '../utils/profile_progress.dart';
 import '../utils/viewer_profile.dart';
+import '../utils/seeker_strong_match_counter.dart';
+import '../widgets/active_mode/active_mode_switch.dart';
 import '../widgets/property_card.dart';
-import '../widgets/space_switcher.dart';
 import '../widgets/truecircle_logo.dart';
-import '../widgets/trust_tier_legend_scale.dart';
 import '../widgets/filter_chip_bar.dart';
+import '../widgets/home/home_explore_responsive_shell.dart';
+import '../widgets/home/home_profile_completion_banner.dart';
+import '../widgets/trust_badges_help_button.dart';
 import '../theme/app_scroll_behavior.dart';
 import '../theme/app_typography.dart';
 import '../core/theme/app_theme.dart' show AppButtonStyles, AppColors;
+import '../core/theme/app_theme.dart' as core;
 import '../theme/home_marketplace_theme.dart';
 import 'auth_screen.dart';
 
@@ -86,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _searchDropdownGap = 8;
   static const double _searchDropdownRadius = 12;
 
+  bool _handledColdStartLanding = false;
   bool _handledListingAddedMessage = false;
   bool _handledPortalWelcome = false;
   bool _showWelcomeFeedBanner = false;
@@ -132,19 +141,6 @@ class _HomeScreenState extends State<HomeScreen> {
       (Route<dynamic> route) => route.isFirst,
     );
     appRouter.pushReplacement('/');
-  }
-
-  Future<void> _openProfileEdit({Map<String, dynamic>? initialProfile}) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (context) =>
-            ProfileEditScreen(initialProfile: initialProfile),
-      ),
-    );
-    if (!mounted) return;
-    await AuthService.reloadProfileFromStorage();
-    if (!mounted) return;
-    setState(() {});
   }
 
   Future<void> _openSignIn({String? authRedirectPath}) async {
@@ -385,8 +381,50 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Pipeline helpers ──────────────────────────────────────────
 
+  bool get _sessionNeedsOnboarding {
+    final session = _activeUserSession;
+    if (session == null || session.isEmpty) return false;
+    return ViewerProfile.sessionNeedsOnboarding(session);
+  }
+
+  bool get _isFamilyViewer {
+    final viewer = ViewerProfile.fromSession(_activeUserSession);
+    return ListingMatchEngine.isFamilyOccupant(viewer);
+  }
+
+  bool get _familyViewerOnSharedLivingTab =>
+      _activeSpace == MarketplaceSpace.sharedSpace && _isFamilyViewer;
+
   MarketplaceListingPipelineResult get _currentPipeline {
-    return _pipelineResult ??= _runDefaultPipeline();
+    final needsOnboarding = _sessionNeedsOnboarding;
+    final cached = _pipelineResult;
+    final shouldRefresh = cached == null ||
+        cached.requiresOnboarding != needsOnboarding ||
+        (cached.ranked.isNotEmpty &&
+            cached.ranked.first.match.percentage == 0 &&
+            _activeUserSession != null &&
+            !needsOnboarding);
+    if (shouldRefresh) {
+      // #region agent log
+      agentLog(
+        'C',
+        'home_screen.dart:_currentPipeline',
+        'pipeline cache refresh',
+        {
+          'reason': cached == null
+              ? 'null_cache'
+              : cached.requiresOnboarding != needsOnboarding
+                  ? 'onboarding_mismatch'
+                  : 'zero_pct_with_session',
+          'cachedRequiresOnboarding': cached?.requiresOnboarding ?? false,
+          'sessionNeedsOnboarding': needsOnboarding,
+          'cachedRankedCount': cached?.ranked.length ?? 0,
+        },
+      );
+      // #endregion
+      _pipelineResult = _runDefaultPipeline();
+    }
+    return _pipelineResult!;
   }
 
   Map<String, dynamic>? get _activeUserSession =>
@@ -394,12 +432,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   MarketplaceListingPipelineResult _runDefaultPipeline() {
     final inheritedFilters = _inheritedFeedFilters(_activeUserSession);
-    return MarketplaceListingPipeline.runWithFilters(
+    // #region agent log
+    debugSessionLog(
+      location: 'home_screen.dart:_runDefaultPipeline',
+      message: 'pipeline invoke',
+      hypothesisId: 'A,D,E',
+      data: {
+        'tower': _selectedPropertyType,
+        'activeSpace': _activeSpace.storageToken,
+        'sessionOccupant': _activeUserSession?['occupant_type'],
+        'inheritedOccupant': inheritedFilters.occupantType,
+        'inheritedBudgetMax': inheritedFilters.budgetMax,
+        'pipelineQuery': inheritedFilters.pipelineQueryText(),
+        'listingCount': _listings.length,
+      },
+    );
+    // #endregion
+    final result = MarketplaceListingPipeline.runWithFilters(
       allListings: _listings,
       towerPropertyType: _selectedPropertyType,
       filters: inheritedFilters,
       userSession: _activeUserSession,
     );
+    // #region agent log
+    agentLog(
+      'D',
+      'home_screen.dart:_runDefaultPipeline',
+      'pipeline run complete',
+      {
+        'rankedCount': result.ranked.length,
+        'firstPct':
+            result.ranked.isEmpty ? null : result.ranked.first.match.percentage,
+        'requiresOnboarding': result.requiresOnboarding,
+        'sessionKeyCount': _activeUserSession?.keys.length ?? 0,
+        'sessionNeedsOnboarding': _sessionNeedsOnboarding,
+      },
+    );
+    // #endregion
+    return result;
   }
 
   ListingSearchFilters _inheritedFeedFilters(Map<String, dynamic>? session) {
@@ -407,7 +477,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return const ListingSearchFilters();
     }
     final snapshot = ProfileOnboardingRepository.snapshotFromSession(session);
-    return ProfilePortalInheritanceService.seekerFeedDefaults(snapshot);
+    return ProfilePortalInheritanceService.seekerFeedDefaults(snapshot)
+        .scopedForTower(_selectedPropertyType);
   }
 
   void _refreshPipelineFromProfile() {
@@ -422,7 +493,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  List<ScoredListing> get _rankedVisibleListings => _currentPipeline.ranked;
+  List<ScoredListing> get _rankedVisibleListings {
+    final pipeline = _currentPipeline;
+    final ranked = pipeline.ranked;
+    if (ranked.isNotEmpty) return ranked;
+
+    // Browse-first: keep tower listings visible while onboarding is incomplete.
+    if (pipeline.requiresOnboarding || _sessionNeedsOnboarding) {
+      return [
+        for (final listing in pipeline.afterFilters)
+          ScoredListing(
+            listing: listing,
+            match: ListingMatchResult.noProfile,
+          ),
+      ];
+    }
+
+    return ranked;
+  }
 
   /// Runs search from the text field (Enter key).
   void _commitSearchFromField() {
@@ -467,17 +555,18 @@ class _HomeScreenState extends State<HomeScreen> {
     ListingSearchFilters filters, {
     required String pipelineQuery,
   }) {
+    final scoped = filters.scopedForTower(_selectedPropertyType);
     final result = MarketplaceListingPipeline.runWithFilters(
       allListings: _listings,
       towerPropertyType: _selectedPropertyType,
-      filters: filters,
+      filters: scoped,
       userSession: _activeUserSession,
       searchQuery: pipelineQuery,
     );
 
     setState(() {
       _pipelineResult = result;
-      _activeFilters = filters;
+      _activeFilters = scoped;
       _showSuggestions = false;
       _highlightedSuggestionIndex = -1;
     });
@@ -530,10 +619,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _clearSearch();
       return;
     }
+    final scoped = filters.scopedForTower(_selectedPropertyType);
     final searchText = _searchController.text.trim();
     _runSearchWithFilters(
-      filters,
-      pipelineQuery: filters.pipelineQueryText(searchText: searchText),
+      scoped,
+      pipelineQuery: scoped.pipelineQueryText(searchText: searchText),
     );
   }
 
@@ -591,6 +681,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadHomeData() async {
     await _hydrateSessionFromStorage();
     await _loadListingsFromStorage();
+    await _maybeResolveColdStartLanding();
+  }
+
+  Future<void> _maybeResolveColdStartLanding() async {
+    if (_handledColdStartLanding) return;
+    final session = AuthScreen.currentUserSession;
+    if (!AuthService.isSignedIn(session)) return;
+    _handledColdStartLanding = true;
+    if (!mounted) return;
+    await navigateAfterIdentity(context);
   }
 
   Future<void> _hydrateSessionFromStorage() async {
@@ -769,7 +869,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (ProfileData.isMatchingReady(session)) {
                           context.go('/profile');
                         } else {
-                          context.go('/profile/edit', extra: session);
+                          context.go('/welcome', extra: session);
                         }
                       },
                       onLogout: () async {
@@ -800,18 +900,19 @@ class _HomeScreenState extends State<HomeScreen> {
       ]),
       builder: (context, _) {
         final userSession = profileStateNotifier.session;
-        final signedIn =
-            AuthService.isAuthenticated || userSession != null;
+        final signedIn = AuthService.isSignedIn(userSession);
 
         final screenWidth = MediaQuery.sizeOf(context).width;
         final bodyPadding = screenWidth < 600 ? 16.0 : 24.0;
 
         return Scaffold(
           backgroundColor: HomeMarketplaceTheme.canvas,
-          appBar: _buildHomeAppBar(
-            signedIn: signedIn,
-            userSession: userSession,
-          ),
+          appBar: _selectedTab == _HomeTab.explore
+              ? null
+              : _buildHomeAppBar(
+                  signedIn: signedIn,
+                  userSession: userSession,
+                ),
           body: IndexedStack(
             index: _selectedTab.index,
             children: [
@@ -819,6 +920,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 userSession: userSession,
                 bodyPadding: bodyPadding,
                 screenWidth: screenWidth,
+                signedIn: signedIn,
               ),
               _HomeDashboardEmptyState(
                 icon: Icons.favorite_border_rounded,
@@ -829,7 +931,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildListingsTab(bodyPadding: bodyPadding),
             ],
           ),
-          bottomNavigationBar: BottomNavigationBar(
+          bottomNavigationBar: screenWidth < kHomeExploreMobileBreakpoint
+              ? BottomNavigationBar(
             currentIndex: _selectedTab.index,
             type: BottomNavigationBarType.fixed,
             selectedItemColor: AppColors.accent,
@@ -864,9 +967,9 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             items: const [
               BottomNavigationBarItem(
-                icon: Icon(Icons.explore_outlined),
-                activeIcon: Icon(Icons.explore),
-                label: 'Explore',
+                icon: Icon(Icons.search_outlined),
+                activeIcon: Icon(Icons.search_rounded),
+                label: 'Search',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.favorite_border_rounded),
@@ -884,7 +987,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 label: 'Listings',
               ),
             ],
-          ),
+          )
+              : null,
         );
       },
     );
@@ -894,25 +998,32 @@ class _HomeScreenState extends State<HomeScreen> {
     required Map<String, dynamic>? userSession,
     required double bodyPadding,
     required double screenWidth,
+    required bool signedIn,
   }) {
-    return Stack(
-      children: [
-        Padding(
-          padding: EdgeInsets.all(bodyPadding),
-          child: TapRegion(
-            groupId: _searchTapGroup,
-            onTapOutside: (_) => _closeSuggestions(),
-            child: CustomScrollView(
-              physics: appPageScrollPhysics,
-              cacheExtent: 480,
-              slivers: _buildHomePageSlivers(
-                userSession: userSession,
-                contentWidth: screenWidth - (bodyPadding * 2),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(bodyPadding),
+              child: TapRegion(
+                groupId: _searchTapGroup,
+                onTapOutside: (_) => _closeSuggestions(),
+                child: CustomScrollView(
+                  physics: appPageScrollPhysics,
+                  cacheExtent: 480,
+                  slivers: _buildHomePageSlivers(
+                    userSession: userSession,
+                    contentWidth: constraints.maxWidth,
+                    signedIn: signedIn,
+                    isMobile: constraints.maxWidth < kHomeExploreMobileBreakpoint,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
@@ -934,9 +1045,9 @@ class _HomeScreenState extends State<HomeScreen> {
       key: key,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
-        crossAxisSpacing: _listingGridSpacing,
-        mainAxisSpacing: _listingGridSpacing,
         mainAxisExtent: PropertyCard.gridMainAxisExtent,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
       ),
       delegate: SliverChildBuilderDelegate(
         (context, index) {
@@ -956,18 +1067,41 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Widget> _buildHomePageSlivers({
     required Map<String, dynamic>? userSession,
     required double contentWidth,
+    required bool signedIn,
+    required bool isMobile,
   }) {
     final crossAxisCount = _gridCrossAxisCount(contentWidth);
+    final onboardingBannerState =
+        _homeOnboardingBannerState(userSession, signedIn);
+    final showProfileCompletionBanner =
+        !HomeProfileCompletionBannerSession.dismissed &&
+            onboardingBannerState != HomeOnboardingBannerState.hidden &&
+            onboardingBannerState != HomeOnboardingBannerState.signInRequired;
 
     return [
       SliverToBoxAdapter(
-        child: Center(child: _buildExploreCommandBar()),
+        child: Center(
+          child: _buildExploreCommandBar(
+            userSession: userSession,
+            signedIn: signedIn,
+            contentWidth: contentWidth,
+          ),
+        ),
       ),
-      if (userSession != null &&
-          ProfileData.calculateProfileCompletionPercentage(userSession) < 100) ...[
-        const SliverToBoxAdapter(child: SizedBox(height: 8)),
+      if (showProfileCompletionBanner) ...[
+        const SliverToBoxAdapter(child: SizedBox(height: 6)),
         SliverToBoxAdapter(
-          child: _buildProfileCompletionBanner(userSession),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: HomeMarketplaceTheme.searchBlockMaxWidth,
+              ),
+              child: _buildProfileCompletionBanner(
+                state: onboardingBannerState,
+                userSession: userSession,
+              ),
+            ),
+          ),
         ),
       ],
       if (_showWelcomeFeedBanner) ...[
@@ -987,16 +1121,11 @@ class _HomeScreenState extends State<HomeScreen> {
         const SliverToBoxAdapter(child: SizedBox(height: 10)),
         SliverToBoxAdapter(child: _buildSearchSummaryBanner()),
       ],
-      const SliverToBoxAdapter(child: SizedBox(height: 10)),
-      const SliverToBoxAdapter(
-        child: TrustTierLegendScale(
-          interactive: false,
-          compact: true,
-        ),
+      const SliverToBoxAdapter(child: SizedBox(height: 8)),
+      SliverToBoxAdapter(
+        child: _buildResultsSectionHeader(isMobile: isMobile),
       ),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
-      SliverToBoxAdapter(child: _buildMarketplaceSectionHeader()),
-      const SliverToBoxAdapter(child: SizedBox(height: 12)),
       if (_listingsLoading)
         const SliverToBoxAdapter(
           child: Padding(
@@ -1010,30 +1139,35 @@ class _HomeScreenState extends State<HomeScreen> {
         )
       else if (_listings.isEmpty)
         SliverToBoxAdapter(child: _buildListingsEmptyState())
+      else if (_familyViewerOnSharedLivingTab)
+        SliverToBoxAdapter(child: _buildFamilySharedLivingUnavailableState())
       else if (_currentPipeline.afterTower.isEmpty)
         SliverToBoxAdapter(child: _buildTowerEmptyState())
-      else if (_rankedVisibleListings.isEmpty &&
-          (_currentPipeline.isCommuteDivergent ||
-              (_currentPipeline.hasActiveSearch && !_showSuggestions)))
-        SliverToBoxAdapter(
-          child: _currentPipeline.isCommuteDivergent
-              ? _buildCommuteDivergenceAlert()
-              : _buildSearchNoResultsState(),
-        )
-      else
-        SliverIgnorePointer(
-          ignoring: _showSuggestions && _flatSuggestions.isNotEmpty,
-          sliver: _buildListingGridSliver(
-            key: ValueKey(
-              'grid-${_activeFilters.foodPreference}-'
-              '${_activeFilters.city}-'
-              '${_rankedVisibleListings.length}',
+      else ...[
+        if (_rankedVisibleListings.isEmpty &&
+            (_currentPipeline.isCommuteDivergent ||
+                (_currentPipeline.hasActiveSearch && !_showSuggestions)))
+          SliverToBoxAdapter(
+            child: _currentPipeline.isCommuteDivergent
+                ? _buildCommuteDivergenceAlert()
+                : _buildSearchNoResultsState(),
+          )
+        else
+          SliverIgnorePointer(
+            ignoring: _showSuggestions && _flatSuggestions.isNotEmpty,
+            sliver: _buildListingGridSliver(
+              key: ValueKey(
+                'grid-${_activeFilters.foodPreference}-'
+                '${_activeFilters.city}-'
+                '${_rankedVisibleListings.length}-'
+                '${_sessionNeedsOnboarding ? 'onboarding' : 'ranked'}',
+              ),
+              listings: _rankedVisibleListings,
+              crossAxisCount: crossAxisCount,
             ),
-            listings: _rankedVisibleListings,
-            crossAxisCount: crossAxisCount,
           ),
-        ),
-      const SliverToBoxAdapter(child: SizedBox(height: 32)),
+      ],
+      const SliverToBoxAdapter(child: SizedBox(height: 20)),
     ];
   }
 
@@ -1157,85 +1291,148 @@ class _HomeScreenState extends State<HomeScreen> {
     _recordRecentSearch(pipelineQuery);
   }
 
-  Widget _buildExploreCommandBar() {
+  Widget _buildExploreCommandBar({
+    required Map<String, dynamic>? userSession,
+    required bool signedIn,
+    required double contentWidth,
+  }) {
+    final caps = ActiveModeService.capabilities;
+    final strongMatchCount =
+        SeekerStrongMatchCounter.count(_rankedVisibleListings);
+    final unread = ActiveModeService.unreadActivityFor(
+      session: userSession,
+      activeMode: ActiveModeService.current,
+      hostApplicantCount: _applicationCount,
+      seekerStrongMatchCount: strongMatchCount,
+    );
+
+    final profileMenu = _UserHeaderMenu(
+      fullName: AuthService.displayName(userSession),
+      compact: contentWidth < kHomeExploreMobileBreakpoint,
+      onViewProfile: () {
+        final session = AuthScreen.currentUserSession;
+        if (ProfileData.isMatchingReady(session)) {
+          context.go('/profile');
+        } else {
+          context.go('/welcome', extra: session);
+        }
+      },
+      onLogout: () async {
+        await AuthService.signOut();
+        if (mounted) {
+          setState(() => _pipelineResult = null);
+        }
+      },
+    );
+
+    final modeSwitch = signedIn && caps.isDualCapable
+        ? ActiveModeSwitch(
+            current: ActiveModeService.current,
+            unread: unread,
+            canSeek: caps.canSeek,
+            canHost: caps.canHost,
+            compact: contentWidth < kHomeExploreMobileBreakpoint,
+            onModeSelected: (mode) async {
+              await ActiveModeService.recordUnreadBaselines(
+                hostApplicantCount: _applicationCount,
+                seekerStrongMatchCount: strongMatchCount,
+              );
+              if (!mounted) return;
+              await navigateForActiveMode(context, mode);
+            },
+          )
+        : null;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
+      padding: const EdgeInsets.fromLTRB(0, 2, 0, 2),
       child: ConstrainedBox(
         constraints: const BoxConstraints(
           maxWidth: HomeMarketplaceTheme.searchBlockMaxWidth,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildExploreHeroCopy(),
-            const SizedBox(height: 24),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: HomeMarketplaceTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: HomeMarketplaceTheme.border),
-                boxShadow: HomeMarketplaceTheme.cardShadowRest,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SpaceSwitcher(
-                      activeSpace: _activeSpace,
-                      onSelected: (space) => unawaited(_selectActiveSpace(space)),
-                    ),
-                    const SizedBox(height: 10),
-                    _buildSearchBarAnchor(),
-                    const SizedBox(height: 10),
-                    MarketplaceFilterBar(
-                      towerPropertyType: _selectedPropertyType,
-                      activeFilters: _activeFilters,
-                      onFiltersChanged: _onChipFiltersChanged,
-                      onClearAll: _clearAllFilters,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        child: HomeExploreResponsiveShell(
+          maxWidth: contentWidth,
+          activeSpace: _activeSpace,
+          towerPropertyType: _selectedPropertyType,
+          activeFilters: _activeFilters,
+          searchBar: _buildSearchBarAnchor(),
+          signedIn: signedIn,
+          onLogoTap: _onLogoTap,
+          onSpaceSelected: (space) => unawaited(_selectActiveSpace(space)),
+          onFiltersChanged: _onChipFiltersChanged,
+          onClearAll: _clearAllFilters,
+          onSignIn: () => _openSignIn(),
+          onListSpace: _goAddListing,
+          modeSwitch: modeSwitch,
+          profileTrailing: profileMenu,
+          onMoreFiltersTap: _openAdvancedFiltersDrawer,
+          moreFiltersActiveCount: MarketplaceFilterBar.drawerOnlyActiveCount(
+            _activeFilters,
+            towerPropertyType: _selectedPropertyType,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildExploreHeroCopy() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          'Match with spaces and communities that actually fit your story.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
-            height: 1.25,
-            color: HomeMarketplaceTheme.textPrimary,
-          ),
+  Widget _buildResultsSectionHeader({required bool isMobile}) {
+    return HomeExploreResultsHeader(
+      isMobile: isMobile,
+      activeSpace: _activeSpace,
+      resultCount: _rankedVisibleListings.length,
+      onMapView: isMobile ? () {} : null,
+    );
+  }
+
+  Widget _buildSearchBlockDivider() {
+    return Container(
+      height: 1,
+      width: double.infinity,
+      color: HomeMarketplaceTheme.border,
+    );
+  }
+
+  void _openAdvancedFiltersDrawer() {
+    MarketplaceFilterBar.showAdvancedFiltersDrawer(
+      context,
+      towerPropertyType: _selectedPropertyType,
+      activeFilters: _activeFilters,
+      onFiltersChanged: _onChipFiltersChanged,
+      onClearAll: _clearAllFilters,
+      resultCount: _rankedVisibleListings.length,
+      resultCountProvider: () => _rankedVisibleListings.length,
+      allListings: _listings,
+      userSession: AuthScreen.currentUserSession,
+      searchQuery: _searchController.text.trim(),
+    );
+  }
+
+  Widget _buildResultsControlHeader() {
+    final resultCount = _rankedVisibleListings.length;
+    final isSharedLiving = _activeSpace == MarketplaceSpace.sharedSpace;
+    final label = isSharedLiving
+        ? '👥 $resultCount ${resultCount == 1 ? 'community' : 'communities'} matching your story'
+        : '🏡 $resultCount ${resultCount == 1 ? 'space' : 'spaces'} matching your story';
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        maxWidth: HomeMarketplaceTheme.searchBlockMaxWidth,
+      ),
+      child: Text(
+        label,
+        style: AppTypography.detail().copyWith(
+          fontWeight: FontWeight.w500,
+          color: HomeMarketplaceTheme.textSecondary,
+          fontFamily: core.AppTypography.fontFamily,
+          fontFamilyFallback: core.AppTypography.emojiFontFallback,
         ),
-        const SizedBox(height: 8),
-        Text(
-          HomeMarketplaceTheme.brandTagline,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 15,
-            height: 1.4,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 
   Widget _buildSearchBarAnchor() {
     final showDropdown = _showSuggestions && _flatSuggestions.isNotEmpty;
-    final searchFieldRounded = showDropdown ? 16.0 : 999.0;
+    final searchFieldRounded = showDropdown ? 16.0 : 16.0;
 
     return TapRegion(
       groupId: _searchTapGroup,
@@ -1243,18 +1440,30 @@ class _HomeScreenState extends State<HomeScreen> {
         key: _searchBarAnchorKey,
         height: _searchBarHeight,
         width: double.infinity,
-        child: _buildSearchInputField(searchFieldRounded),
+        child: _buildSearchInputField(
+          searchFieldRounded,
+          showDropdown: showDropdown,
+        ),
       ),
     );
   }
 
-  Widget _buildSearchInputField(double borderRadius) {
+  Widget _buildSearchInputField(
+    double borderRadius, {
+    required bool showDropdown,
+  }) {
+    final hasQuery = _searchController.text.isNotEmpty;
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: HomeMarketplaceTheme.surface,
-        borderRadius: BorderRadius.circular(borderRadius),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(borderRadius),
+          topRight: Radius.circular(borderRadius),
+          bottomLeft: Radius.circular(showDropdown ? 0 : borderRadius),
+          bottomRight: Radius.circular(showDropdown ? 0 : borderRadius),
+        ),
         border: Border.all(color: HomeMarketplaceTheme.border),
-        boxShadow: HomeMarketplaceTheme.searchShadowSm,
       ),
       child: Material(
         color: Colors.transparent,
@@ -1289,27 +1498,50 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: InputDecoration(
               hintText: MarketConfig.current.searchBarHint,
               hintStyle: AppTypography.searchHint(),
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                color: HomeMarketplaceTheme.textMuted,
-                size: 24,
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(left: 16, right: 4),
+                child: Text(
+                  '🔍',
+                  style: TextStyle(
+                    fontSize: 18,
+                    height: 1,
+                    fontFamily: core.AppTypography.emojiFontFamily,
+                    fontFamilyFallback: core.AppTypography.emojiFontFallback,
+                  ),
+                ),
               ),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear search',
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      color: HomeMarketplaceTheme.textSecondary,
-                      onPressed: () {
-                        _searchController.clear();
-                        _clearSearch();
-                      },
-                    ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 0,
+                minHeight: 0,
+              ),
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasQuery)
+                      IconButton(
+                        tooltip: 'Clear search',
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        color: HomeMarketplaceTheme.textSecondary,
+                        onPressed: () {
+                          _searchController.clear();
+                          _clearSearch();
+                        },
+                      ),
+                    const TrustBadgesHelpButton(),
+                  ],
+                ),
+              ),
+              suffixIconConstraints: const BoxConstraints(
+                minHeight: 40,
+                minWidth: 0,
+              ),
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
+                horizontal: 8,
                 vertical: 16,
               ),
               isDense: true,
@@ -1465,6 +1697,51 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  HomeOnboardingBannerState _homeOnboardingBannerState(
+    Map<String, dynamic>? userSession,
+    bool signedIn,
+  ) =>
+      ProfileProgress.homeBannerState(userSession, signedIn: signedIn);
+
+  Widget _buildProfileCompletionBanner({
+    required HomeOnboardingBannerState state,
+    required Map<String, dynamic>? userSession,
+  }) {
+    final percent = ProfileProgress.seekerPercent(userSession);
+
+    final VoidCallback onContinue = switch (state) {
+      HomeOnboardingBannerState.completeProfile => () {
+          final session = userSession;
+          if (session != null && session.isNotEmpty) {
+            context.push('/welcome', extra: session);
+          } else {
+            context.push('/welcome');
+          }
+        },
+      HomeOnboardingBannerState.continueProfile => () {
+          final session = userSession;
+          if (session != null && session.isNotEmpty) {
+            context.push('/profile/edit', extra: session);
+          } else {
+            context.push('/profile/edit');
+          }
+        },
+      HomeOnboardingBannerState.signInRequired ||
+      HomeOnboardingBannerState.hidden =>
+        () {},
+    };
+
+    return HomeProfileCompletionBanner(
+      percent: percent,
+      audience: ProfileCompletionAudience.seeker,
+      onContinue: onContinue,
+      onDismiss: () {
+        HomeProfileCompletionBannerSession.dismissed = true;
+        setState(() {});
+      },
     );
   }
 
@@ -1686,57 +1963,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
-  Widget _buildProfileCompletionBanner(Map<String, dynamic> userSession) {
-    final missing = ProfileData.missingFieldsForCompletion(userSession);
-    final percent =
-        ProfileData.calculateProfileCompletionPercentage(userSession);
-    if (percent >= 100) return const SizedBox.shrink();
-    final missingText = missing.take(3).join(', ');
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: HomeMarketplaceTheme.searchSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: HomeMarketplaceTheme.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.auto_awesome_rounded,
-            color: HomeMarketplaceTheme.primary,
-            size: 22,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Profile $percent% complete',
-                  style: AppTypography.cardTitle(),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  missing.isEmpty
-                      ? 'Add a few more details for better ranking.'
-                      : 'Still needed: $missingText',
-                  style: AppTypography.detail(),
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () => _openProfileEdit(initialProfile: userSession),
-            child: const Text('Finish'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildWelcomeFeedBanner() {
     final filterSummary = _activeFilters.isEmpty
         ? 'your onboarding preferences'
@@ -1892,6 +2118,53 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildFamilySharedLivingUnavailableState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+        boxShadow: HomeMarketplaceTheme.cardShadowRest,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.family_restroom_outlined,
+            size: 36,
+            color: HomeMarketplaceTheme.textMuted,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Shared living isn\'t typically available for families',
+            textAlign: TextAlign.center,
+            style: AppTypography.sectionTitle()
+                .copyWith(fontSize: AppTypography.textMd),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Most family homes are listed under Independent Places — '
+            'whole flats and houses with the space you need.',
+            textAlign: TextAlign.center,
+            style: AppTypography.detail(),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () =>
+                unawaited(_selectActiveSpace(MarketplaceSpace.fullRental)),
+            style: AppButtonStyles.primaryFilled,
+            child: Text(
+              'Browse Independent Places',
+              style: AppTypography.button(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTowerEmptyState() {
     final label = _activeSpace.label;
 
@@ -1988,11 +2261,13 @@ class _UserHeaderMenu extends StatefulWidget {
     required this.fullName,
     required this.onViewProfile,
     required this.onLogout,
+    this.compact = false,
   });
 
   final String fullName;
   final VoidCallback onViewProfile;
   final VoidCallback onLogout;
+  final bool compact;
 
   @override
   State<_UserHeaderMenu> createState() => _UserHeaderMenuState();
@@ -2009,6 +2284,34 @@ class _UserHeaderMenuState extends State<_UserHeaderMenu> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.compact) {
+      return PopupMenuButton<String>(
+        tooltip: 'Account menu',
+        offset: const Offset(0, 44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        onSelected: (value) {
+          switch (value) {
+            case 'profile':
+              widget.onViewProfile();
+            case 'logout':
+              widget.onLogout();
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(value: 'profile', child: Text('View profile')),
+          const PopupMenuItem(value: 'logout', child: Text('Sign out')),
+        ],
+        child: CircleAvatar(
+          backgroundColor: HomeMarketplaceTheme.primary,
+          radius: 18,
+          child: Text(
+            _initial,
+            style: AppTypography.button().copyWith(fontSize: 13, height: 1),
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
       height: _HomeNavBar.actionHeight,
       child: Material(

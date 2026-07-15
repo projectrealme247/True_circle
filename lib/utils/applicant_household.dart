@@ -42,7 +42,8 @@ class ApplicantHousehold {
     return ApplicantHousehold(
       coApplicants: coApplicants,
       commuteProfiles: commuteProfiles,
-      hasGuarantor: session['has_guarantor'] == true,
+      hasGuarantor: session['guarantor_status'] == 'yes' ||
+          session['has_guarantor'] == true,
       hasHapVoucher: session['has_hap_voucher'] == true,
       hapContribution: hapRaw is num
           ? hapRaw.toDouble()

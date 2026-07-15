@@ -1,5 +1,5 @@
+import '../services/active_mode_service.dart';
 import '../services/trust_service.dart';
-import '../services/view_preference_service.dart';
 import 'listing_data.dart';
 import 'profile_data.dart';
 import 'viewer_profile.dart';
@@ -38,10 +38,10 @@ abstract final class PolymorphicIdentity {
   static bool useHostCompletionDenominator({
     required Map<String, dynamic>? session,
     required int ownedListingCount,
-  }) =>
-      ViewPreferenceService.isHostContext(
-        session: session,
-        ownedListingCount: ownedListingCount,
-      ) ||
-      ViewPreferenceService.isMultiListingHost(ownedListingCount);
+  }) {
+    final caps = ActiveModeService.capabilitiesFor(session)
+        .withOwnedListingCount(ownedListingCount);
+    return (ActiveModeService.current == ActiveMode.hosting && caps.canHost) ||
+        ownedListingCount > 1;
+  }
 }

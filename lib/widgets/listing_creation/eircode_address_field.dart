@@ -290,20 +290,15 @@ class _EircodeAddressFieldState extends State<EircodeAddressField> {
           child: Align(
             alignment: Alignment.topLeft,
             child: Material(
-              color: Colors.transparent,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _borderColor, width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 14,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
+              color: Colors.white,
+              elevation: 6,
+              shadowColor: Colors.black.withValues(alpha: 0.08),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: _borderColor, width: 1),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 260),
                 child: showLoading
                     ? const Padding(

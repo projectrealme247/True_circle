@@ -3,10 +3,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../navigation/navigate_after_identity.dart';
 import '../screens/auth_screen.dart';
 import 'profile_state_notifier.dart';
 import 'profile_storage_service.dart';
+import 'profile_onboarding_repository.dart';
 import 'marketplace_context_notifier.dart';
+import '../utils/viewer_profile.dart';
 
 /// Supabase email/password auth + local profile hydration.
 abstract final class AuthService {
@@ -17,6 +20,20 @@ abstract final class AuthService {
   static Session? get currentSession => client.auth.currentSession;
 
   static bool get isAuthenticated => currentSession != null;
+
+  /// True when the user has a real auth identity — not a marketplace-only browse shell.
+  static bool hasSignedInIdentity(Map<String, dynamic>? session) {
+    if (session == null || session.isEmpty) return false;
+    if (session['demo_mode'] == true) return true;
+    final email = session['email']?.toString().trim();
+    if (email != null && email.isNotEmpty) return true;
+    final userId = session['supabase_user_id']?.toString().trim();
+    if (userId != null && userId.isNotEmpty) return true;
+    return false;
+  }
+
+  static bool isSignedIn(Map<String, dynamic>? session) =>
+      isAuthenticated || hasSignedInIdentity(session);
 
   /// Restore Supabase session into [AuthScreen.currentUserSession] on app start.
   static Future<void> bootstrap() async {
@@ -86,11 +103,93 @@ abstract final class AuthService {
   }
 
   static Future<void> signOut() async {
-    await client.auth.signOut();
+    debugPrint('[Auth] Signing out: explicit user sign-out');
+    await client.auth.signOut(scope: SignOutScope.global);
     AuthScreen.currentUserSession = null;
     profileStateNotifier.clear();
     await ProfileStorageService.clear();
+    resetIdentityLanding();
     authSessionNotifier.refresh();
+  }
+
+  /// Local-only Supabase sign-out — only when auth is already gone and storage
+  /// is demonstrably corrupted. Never for incomplete profiles.
+  static Future<void> safeLocalSignOutIfAllowed({required String reason}) async {
+    if (currentSession != null) {
+      debugPrint(
+        '[Auth] Blocked SignOutScope.local ($reason): '
+        'Supabase auth session is still active',
+      );
+      return;
+    }
+
+    final stored = await ProfileStorageService.load();
+    if (stored != null &&
+        stored.isNotEmpty &&
+        !isProfileStorageCorrupted(stored)) {
+      debugPrint(
+        '[Auth] Blocked SignOutScope.local ($reason): '
+        'local profile is present and not corrupted '
+        '(incomplete profile is allowed)',
+      );
+      return;
+    }
+
+    debugPrint('[Auth] Signing out due to $reason');
+    await client.auth.signOut(scope: SignOutScope.local);
+    AuthScreen.currentUserSession = null;
+    profileStateNotifier.clear();
+    if (stored != null && isProfileStorageCorrupted(stored)) {
+      await ProfileStorageService.clear();
+    }
+  }
+
+  static bool isProfileStorageCorrupted(Map<String, dynamic>? stored) {
+    if (stored == null) return false;
+    for (final entry in stored.entries) {
+      final key = entry.key;
+      if (key.trim().isEmpty || key.length > 160) return true;
+      final value = entry.value;
+      final valid = value == null ||
+          value is String ||
+          value is num ||
+          value is bool ||
+          value is List ||
+          value is Map;
+      if (!valid) return true;
+    }
+    return false;
+  }
+
+  static Future<void> _retainLocalProfileIfPresent({
+    required String reason,
+  }) async {
+    final stored = await ProfileStorageService.load();
+    if (stored == null || stored.isEmpty) {
+      debugPrint('[Auth] $reason — no local profile to retain');
+      AuthScreen.currentUserSession = null;
+      profileStateNotifier.clear();
+      return;
+    }
+
+    if (isProfileStorageCorrupted(stored)) {
+      await safeLocalSignOutIfAllowed(
+        reason: 'corrupted local profile storage',
+      );
+      return;
+    }
+
+    final retained = Map<String, dynamic>.from(stored);
+    final migrated =
+        await ProfileOnboardingRepository.ensureLegacyHostTrackPersisted(retained);
+    final needsOnboarding = ViewerProfile.sessionNeedsOnboarding(migrated);
+    debugPrint(
+      '[Auth] $reason — retaining local profile '
+      '(needsOnboarding=$needsOnboarding, keys=${migrated.keys.length})',
+    );
+    AuthScreen.currentUserSession = migrated;
+    profileStateNotifier.commitPersisted(migrated);
+    unawaited(marketplaceContextNotifier.refresh());
   }
 
   /// Atomic profile sync: persist â†’ mirror global session â†’ notify listeners.
@@ -160,8 +259,9 @@ abstract final class AuthService {
     try {
       final session = currentSession;
       if (session == null) {
-        AuthScreen.currentUserSession = null;
-        profileStateNotifier.clear();
+        await _retainLocalProfileIfPresent(
+          reason: 'Supabase session absent during hydration',
+        );
         return;
       }
 
@@ -169,16 +269,32 @@ abstract final class AuthService {
       final metaName = user.userMetadata?['full_name']?.toString().trim();
 
       final stored = await ProfileStorageService.load();
-      final merged = <String, dynamic>{
+      if (stored != null && isProfileStorageCorrupted(stored)) {
+        await safeLocalSignOutIfAllowed(
+          reason: 'corrupted circlekey_user_profile payload',
+        );
+        return;
+      }
+
+      var merged = <String, dynamic>{
         if (stored != null) ...stored,
         'supabase_user_id': user.id,
         'email': user.email ?? stored?['email'] ?? '',
         if (metaName != null && metaName.isNotEmpty) 'full_name': metaName,
       };
 
+      merged =
+          await ProfileOnboardingRepository.ensureLegacyHostTrackPersisted(merged);
+
+      final needsOnboarding = ViewerProfile.sessionNeedsOnboarding(merged);
+      debugPrint(
+        '[Auth] Hydrated profile for ${merged['email']}; '
+        'needsOnboarding=$needsOnboarding',
+      );
+
       AuthScreen.currentUserSession = merged;
       profileStateNotifier.commitPersisted(merged);
-    unawaited(marketplaceContextNotifier.refresh());
+      unawaited(marketplaceContextNotifier.refresh());
       await ProfileStorageService.save(merged);
     } finally {
       _hydratingSession = false;
@@ -289,17 +405,28 @@ final authSessionNotifier = AuthSessionNotifier();
 
 final class AuthSessionNotifier extends ChangeNotifier {
   AuthSessionNotifier() {
-    AuthService.client.auth.onAuthStateChange.listen((_) {
-      unawaited(_onAuthStateChanged());
+    AuthService.client.auth.onAuthStateChange.listen((data) {
+      debugPrint(
+        '[Auth] onAuthStateChange: ${data.event.name} '
+        'hasSession=${data.session != null}',
+      );
+      unawaited(_onAuthStateChanged(data.event));
     });
   }
 
   bool _handlingAuthChange = false;
 
-  Future<void> _onAuthStateChanged() async {
+  Future<void> _onAuthStateChanged(AuthChangeEvent event) async {
     if (_handlingAuthChange) return;
     _handlingAuthChange = true;
     try {
+      if (event == AuthChangeEvent.signedOut &&
+          AuthService.currentSession == null) {
+        debugPrint(
+          '[Auth] Auth state signedOut with no active token — '
+          'hydrating without destructive local sign-out',
+        );
+      }
       await AuthService.bootstrap();
       refresh();
     } finally {

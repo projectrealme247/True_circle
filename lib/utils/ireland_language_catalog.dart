@@ -19,6 +19,7 @@ abstract final class IrelandLanguageCatalog {
     'Tamil',
     'Malayalam',
     'Bengali',
+    'Assamese',
     'Punjabi',
     'Gujarati',
     'Kannada',

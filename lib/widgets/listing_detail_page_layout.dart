@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 import '../models/marketplace_space.dart';
 import '../utils/listing_data.dart';
+import '../utils/listing_property_highlights.dart';
+import '../utils/listing_strength_calculator.dart';
 import 'listing_detail_commute_section.dart';
 import 'listing_detail_tokens.dart';
 import 'listing_photo_gallery.dart';
+import 'listing_strength_score_card.dart';
 
 /// Dual-column (desktop) / stacked (mobile) listing detail layout.
 class ListingDetailPageLayout extends StatelessWidget {
@@ -165,6 +168,7 @@ class _StoryColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final description = ListingData.description(item);
     final location = ListingData.location(item);
+    final strength = ListingStrengthCalculator.fromListing(item);
     final isShare = space == MarketplaceSpace.sharedSpace;
     final imageHeight = isShare ? 240.0 : 280.0;
 
@@ -191,12 +195,13 @@ class _StoryColumn extends StatelessWidget {
             const SizedBox(height: 6),
             Text(location, style: ListingDetailTokens.locationSubtitle),
           ],
+          const SizedBox(height: 16),
+          ListingStrengthScoreCard(snapshot: strength),
           const SizedBox(height: 20),
           const _SectionLabel(text: 'PROPERTY HIGHLIGHTS'),
           const SizedBox(height: 10),
           _FeatureMatrixGrid(
             listing: item,
-            space: space,
             formatHighlightLabel: formatHighlightLabel,
           ),
           const SizedBox(height: 18),
@@ -377,61 +382,15 @@ class _ActionDashboardPanel extends StatelessWidget {
 class _FeatureMatrixGrid extends StatelessWidget {
   const _FeatureMatrixGrid({
     required this.listing,
-    required this.space,
     required this.formatHighlightLabel,
   });
 
   final Map<String, dynamic> listing;
-  final MarketplaceSpace space;
   final String Function(String) formatHighlightLabel;
 
   @override
   Widget build(BuildContext context) {
-    final cells = space == MarketplaceSpace.fullRental
-        ? [
-            _MatrixCell(
-              icon: Icons.home_work_outlined,
-              label: formatHighlightLabel(
-                'Entire Place (Independent Flat/House)',
-              ),
-            ),
-            _MatrixCell(
-              icon: Icons.king_bed_outlined,
-              label: formatHighlightLabel(ListingData.bedsHighlightLabel(listing)),
-            ),
-            _MatrixCell(
-              icon: Icons.verified_user_outlined,
-              label: formatHighlightLabel(ListingData.rtbMatrixLabel(listing)),
-            ),
-            _MatrixCell(
-              icon: Icons.local_parking_outlined,
-              label: formatHighlightLabel(ListingData.parkingMatrixLabel(listing)),
-            ),
-          ]
-        : [
-            _MatrixCell(
-              icon: Icons.bed_outlined,
-              label: formatHighlightLabel(ListingData.shareRoomMatrixLabel(listing)),
-            ),
-            _MatrixCell(
-              icon: Icons.groups_outlined,
-              label: formatHighlightLabel(
-                ListingData.householdCultureMatrixLabel(listing),
-              ),
-            ),
-            _MatrixCell(
-              icon: Icons.restaurant_outlined,
-              label: formatHighlightLabel(
-                ListingData.dietaryKitchenMatrixLabel(listing),
-              ),
-            ),
-            _MatrixCell(
-              icon: Icons.translate_outlined,
-              label: formatHighlightLabel(
-                ListingData.houseLanguagesMatrixLabel(listing),
-              ),
-            ),
-          ];
+    final cells = ListingPropertyHighlights.gridCells(listing);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -446,7 +405,14 @@ class _FeatureMatrixGrid extends StatelessWidget {
             mainAxisExtent: 72,
           ),
           itemCount: cells.length,
-          itemBuilder: (context, index) => cells[index],
+          itemBuilder: (context, index) {
+            final cell = cells[index];
+            return _MatrixCell(
+              icon: cell.icon,
+              label: formatHighlightLabel(cell.label),
+              muted: cell.isPlatformFallback,
+            );
+          },
         );
       },
     );
@@ -454,18 +420,27 @@ class _FeatureMatrixGrid extends StatelessWidget {
 }
 
 class _MatrixCell extends StatelessWidget {
-  const _MatrixCell({required this.icon, required this.label});
+  const _MatrixCell({
+    required this.icon,
+    required this.label,
+    this.muted = false,
+  });
 
   final IconData icon;
   final String label;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F7),
+        color: muted ? const Color(0xFFF8FAFC) : const Color(0xFFF7F7F7),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ListingDetailTokens.border),
+        border: Border.all(
+          color: muted
+              ? const Color(0xFFE2E8F0)
+              : ListingDetailTokens.border,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

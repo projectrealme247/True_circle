@@ -50,11 +50,14 @@ abstract final class EircodeLookupService {
     }
 
     if (placemark.label.trim().isNotEmpty) {
-      return IrishAddressSuggestion(
-        displayLabel: placemark.eircode != null
+      final label = IrishAddressFormat.sanitizeCommaSeparatedLabel(
+        placemark.eircode != null
             ? '${placemark.label}, ${EircodeGeocodingService.normalize(placemark.eircode!)}'
             : placemark.label,
-        streetLine: placemark.label,
+      );
+      return IrishAddressSuggestion(
+        displayLabel: label,
+        streetLine: label,
         area: placemark.label,
         county: 'Dublin',
         eircode: placemark.eircode,
@@ -324,10 +327,12 @@ abstract final class EircodeLookupService {
         : _displayLabelWithoutEircode(fields);
 
     return IrishAddressSuggestion(
-      displayLabel: displayLabel,
-      streetLine: IrishAddressFormat.hasStreetLine(fields)
-          ? displayLabel.split(',').first.trim()
-          : displayLabel,
+      displayLabel: IrishAddressFormat.sanitizeCommaSeparatedLabel(displayLabel),
+      streetLine: IrishAddressFormat.sanitizeCommaSeparatedLabel(
+        IrishAddressFormat.hasStreetLine(fields)
+            ? displayLabel.split(',').first.trim()
+            : displayLabel,
+      ),
       area: IrishAddressFormat.formatPublicArea(fields) ?? '',
       county: IrishAddressFormat.countyZoneLabel(
         fields,

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../theme/trust_tier_design.dart';
+import '../../utils/rental_date_format.dart';
+import '../../utils/thousands_separator_formatter.dart';
 
 /// Calm selection styling — no coral fills on choice controls.
-const Color listingChoiceBorderSelected = Color(0xFF6B7280);
+const Color listingChoiceBorderSelected = Color(0xFF111827);
 const Color listingChoiceBorderUnselected = Color(0xFFE5E7EB);
 const Color listingChoiceCheckColor = Color(0xFF6B7280);
 
@@ -33,7 +36,7 @@ BoxDecoration listingChoiceBoxDecoration({
     borderRadius: BorderRadius.circular(borderRadius),
     border: Border.all(
       color: selected ? listingChoiceBorderSelected : listingChoiceBorderUnselected,
-      width: selected ? 1.25 : 1.0,
+      width: selected ? 1.5 : 1.0,
     ),
     boxShadow: selected ? listingChoiceSelectedShadow : null,
   );
@@ -47,58 +50,73 @@ Border listingDaftBorder({bool selected = false}) => Border.all(
       color: selected ? listingChoiceBorderSelected : listingDaftBorderColor,
       width: listingDaftBorderWidth,
     );
-const double listingFieldHeight = 44;
+/// Standard interactive control height (matches onboarding / profile inputs).
+const double listingFieldHeight = 48;
 
-/// Spacing tokens — 8px grid (compact).
-const double listingSectionSpacing = 28;
-const double listingFieldSpacing = 16;
-const double listingLabelSpacing = 8;
-const double listingCardPadding = 12;
+/// Spacing tokens — 8px grid (aligned with [AppSpacing]).
+const double listingSectionSpacing = AppSpacing.lg;
+const double listingFieldSpacing = AppSpacing.md;
+const double listingLabelSpacing = AppSpacing.sm;
+const double listingCardPadding = AppSpacing.md;
 
-/// Typography hierarchy — page → section → label → sub-label → value.
+/// Typography hierarchy — page → section → label → helper → value.
 const TextStyle listingPageTitleStyle = TextStyle(
   fontSize: 26,
   fontWeight: FontWeight.w600,
-  color: Color(0xFF111827),
+  color: AppColors.primaryText,
   letterSpacing: -0.4,
   height: 1.15,
+  fontFamily: AppTypography.fontFamily,
+  fontFamilyFallback: AppTypography.emojiFontFallback,
 );
 
-const TextStyle listingSectionTitleStyle = TextStyle(
-  fontSize: 18,
+/// Wizard step section headers (Tenure & duration, Listing type, Photos).
+const TextStyle listingFormSectionHeaderStyle = TextStyle(
+  fontSize: 13,
   fontWeight: FontWeight.w600,
-  color: Color(0xFF1F2937),
-  letterSpacing: -0.2,
-  height: 1.25,
+  color: AppColors.secondaryText,
+  letterSpacing: -0.1,
+  height: 1.35,
+  fontFamily: AppTypography.fontFamily,
+  fontFamilyFallback: AppTypography.emojiFontFallback,
 );
 
-const TextStyle listingPageSubtitleStyle = TextStyle(
-  fontSize: 16,
+@Deprecated('Use listingFormSectionHeaderStyle')
+const TextStyle listingSectionTitleStyle = listingFormSectionHeaderStyle;
+
+/// Page subtitle + helper / hint copy beneath labels.
+const TextStyle listingFormHelperStyle = TextStyle(
+  fontSize: 12,
   fontWeight: FontWeight.w400,
-  color: Color(0xFF6B7280),
+  color: AppColors.secondaryText,
   height: 1.45,
+  fontFamily: AppTypography.fontFamily,
+  fontFamilyFallback: AppTypography.emojiFontFallback,
 );
 
-/// Field labels (e.g. Tenant composition, BER rating).
+const TextStyle listingPageSubtitleStyle = listingFormHelperStyle;
+
+/// Inner field labels (Available from, Bedrooms).
 const TextStyle listingFieldLabelStyle = TextStyle(
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
+  color: AppColors.secondaryText,
+  height: 1.35,
+  fontFamily: AppTypography.fontFamily,
+  fontFamilyFallback: AppTypography.emojiFontFallback,
+);
+
+/// Informational / helper copy beneath field labels.
+const TextStyle listingSubLabelStyle = listingFormHelperStyle;
+
+/// Selected values, inputs, and choice tile labels.
+const TextStyle listingFieldValueStyle = TextStyle(
   fontSize: 15,
   fontWeight: FontWeight.w500,
-  color: Color(0xFF4B5563),
+  color: AppColors.primaryText,
   height: 1.35,
-);
-
-/// Informational / helper copy beneath labels.
-const TextStyle listingSubLabelStyle = TextStyle(
-  fontSize: 13,
-  fontWeight: FontWeight.w400,
-  color: Color(0xFF9CA3AF),
-  height: 1.45,
-);
-
-const TextStyle listingFieldValueStyle = TextStyle(
-  fontSize: 16,
-  fontWeight: FontWeight.w500,
-  color: Color(0xFF111827),
+  fontFamily: AppTypography.fontFamily,
+  fontFamilyFallback: AppTypography.emojiFontFallback,
 );
 
 /// Monochromatic icon tint for form choice tiles (matches utility icons).
@@ -120,10 +138,14 @@ class ListingSectionHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.required = false,
+    this.trailing,
   });
 
   final String title;
   final String? subtitle;
+  final bool required;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +154,22 @@ class ListingSectionHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: listingSectionTitleStyle),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: listingFieldLabel(
+                  title,
+                  required: required,
+                  style: listingFormSectionHeaderStyle,
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 8),
+                trailing!,
+              ],
+            ],
+          ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
             Text(subtitle!, style: listingSubLabelStyle),
@@ -141,6 +178,89 @@ class ListingSectionHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Subtle badge shown while title/description remain auto-drafted.
+class ListingAutoDraftBadge extends StatelessWidget {
+  const ListingAutoDraftBadge({super.key, this.visible = true});
+
+  final bool visible;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: visible ? 1 : 0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      child: AnimatedScale(
+        scale: visible ? 1 : 0.92,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        child: IgnorePointer(
+          ignoring: !visible,
+          child: Container(
+            padding: TrustTierDesign.trustScaleCapsulePadding,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(
+                TrustTierDesign.trustScaleCapsuleRadius,
+              ),
+              border: Border.all(
+                color: TrustTierDesign.trustScaleCapsuleText.withValues(
+                  alpha: 0.35,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 12,
+                  color: TrustTierDesign.trustScaleCapsuleText,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Auto-drafted — tap to edit',
+                  style: TrustTierDesign.trustScaleLabelStyle(compact: true),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+TextStyle listingSmartCopyFieldStyle({
+  required TextStyle base,
+  required bool isAutoDrafted,
+}) {
+  return base.copyWith(
+    color: isAutoDrafted ? Colors.black38 : const Color(0xDE000000),
+  );
+}
+
+/// Field label with optional required asterisk.
+Widget listingFieldLabel(
+  String text, {
+  bool required = false,
+  TextStyle? style,
+}) {
+  final baseStyle = style ?? listingFieldLabelStyle;
+  if (!required) return Text(text, style: baseStyle);
+  return Text.rich(
+    TextSpan(
+      children: [
+        TextSpan(text: text, style: baseStyle),
+        TextSpan(
+          text: ' *',
+          style: baseStyle.copyWith(color: const Color(0xFF9CA3AF)),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Collapsed-by-default panel for optional listing enhancements.
@@ -162,25 +282,30 @@ class ListingCollapsibleSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Border animates on AnimatedContainer (no fill color) so any child
+    // ListTile/SwitchListTile has Material as its nearest painted ancestor.
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeInOutCubic,
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: expanded ? listingChoiceBorderSelected : listingChoiceBorderUnselected,
+          color: expanded
+              ? listingChoiceBorderSelected
+              : listingChoiceBorderUnselected,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
               onTap: () => onExpandedChanged(!expanded),
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(14),
+                top: Radius.circular(12),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(listingCardPadding),
@@ -190,7 +315,7 @@ class ListingCollapsibleSection extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(title, style: listingSectionTitleStyle),
+                          Text(title, style: listingFormSectionHeaderStyle),
                           if (subtitle != null) ...[
                             const SizedBox(height: 4),
                             Text(subtitle!, style: listingSubLabelStyle),
@@ -212,33 +337,33 @@ class ListingCollapsibleSection extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                listingCardPadding,
-                0,
-                listingCardPadding,
-                listingCardPadding,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < children.length; i++) ...[
-                    if (i > 0) const SizedBox(height: listingFieldSpacing),
-                    children[i],
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  listingCardPadding,
+                  0,
+                  listingCardPadding,
+                  listingCardPadding,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < children.length; i++) ...[
+                      if (i > 0) const SizedBox(height: listingFieldSpacing),
+                      children[i],
+                    ],
                   ],
-                ],
+                ),
               ),
+              crossFadeState: expanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 220),
+              sizeCurve: Curves.easeInOutCubic,
             ),
-            crossFadeState: expanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 220),
-            sizeCurve: Curves.easeInOutCubic,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -568,9 +693,11 @@ class ListingWrapSegmentedControl<T extends Object> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     this.enabled = true,
+    this.emojis = const {},
   });
 
   final Map<T, String> segments;
+  final Map<T, String> emojis;
   final T selected;
   final ValueChanged<T> onChanged;
   final bool enabled;
@@ -584,6 +711,7 @@ class ListingWrapSegmentedControl<T extends Object> extends StatelessWidget {
         for (final entry in segments.entries)
           _WrapSegmentChip(
             label: entry.value,
+            emoji: emojis[entry.key],
             selected: entry.key == selected,
             enabled: enabled,
             onTap: () => onChanged(entry.key),
@@ -596,12 +724,14 @@ class ListingWrapSegmentedControl<T extends Object> extends StatelessWidget {
 class _WrapSegmentChip extends StatelessWidget {
   const _WrapSegmentChip({
     required this.label,
+    this.emoji,
     required this.selected,
     required this.enabled,
     required this.onTap,
   });
 
   final String label;
+  final String? emoji;
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
@@ -617,19 +747,14 @@ class _WrapSegmentChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected
-                  ? listingChoiceBorderSelected
-                  : listingChoiceBorderUnselected,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
+          decoration: listingChoiceBoxDecoration(selected: selected),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (emoji != null && emoji!.isNotEmpty) ...[
+                Text(emoji!, style: const TextStyle(fontSize: 14, height: 1)),
+                const SizedBox(width: 5),
+              ],
               Text(
                 label,
                 style: listingFieldValueStyle.copyWith(
@@ -764,7 +889,7 @@ class ListingOutlineChoiceGrid<T extends Object> extends StatelessWidget {
               label: entries[i].value,
               selected: entries[i].key == selected,
               enabled: enabled,
-              height: 44,
+              height: listingFieldHeight,
               textAlign: TextAlign.left,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               onTap: () => onChanged(entries[i].key),
@@ -995,12 +1120,8 @@ class ListingDateInputField extends StatelessWidget {
   /// When true, label is rendered by [ListingLabeledField] above this widget.
   final bool externalLabel;
 
-  static String _formatDate(DateTime? date) {
-    if (date == null) return '';
-    return '${date.day.toString().padLeft(2, '0')}/'
-        '${date.month.toString().padLeft(2, '0')}/'
-        '${date.year}';
-  }
+  static String _formatDate(DateTime? date) =>
+      RentalDateFormat.formatRentalAvailabilityDateTime(date);
 
   @override
   Widget build(BuildContext context) {
@@ -1374,6 +1495,11 @@ class ListingCompactRuleTile extends StatelessWidget {
     required this.active,
     required this.onChanged,
     this.enabled = true,
+    this.emoji,
+    this.icon,
+    this.activeIcon,
+    this.inactiveIcon,
+    this.activeIconColor,
   });
 
   final String offLabel;
@@ -1381,17 +1507,115 @@ class ListingCompactRuleTile extends StatelessWidget {
   final bool active;
   final ValueChanged<bool> onChanged;
   final bool enabled;
+  final String? emoji;
+  final IconData? icon;
+  final IconData? activeIcon;
+  final IconData? inactiveIcon;
+  final Color? activeIconColor;
 
   @override
   Widget build(BuildContext context) {
-    return ListingOutlineChoiceTile(
+    return ListingAnimatedRuleChip(
       label: active ? onLabel : offLabel,
-      selected: active,
+      active: active,
       enabled: enabled,
-      height: 40,
-      textAlign: TextAlign.center,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      emoji: emoji,
+      icon: icon,
+      activeIcon: activeIcon,
+      inactiveIcon: inactiveIcon,
+      activeIconColor: activeIconColor,
       onTap: () => onChanged(!active),
+    );
+  }
+}
+
+/// Rule chip with optional animated icon and emoji — preserves calm tile chrome.
+class ListingAnimatedRuleChip extends StatelessWidget {
+  const ListingAnimatedRuleChip({
+    super.key,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.enabled = true,
+    this.emoji,
+    this.icon,
+    this.activeIcon,
+    this.inactiveIcon,
+    this.activeIconColor,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final bool enabled;
+  final String? emoji;
+  final IconData? icon;
+  final IconData? activeIcon;
+  final IconData? inactiveIcon;
+  final Color? activeIconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolvedActiveIcon = activeIcon ?? icon;
+    final resolvedInactiveIcon = inactiveIcon ?? icon;
+    final showAnimatedIcon =
+        resolvedActiveIcon != null && resolvedInactiveIcon != null;
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          height: 40,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: listingChoiceBoxDecoration(selected: active),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (showAnimatedIcon) ...[
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: Icon(
+                    active ? resolvedActiveIcon! : resolvedInactiveIcon!,
+                    key: ValueKey(active),
+                    size: 16,
+                    color: active
+                        ? (activeIconColor ?? listingChoiceIconColor)
+                        : const Color(0xFF9CA3AF),
+                  ),
+                ),
+                const SizedBox(width: 5),
+              ] else if (emoji != null && emoji!.isNotEmpty) ...[
+                Text(emoji!, style: const TextStyle(fontSize: 14, height: 1)),
+                const SizedBox(width: 4),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: listingFieldValueStyle.copyWith(
+                    fontSize: 13,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                    height: 1.2,
+                    color: enabled
+                        ? const Color(0xFF374151)
+                        : const Color(0xFF9CA3AF),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1402,29 +1626,40 @@ class ListingPremiumRentField extends StatelessWidget {
     super.key,
     required this.controller,
     this.enabled = true,
-    this.validator,
+    this.showLabel = true,
+    this.showError = false,
+    this.errorText,
+    this.onChanged,
   });
 
   final TextEditingController controller;
   final bool enabled;
-  final String? Function(String?)? validator;
+  final bool showLabel;
+  final bool showError;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
 
   static const _surfaceBg = Color(0xFFF9FAFB);
   static const _borderColor = Color(0xFFE5E7EB);
+  static const _errorColor = Color(0xFFEF4444);
 
   @override
   Widget build(BuildContext context) {
+    final hasError = showError && (errorText ?? '').isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Monthly rent', style: listingFieldLabelStyle),
-        const SizedBox(height: 8),
+        if (showLabel) listingFieldLabel('Monthly rent', required: true),
+        if (showLabel) const SizedBox(height: 8),
         Container(
           height: 56,
           decoration: BoxDecoration(
             color: _surfaceBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _borderColor),
+            border: Border.all(
+              color: hasError ? _errorColor : _borderColor,
+              width: hasError ? 1.5 : 1,
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1452,12 +1687,13 @@ class ListingPremiumRentField extends StatelessWidget {
               Expanded(
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: TextFormField(
+                  child: TextField(
                     controller: controller,
                     enabled: enabled,
                     keyboardType: TextInputType.number,
                     textAlignVertical: TextAlignVertical.center,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [ThousandsSeparatorFormatter()],
+                    onChanged: onChanged,
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
@@ -1476,22 +1712,29 @@ class ListingPremiumRentField extends StatelessWidget {
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
-                      errorBorder: InputBorder.none,
-                      focusedErrorBorder: InputBorder.none,
-                      errorStyle: TextStyle(height: 0, fontSize: 0),
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 16,
                       ),
                       isCollapsed: false,
                     ),
-                    validator: validator,
                   ),
                 ),
               ),
             ],
           ),
         ),
+        if (hasError) ...[
+          const SizedBox(height: 6),
+          Text(
+            errorText!,
+            style: const TextStyle(
+              fontSize: 12,
+              color: _errorColor,
+              height: 1.2,
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -39,7 +39,11 @@ abstract final class HomeMarketplaceTheme {
   static const searchBlockMaxWidth = 896.0;
   static const searchBlockRadius = AppRadius.lg;
 
-  static const brandTagline = 'Matched by lifestyle, connected by trust';
+  static const heroHeadline = 'Find people and places that fit.';
+  static const heroSubheadline = 'Matched by lifestyle, timing and trust.';
+
+  /// Legacy alias — homepage hero uses [heroSubheadline].
+  static const brandTagline = heroSubheadline;
 
   static BoxDecoration cardDecoration({bool elevated = true}) =>
       AppTheme.cardDecoration(elevated: elevated);

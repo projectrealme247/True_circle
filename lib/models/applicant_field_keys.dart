@@ -11,6 +11,7 @@ abstract final class ApplicantFieldKeys {
   static const foodPreference = 'food_preference';
   static const preferredLeaseMonths = 'preferred_lease_months';
   static const earliestMoveInDate = 'earliest_move_in_date';
+  static const hasVerifiedPreArrivalDocs = 'has_verified_pre_arrival_docs';
   static const budgetMin = 'budget_min';
   static const budgetMax = 'budget_max';
   static const fullName = 'full_name';

@@ -1,4 +1,5 @@
-﻿import 'profile_data.dart';
+﻿import '../models/move_in_timing.dart';
+import 'profile_data.dart';
 import 'target_search_areas.dart';
 
 /// Trust verification stages for the progressive trust funnel.
@@ -69,6 +70,10 @@ class ViewerProfile {
     this.groupSize = 1,
     this.targetSearchAreas = const [],
     this.isPreArrivalSeeker = false,
+    this.moveInWindow = '',
+    this.earliestMoveInDate = '',
+    this.hasVerifiedPreArrivalDocs = false,
+    this.needsOnboarding = false,
   });
 
   final String city;
@@ -105,8 +110,52 @@ class ViewerProfile {
   final List<String> targetSearchAreas;
   final bool isPreArrivalSeeker;
 
-  static double trustMultiplierForStage(int stage) =>
-      TrustStage.fromLevel(stage).multiplier;
+  /// Seeker move-in window token (`this_month`, `next_month`, etc.).
+  final String moveInWindow;
+
+  /// Legacy exact-date field — read-only for migration; prefer [moveInWindow].
+  final String earliestMoveInDate;
+
+  /// Backend-verified inbound docs (university offer, employment contract, relocation letter).
+  final bool hasVerifiedPreArrivalDocs;
+
+  /// Profile shell exists but lacks fields required for meaningful matching.
+  final bool needsOnboarding;
+
+  static bool sessionNeedsOnboarding(Map<String, dynamic> raw) {
+    return ProfileData.text(raw['detected_city']).isEmpty ||
+        ProfileData.text(raw['budget_max']).isEmpty;
+  }
+
+  static bool _hasAuthenticatedProfileShell(Map<String, dynamic> raw) {
+    return ProfileData.text(raw['supabase_user_id']).isNotEmpty ||
+        ProfileData.text(raw['email']).isNotEmpty ||
+        raw['demo_mode'] == true ||
+        ProfileData.text(raw['active_marketplace_space']).isNotEmpty;
+  }
+
+  static ViewerProfile incompleteShell(Map<String, dynamic> raw) {
+    return ViewerProfile(
+      city: '',
+      nativePlace: '',
+      motherTongue: '',
+      spokenLanguages: const [],
+      foodPreference: '',
+      occupantType: '',
+      genderPreference: '',
+      studentType: '',
+      company: '',
+      jobTitle: '',
+      budgetMin: null,
+      budgetMax: null,
+      preferredPropertyType: ProfileData.text(raw['preferred_property_type']),
+      completenessPercent: 0,
+      hasCompany: false,
+      trustStage: _resolveTrustStage(raw),
+      circleMarkers: const [],
+      needsOnboarding: true,
+    );
+  }
 
   static ViewerProfile? fromSession(Map<String, dynamic>? raw) {
     if (raw == null || raw.isEmpty) return null;
@@ -131,11 +180,15 @@ class ViewerProfile {
     final budgetMax = _parseInt(raw['budget_max']);
 
     final completeness = _completenessPercent(raw);
+    final needsOnboarding = sessionNeedsOnboarding(raw);
 
     if (city.isEmpty &&
         motherTongue.isEmpty &&
         food.isEmpty &&
         occupant.isEmpty) {
+      if (_hasAuthenticatedProfileShell(raw)) {
+        return incompleteShell(raw);
+      }
       return null;
     }
 
@@ -181,7 +234,23 @@ class ViewerProfile {
       targetSearchAreas: TargetSearchAreas.hydrateFromSession(raw),
       isPreArrivalSeeker: raw['pre_arrival_contact_ready'] == true &&
           ProfileData.text(raw['verified_university_email']).isEmpty,
+      moveInWindow:
+          SeekerMoveInWindow.fromSession(raw)?.storageToken ?? '',
+      earliestMoveInDate: ProfileData.text(raw['earliest_move_in_date']),
+      hasVerifiedPreArrivalDocs: _resolveVerifiedPreArrivalDocs(raw),
+      needsOnboarding: needsOnboarding,
     );
+  }
+
+  static double trustMultiplierForStage(int stage) =>
+      TrustStage.fromLevel(stage).multiplier;
+
+  static bool _resolveVerifiedPreArrivalDocs(Map<String, dynamic> raw) {
+    if (raw['has_verified_pre_arrival_docs'] == true) return true;
+    if (raw['onboarding_letter_verified'] == true) return true;
+    if (raw['employment_contract_verified'] == true) return true;
+    if (raw['relocation_letter_verified'] == true) return true;
+    return false;
   }
 
   static SeekerCohort seekerCohortFromSession(Map<String, dynamic>? session) {

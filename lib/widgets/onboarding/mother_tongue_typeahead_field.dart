@@ -72,13 +72,16 @@ class MotherTongueTypeaheadField extends StatelessWidget {
                 itemCount: options.length,
                 itemBuilder: (context, index) {
                   final language = options.elementAt(index);
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      language,
-                      style: const TextStyle(fontSize: 15),
+                  return Material(
+                    color: Colors.white,
+                    child: ListTile(
+                      dense: true,
+                      title: Text(
+                        language,
+                        style: const TextStyle(fontSize: 15),
+                      ),
+                      onTap: () => onSelected(language),
                     ),
-                    onTap: () => onSelected(language),
                   );
                 },
               ),

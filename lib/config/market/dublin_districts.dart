@@ -167,6 +167,8 @@ String? dublinDistrictLabelFromCoordinates(double lat, double lon) {
     (minLat: 53.33, maxLat: 53.37, minLon: -6.24, maxLon: -6.16, key: 'dublin17'),
     (minLat: 53.28, maxLat: 53.33, minLon: -6.38, maxLon: -6.30, key: 'dublin16'),
     (minLat: 53.34, maxLat: 53.38, minLon: -6.38, maxLon: -6.30, key: 'dublin20'),
+    (minLat: 53.42, maxLat: 53.55, minLon: -6.28, maxLon: -6.05, key: 'co_dublin_north'),
+    (minLat: 53.25, maxLat: 53.32, minLon: -6.20, maxLon: -6.05, key: 'co_dublin_south'),
   ];
 
   final key = dublinDistrictKey(label);

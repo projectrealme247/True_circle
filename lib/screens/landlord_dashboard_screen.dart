@@ -9,14 +9,22 @@ import '../models/independent_places_applicant_stream.dart';
 import '../models/landlord_applicant_card_model.dart';
 import '../models/listing_creation_category.dart';
 import '../models/shared_living_applicant_stream.dart';
+import '../navigation/navigate_after_identity.dart';
+import '../services/active_mode_service.dart';
+import '../services/application_service.dart';
+import '../services/auth_service.dart';
 import '../services/listing_applications_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/profile_state_notifier.dart';
 import '../screens/auth_screen.dart';
 import '../utils/listing_data.dart';
 import '../utils/profile_data.dart';
+import '../utils/profile_progress.dart';
+import '../utils/seeker_strong_match_aggregator.dart';
 import '../theme/app_typography.dart';
 import '../utils/landlord_dashboard_helpers.dart';
+import '../widgets/active_mode/active_mode_switch.dart';
+import '../widgets/home/home_profile_completion_banner.dart';
 import '../widgets/landlord_dashboard/landlord_dashboard_theme.dart';
 import '../widgets/landlord_dashboard/landlord_kpi_metrics_row.dart';
 import '../widgets/landlord_dashboard/landlord_listing_switcher.dart';
@@ -64,17 +72,26 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
   bool _loading = true;
   String? _actionLoadingId;
   String? _loadError;
+  int _hostApplicantCount = 0;
+  int _seekerStrongMatchCount = 0;
 
   @override
   void initState() {
     super.initState();
+    profileStateNotifier.addListener(_onProfileChanged);
     _bootstrap();
   }
 
   @override
   void dispose() {
+    profileStateNotifier.removeListener(_onProfileChanged);
     _listingPageController.dispose();
     super.dispose();
+  }
+
+  void _onProfileChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _bootstrap() async {
@@ -121,6 +138,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
         _selectedIndex = selected;
         _loading = false;
       });
+      await _refreshCrossModeBadges(listings);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_listingPageController.hasClients && selected > 0) {
@@ -134,6 +152,81 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
         _loadError = e.toString();
       });
     }
+  }
+
+  Future<void> _refreshCrossModeBadges(List<Map<String, dynamic>> listings) async {
+    await applicationService.ensureLoaded();
+    var applicantCount = 0;
+    for (final listing in listings) {
+      applicantCount +=
+          applicationService.rowsForListing(ListingData.id(listing)).length;
+    }
+    final strongMatches = await SeekerStrongMatchAggregator.countForSession(
+      profileStateNotifier.session,
+    );
+    if (!mounted) return;
+    setState(() {
+      _hostApplicantCount = applicantCount;
+      _seekerStrongMatchCount = strongMatches;
+    });
+  }
+
+  Widget? _buildModeSwitch() {
+    final session = profileStateNotifier.session;
+    final caps = ActiveModeService.capabilitiesFor(session);
+    if (!caps.isDualCapable) return null;
+    final unread = ActiveModeService.unreadActivityFor(
+      session: session,
+      activeMode: ActiveModeService.current,
+      hostApplicantCount: _hostApplicantCount,
+      seekerStrongMatchCount: _seekerStrongMatchCount,
+    );
+    return ActiveModeSwitch(
+      current: ActiveModeService.current,
+      unread: unread,
+      canSeek: caps.canSeek,
+      canHost: caps.canHost,
+      compact: true,
+      onModeSelected: (mode) async {
+        await ActiveModeService.recordUnreadBaselines(
+          hostApplicantCount: _hostApplicantCount,
+          seekerStrongMatchCount: _seekerStrongMatchCount,
+        );
+        if (!mounted) return;
+        await navigateForActiveMode(context, mode);
+      },
+    );
+  }
+
+  Widget? _buildHostProfileBanner() {
+    final session = profileStateNotifier.session;
+    final signedIn = AuthService.isSignedIn(session);
+    final state = ProfileProgress.hostBannerState(session, signedIn: signedIn);
+    if (HomeProfileCompletionBannerSession.hostDismissed ||
+        state == HomeOnboardingBannerState.hidden ||
+        state == HomeOnboardingBannerState.signInRequired) {
+      return null;
+    }
+    final percent = ProfileProgress.hostPercent(session);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: HomeProfileCompletionBanner(
+        percent: percent,
+        audience: ProfileCompletionAudience.host,
+        onContinue: () {
+          final extra = session;
+          if (extra != null && extra.isNotEmpty) {
+            context.push('/profile/edit/host', extra: extra);
+          } else {
+            context.push('/profile/edit/host');
+          }
+        },
+        onDismiss: () {
+          HomeProfileCompletionBannerSession.hostDismissed = true;
+          setState(() {});
+        },
+      ),
+    );
   }
 
   Future<_ListingStreamPayload> _loadPayloadForListing(
@@ -372,6 +465,13 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
           ),
         ),
         actions: [
+          if (_buildModeSwitch() != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: _buildModeSwitch(),
+            ),
+            const SizedBox(width: 4),
+          ],
           IconButton(
             tooltip: 'Refresh streams',
             onPressed: _loading ? null : _bootstrap,
@@ -399,10 +499,12 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
 
   Widget _buildDashboard() {
     final payload = _currentPayload;
+    final hostBanner = _buildHostProfileBanner();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (hostBanner != null) hostBanner,
         LandlordListingSwitcher(
           listings: _listings,
           selectedIndex: _selectedIndex,

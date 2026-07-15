@@ -1,14 +1,19 @@
 import 'package:flutter/foundation.dart';
 
+import '../debug/agent_log.dart';
+import '../debug/debug_session_log.dart';
+
+import '../models/move_in_timing.dart';
+import '../theme/trust_tier_design.dart';
 import 'listing_data.dart';
 import 'listing_search_intent.dart';
 import 'viewer_profile.dart';
 
-import '../debug/agent_log.dart';
 import '../services/commute_scoring_service.dart';
 import 'commute_profile.dart';
 import 'profile_data.dart';
 import 'student_track_preference.dart';
+import 'weighted_listing_matcher.dart';
 
 enum MatchTower { rent, buy, share }
 
@@ -43,34 +48,58 @@ class ListingMatchResult {
     maxScore: 1,
     percentage: 0,
     label: '',
-    reasons: [],
+    reasons: const [],
+    excluded: false,
+    tower: MatchTower.rent,
+  );
+
+  static const onboardingRequired = ListingMatchResult(
+    score: 0,
+    maxScore: 1,
+    percentage: 0,
+    label: 'Onboarding Required',
+    reasons: const [],
     excluded: false,
     tower: MatchTower.rent,
   );
 }
 
 class ScoredListing {
-  const ScoredListing({required this.listing, required this.match});
+  const ScoredListing({
+    required this.listing,
+    required this.match,
+    this.preferenceScore = 100.0,
+  });
 
   final Map<String, dynamic> listing;
   final ListingMatchResult match;
+  final double preferenceScore;
 }
 class ListingRankOutcome {
   const ListingRankOutcome({
     required this.ranked,
     this.isCommuteDivergent = false,
+    this.requiresOnboarding = false,
   });
   final List<ScoredListing> ranked;
   final bool isCommuteDivergent;
+  final bool requiresOnboarding;
 }
 
 /// Hard filters + tower scoring + trust multiplier + circle ranking.
 ///
 /// Final Score = TrustMultiplier x CompatibilityScore
 abstract final class ListingMatchEngine {
-  static const rentMaxScore = 225;
+  static const rentMaxScore = 100;
   static const buyMaxScore = 175;
-  static const shareMaxScore = 235;
+  static const shareMaxScore = 100;
+
+  static const _rentPetSmokingSoftPenalty = 15;
+
+  static const _shareBudgetHardCapRatio =
+      WeightedListingMatcher.budgetHardCapRatio;
+  static const _shareBudgetStretchStartRatio =
+      WeightedListingMatcher.budgetStretchStartRatio;
 
   /// Minimum compatibility (0.0–1.0) required to surface the In Your Circle badge.
   static const inCircleMinMatchFraction = 0.75;
@@ -91,9 +120,32 @@ abstract final class ListingMatchEngine {
     SearchIntent? searchIntent,
     SearchIntent? appliedSearchIntent,
     bool filtersWereRelaxed = false,
+    WeightedFilterCriteria? weightedCriteria,
   }) {
     final viewer = ViewerProfile.fromSession(viewerSession);
+    if (viewer?.needsOnboarding == true) {
+      // #region agent log
+      agentLog(
+        'A',
+        'listing_match_engine.dart:rank',
+        'skip ranking — needs onboarding',
+        {
+          'sessionKeyCount': viewerSession?.keys.length ?? 0,
+          'hasDetectedCity':
+              (viewerSession?['detected_city']?.toString() ?? '').isNotEmpty,
+          'hasBudgetMax':
+              (viewerSession?['budget_max']?.toString() ?? '').isNotEmpty,
+        },
+      );
+      // #endregion
+      return const ListingRankOutcome(
+        ranked: [],
+        requiresOnboarding: true,
+      );
+    }
+
     final scored = <ScoredListing>[];
+    var excludedCount = 0;
 
     for (final listing in listings) {
       final match = evaluate(
@@ -104,12 +156,44 @@ abstract final class ListingMatchEngine {
         appliedSearchIntent: appliedSearchIntent,
         filtersWereRelaxed: filtersWereRelaxed,
       );
+      if (match.excluded) {
+        excludedCount++;
+      }
       if (!match.excluded) {
-        scored.add(ScoredListing(listing: listing, match: match));
+        final preferenceScore = weightedCriteria != null
+            ? WeightedListingMatcher.computePreferenceScore(
+                listing,
+                weightedCriteria,
+              )
+            : 100.0;
+        scored.add(ScoredListing(
+          listing: listing,
+          match: match,
+          preferenceScore: preferenceScore,
+        ));
       }
     }
 
-    if (scored.isEmpty && listings.isNotEmpty) {
+    // #region agent log
+    if (listings.isNotEmpty) {
+      debugSessionLog(
+        location: 'listing_match_engine.dart:rank',
+        message: 'rank pool outcome',
+        hypothesisId: 'B,C',
+        data: {
+          'inputPool': listings.length,
+          'excluded': excludedCount,
+          'scored': scored.length,
+          'viewerOccupant': viewer?.occupantType,
+          'isFamily': isFamilyOccupant(viewer),
+        },
+      );
+    }
+    // #endregion
+
+    if (scored.isEmpty &&
+        listings.isNotEmpty &&
+        !_allShareListingsBlockedForFamily(viewer, listings)) {
       for (final listing in listings) {
         final match = evaluate(
           listing,
@@ -121,17 +205,35 @@ abstract final class ListingMatchEngine {
           skipProfileHardFilters: true,
         );
         if (!match.excluded) {
-          scored.add(ScoredListing(listing: listing, match: match));
+          final preferenceScore = weightedCriteria != null
+              ? WeightedListingMatcher.computePreferenceScore(
+                  listing,
+                  weightedCriteria,
+                )
+              : 100.0;
+          scored.add(ScoredListing(
+            listing: listing,
+            match: match,
+            preferenceScore: preferenceScore,
+          ));
         }
       }
     }
 
     // Priority ranking:
-    // 1. Circle listings ΓåÆ highest quality first
-    // 2. High-match (>= 50%) ΓåÆ sorted by score descending
-    // 3. Medium-match (25-49%) ΓåÆ sorted by score descending
-    // 4. Low-match (< 25%) ΓåÆ pushed to end
+    // 1. Weighted lifestyle preference score (when active soft filters exist)
+    // 2. Circle listings → highest quality first
+    // 3. High-match (>= 50%) → sorted by score descending
+    // 4. Medium-match (25-49%) → sorted by score descending
+    // 5. Low-match (< 25%) → pushed to end
+    final usesWeightedSort = weightedCriteria != null &&
+        _weightedCriteriaHasSoftFilters(weightedCriteria);
     scored.sort((a, b) {
+      if (usesWeightedSort) {
+        final pref = b.preferenceScore.compareTo(a.preferenceScore);
+        if (pref != 0) return pref;
+      }
+
       final aCircle = a.match.inCircle ? 1 : 0;
       final bCircle = b.match.inCircle ? 1 : 0;
       if (aCircle != bCircle) return bCircle - aCircle;
@@ -147,6 +249,16 @@ abstract final class ListingMatchEngine {
       ranked: scored,
       isCommuteDivergent: _isCommuteDivergent(viewerSession),
     );
+  }
+
+  static bool _weightedCriteriaHasSoftFilters(WeightedFilterCriteria criteria) {
+    return criteria.requiresWfh ||
+        criteria.requiresVeg ||
+        criteria.requiresNonVeg ||
+        criteria.preferredRoomType != null ||
+        criteria.preferredOccupant != null ||
+        criteria.preferredGender != null ||
+        criteria.maxBudget != null;
   }
 
   static bool _isCommuteDivergent(Map<String, dynamic>? viewerSession) {
@@ -172,7 +284,26 @@ abstract final class ListingMatchEngine {
     bool skipProfileHardFilters = false,
     Map<String, dynamic>? viewerSession,
   }) {
+    if (viewer?.needsOnboarding == true) {
+      return ListingMatchResult.onboardingRequired;
+    }
+
     final tower = _towerFor(listing);
+
+    if (tower == MatchTower.share &&
+        viewer != null &&
+        _isFamilyOccupant(viewer)) {
+      return ListingMatchResult(
+        score: 0,
+        maxScore: _maxFor(tower),
+        percentage: 0,
+        label: '',
+        reasons: const [],
+        excluded: true,
+        tower: tower,
+      );
+    }
+
     final hasSearch = searchIntent != null && searchIntent.hasStructuredFilters;
     final skipHard = skipProfileHardFilters || hasSearch;
 
@@ -204,7 +335,7 @@ abstract final class ListingMatchEngine {
     }
 
     final flags = viewer != null
-        ? _MatchFlags.build(listing, viewer)
+        ? _MatchFlags.build(listing, viewer, viewerSession: viewerSession)
         : _MatchFlags.empty();
     final searchFlags = hasSearch
         ? _SearchMatchFlags.fromIntent(
@@ -219,15 +350,31 @@ abstract final class ListingMatchEngine {
     final compatibilityScore = switch (tower) {
       MatchTower.rent => _scoreRent(flags, viewer, listing, searchFlags, weights, viewerSession),
       MatchTower.buy => _scoreBuy(flags, viewer, listing, searchFlags, weights),
-      MatchTower.share => _scoreShare(flags, viewer, listing, searchFlags, weights),
+      MatchTower.share => _scoreShare(
+          flags,
+          viewer,
+          listing,
+          searchFlags,
+          weights,
+          viewerSession,
+        ),
     };
 
-    // Trust multiplier: Final Score = TrustMultiplier x CompatibilityScore
+    // Trust multiplier: average host + seeker (avoids compounding two penalties).
     final hostTrust = TrustStage.fromLevel(ListingData.hostTrustStage(listing));
     final trustMult = hostTrust.multiplier;
-    final afterTrust = (trustMult * compatibilityScore).round();
-    final finalScore =
-        (afterTrust * _preArrivalScoreMultiplier(viewer, listing)).round();
+    final seekerMult = viewer == null
+        ? 1.0
+        : TrustTierDesign.effectiveSeekerTrustMultiplier(
+            baseStage: viewer.trustStage,
+            hasVerifiedPreArrivalDocs: viewer.hasVerifiedPreArrivalDocs,
+          );
+    final combinedTrustMult = (trustMult + seekerMult) / 2;
+    final finalScoreBeforeArrival =
+        (combinedTrustMult * compatibilityScore).round();
+    final finalScore = (finalScoreBeforeArrival *
+            _preArrivalScoreMultiplier(viewer, listing))
+        .round();
 
     final max = hasSearch && viewer == null
         ? _searchOnlyMax(tower)
@@ -247,6 +394,12 @@ abstract final class ListingMatchEngine {
       hostTrust: hostTrust,
       inCircle: inCircle,
       maxReasons: 4,
+      viewer: viewer,
+      hasPreArrivalTrustUpgrade: viewer != null &&
+          TrustTierDesign.hasPreArrivalTrustUpgrade(
+            baseStage: viewer.trustStage,
+            hasVerifiedPreArrivalDocs: viewer.hasVerifiedPreArrivalDocs,
+          ),
     );
 
     return ListingMatchResult(
@@ -312,9 +465,9 @@ abstract final class ListingMatchEngine {
       };
 
   static String _labelFor(double percentage) {
-    if (percentage >= 80) return '≡ƒöÑ Perfect match';
-    if (percentage >= 60) return 'Γ£à Strong match';
-    if (percentage >= 40) return '≡ƒæì Good match';
+    if (percentage >= 65) return '≡ƒöÑ Perfect match';
+    if (percentage >= 50) return 'Γ£à Strong match';
+    if (percentage >= 30) return '≡ƒæì Good match';
     return 'ΓÜá∩╕Å Less relevant';
   }
 
@@ -333,15 +486,7 @@ abstract final class ListingMatchEngine {
   }
 
   static bool _rentHardFilter(Map<String, dynamic> listing, ViewerProfile viewer) {
-    if (_occupantMismatch(viewer.occupantType, ListingData.occupantType(listing))) {
-      return true;
-    }
-    if (_genderMismatch(viewer.genderPreference, ListingData.bachelorPreference(listing))) {
-      return true;
-    }
-    if (_studentMismatch(viewer.studentType, ListingData.studentType(listing))) {
-      return true;
-    }
+    // Independent Places: occupant, gender, and student type are ranking signals only.
     return false;
   }
 
@@ -357,14 +502,118 @@ abstract final class ListingMatchEngine {
   }
 
   static bool _shareHardFilter(Map<String, dynamic> listing, ViewerProfile viewer) {
-    if (_lifestyleFlagConflict(viewer, listing)) return true;
     if (_genderMismatch(viewer.genderPreference, ListingData.bachelorPreference(listing))) {
       return true;
     }
-    if (_lifestyleConflict(viewer, listing)) return true;
-    if (_smokingDrinkingConflict(viewer, listing)) return true;
+    if (_sharePetSmokingHardExclude(viewer, listing)) return true;
     return false;
   }
+
+  static bool _sharePetSmokingHardExclude(
+    ViewerProfile viewer,
+    Map<String, dynamic> listing,
+  ) {
+    if (_listingExplicitlyDisallowsSmoking(listing) && viewer.smokingOk) {
+      return true;
+    }
+    if (_listingExplicitlyDisallowsPets(listing) && viewer.householdHasPets) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _listingExplicitlyDisallowsSmoking(Map<String, dynamic> listing) {
+    if (ListingData.lifestyleFlags(listing).contains('no_smoking')) {
+      return true;
+    }
+    return listing.containsKey('smoking_allowed') &&
+        listing['smoking_allowed'] != true;
+  }
+
+  static bool _listingExplicitlyDisallowsPets(Map<String, dynamic> listing) {
+    if (ListingData.lifestyleFlags(listing).contains('no_pets')) {
+      return true;
+    }
+    return listing.containsKey('pets_allowed') && listing['pets_allowed'] != true;
+  }
+
+  static double _shareBudgetFitFraction(int? price, ViewerProfile? viewer) {
+    if (price == null || viewer?.budgetMax == null) return 0;
+    final max = viewer!.budgetMax!;
+    if (price <= max) return 1.0;
+    final stretchStart = (max * _shareBudgetStretchStartRatio).round();
+    if (price <= stretchStart) return 0.6;
+    final hardCap = (max * _shareBudgetHardCapRatio).round();
+    if (price <= hardCap) return 0.25;
+    return 0;
+  }
+
+  static double _rentBudgetFitFraction(int? price, ViewerProfile? viewer) {
+    if (price == null || viewer?.budgetMax == null) return 0;
+    final max = viewer!.budgetMax!;
+    if (price <= max) return 1.0;
+    final stretchStart = (max * _shareBudgetStretchStartRatio).round();
+    if (price <= stretchStart) return 0.5;
+    final hardCap = (max * _shareBudgetHardCapRatio).round();
+    if (price <= hardCap) return 0.2;
+    return 0;
+  }
+
+  static bool _shareBudgetSoftOver(int? price, ViewerProfile viewer) {
+    if (price == null || viewer.budgetMax == null) return false;
+    final stretchStart = (viewer.budgetMax! * _shareBudgetStretchStartRatio).round();
+    final hardCap = (viewer.budgetMax! * _shareBudgetHardCapRatio).round();
+    return price > stretchStart && price <= hardCap;
+  }
+
+  static Map<String, dynamic> _seekerTimingSession(ViewerProfile viewer) => {
+        if (viewer.moveInWindow.isNotEmpty) 'move_in_window': viewer.moveInWindow,
+        if (viewer.earliestMoveInDate.isNotEmpty)
+          'earliest_move_in_date': viewer.earliestMoveInDate,
+      };
+
+  static TimingMatchEvaluation _evaluateTiming(
+    ViewerProfile viewer,
+    Map<String, dynamic> listing,
+  ) {
+    return MoveInTimingEngine.evaluate(
+      seekerSession: _seekerTimingSession(viewer),
+      listing: listing,
+    );
+  }
+
+  static bool _timingMatch(ViewerProfile viewer, Map<String, dynamic> listing) {
+    final hasScheduleSignal = viewer.scheduleType.isNotEmpty ||
+        ListingData.scheduleType(listing).isNotEmpty;
+    final hasMoveInSignal =
+        viewer.moveInWindow.isNotEmpty ||
+        viewer.earliestMoveInDate.isNotEmpty ||
+        ProfileData.text(listing['available_from']).isNotEmpty;
+
+    if (!hasScheduleSignal && !hasMoveInSignal) return false;
+
+    final scheduleOk = _scheduleCompatible(viewer, listing);
+    if (!hasMoveInSignal) return scheduleOk;
+
+    final eval = _evaluateTiming(viewer, listing);
+    final moveInOk = eval.earnsTimingScore;
+    if (hasScheduleSignal && hasMoveInSignal) return scheduleOk && moveInOk;
+    return moveInOk;
+  }
+
+  static bool _timingMismatch(ViewerProfile viewer, Map<String, dynamic> listing) {
+    final hasScheduleSignal = viewer.scheduleType.isNotEmpty ||
+        ListingData.scheduleType(listing).isNotEmpty;
+    final hasMoveInSignal =
+        viewer.moveInWindow.isNotEmpty ||
+        viewer.earliestMoveInDate.isNotEmpty ||
+        ProfileData.text(listing['available_from']).isNotEmpty;
+    if (!hasScheduleSignal && !hasMoveInSignal) return false;
+
+    final eval = _evaluateTiming(viewer, listing);
+    return eval.quality == TimingMatchQuality.weak;
+  }
+
   static bool _studentTrackConflict(
     ViewerProfile viewer,
     Map<String, dynamic> listing,
@@ -417,6 +666,26 @@ abstract final class ListingMatchEngine {
     return CommuteScoringService.overBudgetScorePenalty(
       doorToDoorMinutes: minutes,
       budgetMinutes: budget,
+    );
+  }
+
+  static bool isFamilyOccupant(ViewerProfile? viewer) {
+    if (viewer == null) return false;
+    return _isFamilyOccupant(viewer);
+  }
+
+  static bool _isFamilyOccupant(ViewerProfile viewer) {
+    final occ = viewer.occupantType.toLowerCase();
+    return occ.contains('family');
+  }
+
+  static bool _allShareListingsBlockedForFamily(
+    ViewerProfile? viewer,
+    List<Map<String, dynamic>> listings,
+  ) {
+    if (!isFamilyOccupant(viewer)) return false;
+    return listings.every(
+      (listing) => _towerFor(listing) == MatchTower.share,
     );
   }
 
@@ -502,20 +771,69 @@ abstract final class ListingMatchEngine {
     _ScoringWeights w,
     Map<String, dynamic>? viewerSession,
   ) {
-    var score = 0;
-    if (f.foodMatch || search.foodExact) score += w.food;
-    if (f.languageMatch) score += 35;
-    if (f.nativityMatch) score += 25;
-    if (f.occupantMatch || search.occupantExact) score += w.occupant;
-    if (f.genderMatch || search.genderExact) score += w.gender;
-    if (f.studentMatch) score += 15;
-    if (f.priceFit) score += 10;
-    if (f.locationMatch || search.cityExact) score += w.city;
-    if (f.bhkMatch) score += 15;
-    if (f.furnishingMatch) score += 10;
-    if (viewer != null && _mutualMatchRent(viewer, listing)) score += 15;
-    score -= _commuteOverBudgetPenalty(viewerSession, listing);
-    return score.clamp(0, rentMaxScore);
+    final weights = _RentTowerWeights.forViewer(viewer);
+    final price = _parsePrice(ListingData.price(listing));
+    var score = 0.0;
+
+    score += weights.budget *
+        (f.priceFit ? 1.0 : _rentBudgetFitFraction(price, viewer));
+
+    if (f.bhkMatch) score += weights.bedCount;
+
+    score += weights.locationCommute *
+        _rentLocationCommuteFraction(f, search, viewerSession, listing);
+
+    if (f.timingMatch) score += weights.timing;
+    if (f.languageMatch) score += weights.language;
+
+    score += weights.lifestyle * _rentLifestyleFraction(f, search);
+
+    if (viewer != null && _rentPetSmokingMismatch(viewer, listing)) {
+      score -= _rentPetSmokingSoftPenalty;
+    }
+
+    return score.round().clamp(0, rentMaxScore);
+  }
+
+  static double _rentLocationCommuteFraction(
+    _MatchFlags f,
+    _SearchMatchFlags search,
+    Map<String, dynamic>? viewerSession,
+    Map<String, dynamic> listing,
+  ) {
+    final cityOk = f.locationMatch || search.cityExact;
+    if (!cityOk) return 0;
+
+    final hasCommuteIntent = viewerSession != null &&
+        !ProfileData.commuteDestinationUnknown(viewerSession) &&
+        (ProfileData.maximumCommuteBudgetMinutes(viewerSession) != null ||
+            CommuteProfileRegistry.fromSession(viewerSession).isNotEmpty);
+    if (!hasCommuteIntent) return 1.0;
+    if (f.commuteWithinBudget || !f.commuteOverBudget) return 1.0;
+    return 0.5;
+  }
+
+  static double _rentLifestyleFraction(
+    _MatchFlags f,
+    _SearchMatchFlags search,
+  ) {
+    var matched = 0.0;
+    if (f.occupantMatch || search.occupantExact) matched += 1;
+    if (f.furnishingMatch) matched += 1;
+    return matched / 2;
+  }
+
+  static bool _rentPetSmokingMismatch(
+    ViewerProfile viewer,
+    Map<String, dynamic> listing,
+  ) {
+    if (_listingExplicitlyDisallowsSmoking(listing) && viewer.smokingOk) {
+      return true;
+    }
+    if (_listingExplicitlyDisallowsPets(listing) && viewer.householdHasPets) {
+      return true;
+    }
+    return false;
   }
 
   static int _scoreBuy(
@@ -544,38 +862,72 @@ abstract final class ListingMatchEngine {
     Map<String, dynamic> listing,
     _SearchMatchFlags search,
     _ScoringWeights w,
+    Map<String, dynamic>? viewerSession,
   ) {
-    var score = 0;
-    if (f.foodMatch || search.foodExact) score += w.food;
-    if (f.lifestyleCompatible) score += 40;
-    if (f.languageMatch) score += 30;
-    if (f.nativityMatch) score += 25;
-    if (f.genderMatch || search.genderExact) score += w.gender;
-    if (f.roommateTypeMatch || search.occupantExact) score += w.occupant;
-    if (f.roomTypeMatch) score += 15;
-    if (f.priceFit) score += 10;
-    if (f.locationMatch || search.cityExact) score += w.city;
-    if (_scheduleCompatible(viewer, listing)) score += 10;
-    if (_quietHoursAligned(viewer, listing)) score += 5;
-    return score;
+    final weights = _ShareTowerWeights.forViewer(viewer);
+    final price = _parsePrice(ListingData.price(listing));
+    var score = 0.0;
+
+    if (f.languageMatch) score += weights.language;
+
+    if (_shareDietKitchenMatch(f, search, viewer, listing)) {
+      score += weights.diet;
+    }
+
+    if (f.occupantMatch || f.roommateTypeMatch || search.occupantExact) {
+      score += weights.occupant;
+    }
+
+    score += weights.budget * _shareBudgetFitFraction(price, viewer);
+
+    score += weights.lifestyle *
+        _shareLifestyleSocialFraction(f, viewer, listing);
+
+    if (f.timingMatch) score += weights.timing;
+
+    return score.round().clamp(0, shareMaxScore);
   }
 
-  // ΓöÇΓöÇ Mutual matching ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-  static bool _mutualMatchRent(ViewerProfile viewer, Map<String, dynamic> listing) {
-    final prefOccupant = ListingData.preferredTenantOccupant(listing);
-    if (prefOccupant.isNotEmpty && viewer.occupantType.isNotEmpty) {
-      return ListingData.matchesOccupantType(
-        {'occupantType': viewer.occupantType},
-        prefOccupant,
-      );
-    }
-    final prefFood = ListingData.preferredTenantFood(listing);
-    if (prefFood.isNotEmpty && viewer.foodPreference.isNotEmpty) {
-      return _normFood(viewer.foodPreference) == _normFood(prefFood);
-    }
-    return false;
+  static bool _shareDietKitchenMatch(
+    _MatchFlags f,
+    _SearchMatchFlags search,
+    ViewerProfile? viewer,
+    Map<String, dynamic> listing,
+  ) {
+    if (f.foodMatch || search.foodExact) return true;
+    if (viewer == null) return false;
+    return f.lifestyleCompatible;
   }
+
+  static double _shareLifestyleSocialFraction(
+    _MatchFlags f,
+    ViewerProfile? viewer,
+    Map<String, dynamic> listing,
+  ) {
+    var matched = 0;
+    var signals = 0;
+
+    signals++;
+    if (f.lifestyleCompatible) matched++;
+
+    final flags = ListingData.lifestyleFlags(listing);
+    if (flags.contains('quiet_hours_preferred')) {
+      signals++;
+      if (_quietHoursAligned(viewer, listing)) matched++;
+    }
+
+    if (viewer != null &&
+        (viewer.scheduleType.isNotEmpty ||
+            ListingData.scheduleType(listing).isNotEmpty)) {
+      signals++;
+      if (_scheduleCompatible(viewer, listing)) matched++;
+    }
+
+    if (signals == 0) return 0;
+    return matched / signals;
+  }
+
+  // ΓöÇΓöÇ Mutual matching (buy tower only) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   static bool _mutualMatchBuy(ViewerProfile viewer, Map<String, dynamic> listing) {
     final prefOccupant = ListingData.preferredTenantOccupant(listing);
@@ -606,10 +958,16 @@ abstract final class ListingMatchEngine {
     required TrustStage hostTrust,
     required bool inCircle,
     required int maxReasons,
+    ViewerProfile? viewer,
+    bool hasPreArrivalTrustUpgrade = false,
   }) {
     final all = <String>[];
 
     if (inCircle) all.add('≡ƒñ¥ In your circle');
+
+    if (hasPreArrivalTrustUpgrade) {
+      all.add('✅ Pre-arrival docs verified — Grand trust weighting');
+    }
 
     if (hostTrust == TrustStage.idVerified) {
       all.add('≡ƒ¢í∩╕Å ID Verified');
@@ -621,6 +979,14 @@ abstract final class ListingMatchEngine {
 
     switch (tower) {
       case MatchTower.rent:
+        if (f.commuteOverBudget) {
+          all.add('⚠️ Commute may exceed your budget');
+        }
+        if (f.timingQuality == TimingMatchQuality.weak) {
+          all.add('⚠️ ${f.timingQuality.label}');
+        } else if (f.timingMatch && f.timingQuality.label.isNotEmpty) {
+          all.add('✅ ${f.timingQuality.label}');
+        }
         if (!search.foodExact && f.foodMatch) {
           all.add('Γ£à Same food preference');
         }
@@ -633,12 +999,15 @@ abstract final class ListingMatchEngine {
         if (!search.genderExact && f.genderMatch) {
           all.add('Γ£à Gender preference aligned');
         }
-        if (f.languageMatch) all.add('Γ£à Speaks your language');
         if (f.nativityMatch) all.add('Γ£à Same native region');
-        if (f.bhkMatch) all.add('Γ£à BHK fits your need');
+        if (f.bhkMatch) all.add('Γ£à Bed count fits your need');
         if (f.furnishingMatch) all.add('Γ£à Furnished');
         if (f.studentMatch) all.add('Γ£à Student background fits');
         if (f.priceFit) all.add('Γ£à Price in your range');
+        if (f.timingMatch && f.timingQuality.label.isNotEmpty) {
+          all.add('✅ ${f.timingQuality.label}');
+        }
+        if (f.commuteWithinBudget) all.add('Γ£à Commute within budget');
       case MatchTower.buy:
         if (!search.foodExact && f.foodMatch) {
           all.add('Γ£à Same food preference');
@@ -653,6 +1022,27 @@ abstract final class ListingMatchEngine {
         if (f.languageMatch) all.add('Γ£à Speaks your language');
         if (f.nativityMatch) all.add('Γ£à Same native region');
       case MatchTower.share:
+        if (f.budgetSoftOver) {
+          all.add('⚠️ Slightly over your max budget');
+        }
+        if (f.timingQuality == TimingMatchQuality.weak) {
+          all.add('⚠️ ${f.timingQuality.label}');
+        } else if (f.timingMatch && f.timingQuality.label.isNotEmpty) {
+          all.add('✅ ${f.timingQuality.label}');
+        }
+        if (f.commuteOverBudget) {
+          all.add('⚠️ Commute may exceed your budget');
+        }
+        if (f.budgetExactFit) {
+          all.add('Γ£à Perfect budget fit');
+        } else if (f.priceFit) {
+          all.add('Γ£à Within your budget');
+        } else if (f.budgetSoftOver) {
+          all.add('⚠️ Slightly over your max budget');
+        }
+        if (f.timingMatch && f.timingQuality.label.isNotEmpty) {
+          all.add('✅ ${f.timingQuality.label}');
+        }
         if (!search.foodExact && f.foodMatch) {
           all.add('Γ£à Same food preference');
         }
@@ -668,29 +1058,11 @@ abstract final class ListingMatchEngine {
         if (f.roomTypeMatch) all.add('Γ£à Room type available');
         if (f.lifestyleCompatible) all.add('Γ£à Lifestyle compatible');
         if (f.languageMatch) all.add('Γ£à Speaks your language');
-        if (f.nativityMatch) all.add('Γ£à Same native region');
+        if (f.commuteWithinBudget) all.add('Γ£à Commute within budget');
     }
     final result = all.take(maxReasons).toList();
-    // #region agent log
-    if (_combinedReasonsLogCount < 3 && result.isNotEmpty) {
-      _combinedReasonsLogCount++;
-      agentLog(
-        location: 'listing_match_engine.dart:_combinedReasons',
-        message: 'Match reasons built',
-        hypothesisId: 'B',
-        data: {
-          'count': result.length,
-          'firstReason': result.first,
-          'firstHasNonAscii': result.first.runes.any((r) => r > 127),
-          'tower': tower.name,
-        },
-      );
-    }
-    // #endregion
     return result;
   }
-
-  static int _combinedReasonsLogCount = 0;
 
   static void _appendExactSearchReasons(
     List<String> all,
@@ -729,6 +1101,11 @@ abstract final class ListingMatchEngine {
   }
 
   static String _norm(String value) => value.trim().toLowerCase();
+
+  static String _resolveBedLabel(Map<String, dynamic> listing) {
+    final raw = listing['bedrooms'] ?? listing['bhk'];
+    return raw?.toString().toLowerCase().trim() ?? '';
+  }
 }
 
 // ΓöÇΓöÇ Match flags ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -753,6 +1130,14 @@ class _MatchFlags {
     required this.categoryMatch,
     required this.possessionMatch,
     required this.roomTypeMatch,
+    required this.shareBudgetScore,
+    required this.budgetSoftOver,
+    required this.budgetExactFit,
+    required this.timingMatch,
+    required this.timingMismatch,
+    required this.timingQuality,
+    required this.commuteOverBudget,
+    required this.commuteWithinBudget,
   });
 
   final bool foodMatch;
@@ -773,6 +1158,14 @@ class _MatchFlags {
   final bool categoryMatch;
   final bool possessionMatch;
   final bool roomTypeMatch;
+  final int shareBudgetScore;
+  final bool budgetSoftOver;
+  final bool budgetExactFit;
+  final bool timingMatch;
+  final bool timingMismatch;
+  final TimingMatchQuality timingQuality;
+  final bool commuteOverBudget;
+  final bool commuteWithinBudget;
 
   static _MatchFlags empty() => const _MatchFlags(
         foodMatch: false,
@@ -793,9 +1186,21 @@ class _MatchFlags {
         categoryMatch: false,
         possessionMatch: false,
         roomTypeMatch: false,
+        shareBudgetScore: 0,
+        budgetSoftOver: false,
+        budgetExactFit: false,
+        timingMatch: false,
+        timingMismatch: false,
+        timingQuality: TimingMatchQuality.none,
+        commuteOverBudget: false,
+        commuteWithinBudget: false,
       );
 
-  static _MatchFlags build(Map<String, dynamic> listing, ViewerProfile viewer) {
+  static _MatchFlags build(
+    Map<String, dynamic> listing,
+    ViewerProfile viewer, {
+    Map<String, dynamic>? viewerSession,
+  }) {
     final listingFood = ListingData.foodPreferenceToken(listing);
     final viewerFood = ListingMatchEngine._normFood(viewer.foodPreference);
     final foodMatch =
@@ -835,7 +1240,7 @@ class _MatchFlags {
         occupantMatch || (listingOccupant == 'Bachelors' && bachelor.isNotEmpty) ||
         (listingOccupant == 'Working Professionals' && bachelor.isNotEmpty);
 
-    final listingBhk = ListingMatchEngine._norm(ListingData.bhk(listing));
+    final listingBhk = ListingMatchEngine._resolveBedLabel(listing);
     final bhkMatch = listingBhk.isNotEmpty && _inferredBhkMatches(listingBhk, viewer);
 
     final listingFurnishing = ListingMatchEngine._norm(ListingData.furnishing(listing));
@@ -851,6 +1256,24 @@ class _MatchFlags {
 
     final listingRoomType = ListingMatchEngine._norm(ListingData.roomType(listing));
     final roomTypeMatch = listingRoomType.isNotEmpty;
+
+    final shareBudgetFraction =
+        ListingMatchEngine._shareBudgetFitFraction(price, viewer);
+    final shareBudgetScore = (shareBudgetFraction * 15).round();
+    final budgetSoftOver = ListingMatchEngine._shareBudgetSoftOver(price, viewer);
+    final budgetExactFit = price != null &&
+        viewer.budgetMax != null &&
+        price <= viewer.budgetMax! &&
+        (viewer.budgetMin == null ||
+            (price >= viewer.budgetMin! && price <= viewer.budgetMax!));
+    final timingEval = ListingMatchEngine._evaluateTiming(viewer, listing);
+    final timingMatch = ListingMatchEngine._timingMatch(viewer, listing);
+    final timingMismatch = ListingMatchEngine._timingMismatch(viewer, listing);
+    final commutePenalty =
+        ListingMatchEngine._commuteOverBudgetPenalty(viewerSession, listing);
+    final commuteOverBudget = commutePenalty >= 12;
+    final commuteWithinBudget =
+        commutePenalty == 0 && viewerSession != null;
 
     return _MatchFlags(
       foodMatch: foodMatch,
@@ -871,6 +1294,14 @@ class _MatchFlags {
       categoryMatch: categoryMatch,
       possessionMatch: possessionMatch,
       roomTypeMatch: roomTypeMatch,
+      shareBudgetScore: shareBudgetScore,
+      budgetSoftOver: budgetSoftOver,
+      budgetExactFit: budgetExactFit,
+      timingMatch: timingMatch,
+      timingMismatch: timingMismatch,
+      timingQuality: timingEval.quality,
+      commuteOverBudget: commuteOverBudget,
+      commuteWithinBudget: commuteWithinBudget,
     );
   }
 
@@ -1051,6 +1482,118 @@ class _SearchMatchFlags {
           : requested.gender == 'boys'
               ? 'Boys'
               : '',
+    );
+  }
+}
+
+/// Persona-adjusted weight buckets for independent-places scoring (sum = 100).
+class _RentTowerWeights {
+  const _RentTowerWeights({
+    required this.budget,
+    required this.bedCount,
+    required this.locationCommute,
+    required this.timing,
+    required this.language,
+    required this.lifestyle,
+  });
+
+  final int budget;
+  final int bedCount;
+  final int locationCommute;
+  final int timing;
+  final int language;
+  final int lifestyle;
+
+  static _RentTowerWeights forViewer(ViewerProfile? viewer) {
+    final occ = viewer?.occupantType.toLowerCase() ?? '';
+    if (occ.contains('student')) {
+      return const _RentTowerWeights(
+        budget: 30,
+        bedCount: 15,
+        locationCommute: 20,
+        timing: 20,
+        language: 10,
+        lifestyle: 5,
+      );
+    }
+    if (occ.contains('working') || occ.contains('professional')) {
+      return const _RentTowerWeights(
+        budget: 20,
+        bedCount: 15,
+        locationCommute: 25,
+        timing: 15,
+        language: 10,
+        lifestyle: 15,
+      );
+    }
+    if (occ.contains('family')) {
+      return const _RentTowerWeights(
+        budget: 25,
+        bedCount: 30,
+        locationCommute: 20,
+        timing: 10,
+        language: 5,
+        lifestyle: 10,
+      );
+    }
+    return const _RentTowerWeights(
+      budget: 25,
+      bedCount: 20,
+      locationCommute: 20,
+      timing: 15,
+      language: 10,
+      lifestyle: 10,
+    );
+  }
+}
+
+/// Persona-adjusted weight buckets for shared-living scoring (sum = 100).
+class _ShareTowerWeights {
+  const _ShareTowerWeights({
+    required this.language,
+    required this.diet,
+    required this.occupant,
+    required this.budget,
+    required this.lifestyle,
+    required this.timing,
+  });
+
+  final int language;
+  final int diet;
+  final int occupant;
+  final int budget;
+  final int lifestyle;
+  final int timing;
+
+  static _ShareTowerWeights forViewer(ViewerProfile? viewer) {
+    final occ = viewer?.occupantType.toLowerCase() ?? '';
+    if (occ.contains('student')) {
+      return const _ShareTowerWeights(
+        language: 30,
+        lifestyle: 20,
+        occupant: 20,
+        diet: 15,
+        budget: 10,
+        timing: 5,
+      );
+    }
+    if (occ.contains('working') || occ.contains('professional')) {
+      return const _ShareTowerWeights(
+        budget: 20,
+        occupant: 25,
+        lifestyle: 15,
+        language: 20,
+        diet: 15,
+        timing: 5,
+      );
+    }
+    return const _ShareTowerWeights(
+      language: 25,
+      diet: 20,
+      occupant: 20,
+      budget: 15,
+      lifestyle: 10,
+      timing: 10,
     );
   }
 }

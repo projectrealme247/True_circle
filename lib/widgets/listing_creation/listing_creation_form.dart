@@ -8,8 +8,10 @@ import 'package:geolocator/geolocator.dart';
 import '../../config/market/dublin_districts.dart';
 import '../../config/market/market_config.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/skeleton_placeholder.dart';
 import '../../models/listing_creation_field_keys.dart';
 import '../../models/listing_creation_form_models.dart';
+import '../../models/move_in_timing.dart';
 import '../../models/marketplace_space.dart';
 import '../../models/neighborhood_amenity_tag.dart';
 import '../../services/neighborhood_amenities_service.dart';
@@ -18,17 +20,30 @@ import '../../services/fast_location_service.dart';
 import '../../services/eircode_geocoding_service.dart';
 import '../../services/eircode_lookup_service.dart';
 import '../../services/overpass_amenities_service.dart';
+import '../../services/proximity_resolution_cache.dart';
+import '../../services/structured_amenities_fallback_service.dart';
 import '../../services/transit_extraction_service.dart';
+import '../../utils/city_area_match.dart';
 import '../../utils/listing_data.dart';
+import '../../utils/listing_smart_copy_generator.dart';
+import '../../utils/listing_strength_calculator.dart';
+import '../../utils/thousands_separator_formatter.dart';
 import '../../utils/profile_data.dart';
+import '../../utils/proximity_chip_keys.dart';
+import '../../utils/proximity_display_builder.dart';
+import '../../utils/proximity_phase1_policy.dart';
+import '../../utils/target_search_areas.dart';
 import '../../screens/auth_screen.dart';
-import '../../debug/agent_log.dart';
 import '../../models/irish_address_suggestion.dart';
 import '../../utils/address_privacy.dart';
+import '../../utils/irish_address_format.dart';
+import '../../utils/listing_area_resolution.dart';
 import '../gamified_form_wizard.dart';
 import '../listing_media_picker.dart';
-import 'location_pin_field.dart';
+import '../shadcn_select.dart';
 import 'listing_creation_primitives.dart';
+import 'location_pin_field.dart';
+import 'unified_proximity_display.dart';
 
 /// Dublin listing creation form — 3-step wizard with validate + buildPayload.
 class ListingCreationForm extends StatefulWidget {
@@ -54,7 +69,8 @@ class ListingCreationForm extends StatefulWidget {
 class ListingCreationFormState extends State<ListingCreationForm> {
   static const _dublinCenterLat = 53.349805;
   static const _dublinCenterLon = -6.26031;
-  static const _maxContentWidth = 720.0;
+  static const _standardMaxContentWidth = 720.0;
+  static const _locationStepMaxContentWidth = 1140.0;
   static const _stepCount = 3;
   static const demoEircodeHint = 'D02 X285';
 
@@ -72,8 +88,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   // Agreement
   ListingAgreementType _agreementType = ListingAgreementType.longTerm;
   DateTime? _availableFrom;
+  LandlordAvailabilityFlexibility _availabilityFlexibility =
+      LandlordAvailabilityFlexibility.exactDate;
   final _subletDurationController = TextEditingController();
-  SubletDurationUnit _subletDurationUnit = SubletDurationUnit.months;
+  SubletDurationUnit _subletDurationUnit = SubletDurationUnit.years;
 
   // Category
   late String _type;
@@ -115,6 +133,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     FlatmateCohort.families: 'Families',
   };
 
+  static final _cohortEmojis = {
+    for (final c in FlatmateCohort.values) c: c.emoji,
+  };
+
   void _setRoomsToShare(int count) {
     final next = count.clamp(1, 6);
     setState(() {
@@ -146,13 +168,30 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   final _addressSearchController = TextEditingController();
   IrishAddressSuggestion? _selectedAddress;
   bool _hideExactAddress = false;
+  String? _listingAreaKey;
+  String _localityLabel = '';
+  bool _sharedCostsShowErrors = false;
+  bool _rentShowError = false;
+  String? _rentErrorText;
+  bool _locationShowErrors = false;
+  bool _titleShowError = false;
+  String? _autoDraftedTitle;
+  String? _autoDraftedDescription;
+  final _sharedCostsSectionKey = GlobalKey();
+  final _rentSectionKey = GlobalKey();
+  final _locationPanelKey = GlobalKey();
+  final _titleFieldKey = GlobalKey();
   double? _resolvedLatitude;
   double? _resolvedLongitude;
   String? _reverseGeocodedAddress;
   bool _locationFromGps = false;
   bool _fetchingLocation = false;
+  int _externalLocationEpoch = 0;
+  String? _externalLocationLabel;
   bool _proximityResolving = false;
   bool _proximityResolved = false;
+  int _proximityGeneration = 0;
+  List<NearbyExtraTransit> _extraProximityTransit = [];
   NeighborhoodProximityDraft _proximityDraft = NeighborhoodProximityDraft();
   final _transportLineController = TextEditingController();
   final _transportWalkController = TextEditingController();
@@ -162,10 +201,19 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   final _crecheNameController = TextEditingController();
   final _crecheWalkController = TextEditingController();
   String _groceryBrand = '';
+  List<NearbyGroceryOption> _profileGroceries = [];
+  String _collegeSchool = '';
+  int? _collegeWalkMin;
+  String _gpClinic = '';
+  int? _gpWalkMin;
   bool _proximityEditing = false;
   final List<_CustomProximityRowState> _customProximityRows = [];
   List<NeighborhoodAmenityTag> _neighborhoodAmenityTags = [];
   bool _neighborhoodAmenitiesLoading = false;
+  bool _amenitiesEnrichmentInFlight = false;
+  bool _showMoreLocalAmenities = false;
+
+  bool _secureBikeStorage = false;
 
   // Lifestyle
   bool _smokingAllowed = false;
@@ -201,24 +249,21 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       _locationController.text = MarketConfig.current.defaultProfileLocation;
       _seedHouseholdLanguagesFromProfile();
     }
-    if (_proximityDraft.transportLine.isNotEmpty ||
-        (_resolvedLatitude != null && _resolvedLongitude != null)) {
+    if (_proximityDraft.transportLine.isNotEmpty) {
       _proximityResolved = true;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_isProfileDraft(widget.initialListing) && !_locationFromGps) {
-        if (_eircodeController.text.trim().isNotEmpty ||
-            _addressSearchController.text.trim().isNotEmpty) {
+        if (_eircodeController.text.trim().isNotEmpty) {
           _resolveProximity();
         }
         return;
       }
-      if (_eircodeController.text.trim().isNotEmpty ||
-          _locationIdentifierController.text.trim().length >= 2 ||
-          (_locationFromGps &&
-              _locationController.text.trim().length >= 2)) {
-        _resolveProximity();
+      // Only pre-resolve when editing a listing that already has proximity saved.
+      if (widget.initialListing != null &&
+          _proximityDraft.transportLine.isNotEmpty) {
+        return;
       }
     });
   }
@@ -285,12 +330,27 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     final item = ListingData.normalizeItem(raw);
 
     _titleController.text = ListingData.title(item);
-    _rentController.text = _stripRentForInput(ListingData.price(item));
+    _rentController.text = formatThousandsForInput(
+      _stripRentForInput(ListingData.price(item)),
+    );
     _locationController.text = ListingData.location(item);
     _eircodeController.text = ProfileData.text(
       item[ListingCreationFieldKeys.eircode] ?? item['eircode'],
     );
     _hideExactAddress = item[AddressPrivacy.hideExactAddressKey] == true;
+    final storedAreaKey = ProfileData.text(item['listing_area_key']);
+    if (storedAreaKey.isNotEmpty) {
+      _listingAreaKey = storedAreaKey;
+    } else {
+      final blob = '${ListingData.location(item)} ${ListingData.hostCity(item)}';
+      _listingAreaKey = CityAreaMatch.listingAreaKeyFromBlob(blob);
+    }
+    final publicLocation =
+        ProfileData.text(item[AddressPrivacy.publicLocationKey]);
+    if (publicLocation.isNotEmpty && _hideExactAddress) {
+      _localityLabel = publicLocation.split(',').first.trim();
+      _locationController.text = publicLocation;
+    }
     final identifier = ProfileData.text(item['property_location_identifier']);
     if (identifier.isNotEmpty) {
       _locationIdentifierController.text = identifier;
@@ -315,6 +375,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     if (availableRaw is String && availableRaw.isNotEmpty) {
       _availableFrom = DateTime.tryParse(availableRaw);
     }
+    _availabilityFlexibility = LandlordAvailabilityFlexibility.fromListing(item);
 
     _subletDurationController.text =
         ProfileData.text(item['sublet_duration_value']);
@@ -343,6 +404,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     _bedrooms = _parseBedCount(ListingData.bedrooms(item), fallback: 1);
     _bathrooms = _parseBedCount(ListingData.bathrooms(item), fallback: 1);
+    _secureBikeStorage = ListingData.hasBikeStorage(item);
 
     final archRaw = ProfileData.text(item['shared_room_architecture']);
     final sharedRoomsRaw = item['shared_rooms'];
@@ -557,43 +619,257 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   }
 
   String _effectiveLocationLabel() {
-    if (_hideExactAddress && _selectedAddress != null) {
-      return _selectedAddress!.publicLocationLabel;
+    if (_hideExactAddress) {
+      return _publicLocationPreviewLabel();
     }
+    final street = _locationIdentifierController.text.trim();
+    if (street.isNotEmpty) return street;
     final gpsLabel = _locationController.text.trim();
     if (gpsLabel.isNotEmpty) return gpsLabel;
-    return _locationIdentifierController.text.trim();
+    return _selectedAddress?.displayLabel ?? '';
   }
 
-  void _onMapPinPlaced(double lat, double lon) {
+  String _publicLocationPreviewLabel() {
+    final districtShort = _districtShortLabel();
+    if (_localityLabel.isNotEmpty && districtShort != null) {
+      return '$_localityLabel, $districtShort';
+    }
+    if (_selectedAddress != null) {
+      return _selectedAddress!.publicLocationLabel;
+    }
+    final area = _locationController.text.trim();
+    if (area.isNotEmpty) {
+      return AddressPrivacy.publicLocationFrom(
+        area: area,
+        county: 'Dublin',
+        hideExact: true,
+      );
+    }
+    return '';
+  }
+
+  String? _districtShortLabel() {
+    final label = _listingAreaKey != null
+        ? TargetSearchAreas.labelForKey(_listingAreaKey!)
+        : _locationController.text.trim();
+    final match = RegExp(r'Dublin (\d+[W]?)').firstMatch(label);
+    return match?.group(0);
+  }
+
+  void _syncListingAreaKey({
+    double? lat,
+    double? lon,
+    String? areaLabel,
+  }) {
+    final resolved = resolveListingAreaKey(
+      eircode: _eircodeController.text,
+      lat: lat,
+      lon: lon,
+      areaLabel: areaLabel,
+    );
+    if (resolved == null) return;
+
+    _listingAreaKey = resolved;
+
+    if (_locationController.text.trim().isEmpty &&
+        lat != null &&
+        lon != null) {
+      final district = dublinDistrictLabelFromCoordinates(lat, lon);
+      if (district != null) {
+        _locationController.text = district;
+      }
+    }
+  }
+
+  String _resolvedHostCityForMatching(Map hostFields) {
+    if (_listingAreaKey != null) {
+      return TargetSearchAreas.labelForKey(_listingAreaKey!);
+    }
+    final area = _locationController.text.trim();
+    if (area.isNotEmpty) return area;
+    final hostCity = ProfileData.text(hostFields['hostCity']);
+    return hostCity.isNotEmpty ? hostCity : 'Dublin';
+  }
+
+  String get _listingAreaSelectValue {
+    final key = _listingAreaKey ?? MarketConfig.current.defaultAreaKey;
+    for (final (areaKey, label) in MarketConfig.current.areaOptions) {
+      if (areaKey == key) return label;
+    }
+    return _locationController.text.trim();
+  }
+
+  String _resolvedStreetLineFromSuggestion(IrishAddressSuggestion suggestion) {
+    final street = IrishAddressFormat.sanitizeCommaSeparatedLabel(
+      suggestion.streetLine.trim(),
+    );
+    if (street.isNotEmpty && !_isEircodeOnlyLabel(street)) return street;
+
+    final display = IrishAddressFormat.sanitizeCommaSeparatedLabel(
+      suggestion.displayLabel,
+    );
+    if (display.isEmpty || _isEircodeOnlyLabel(display)) return '';
+
+    final firstSegment = display.split(',').first.trim();
+    if (firstSegment.isNotEmpty && !_isEircodeOnlyLabel(firstSegment)) {
+      return firstSegment;
+    }
+    return '';
+  }
+
+  bool _isEircodeOnlyLabel(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return false;
+    if (EircodeGeocodingService.isValidFormat(trimmed)) return true;
+    return RegExp(r'^D\d{2}\s?[A-Z0-9]{4}$', caseSensitive: false)
+        .hasMatch(trimmed.replaceAll(' ', ''));
+  }
+
+  /// Clears address, area, eircode, and proximity derived from a prior location.
+  void _resetLocationDerivedFields({bool clearCoordinates = false}) {
+    _proximityGeneration++;
+    _selectedAddress = null;
+    _reverseGeocodedAddress = null;
+    if (clearCoordinates) {
+      _resolvedLatitude = null;
+      _resolvedLongitude = null;
+    }
+    _locationFromGps = false;
+    _proximityResolving = false;
+    _proximityResolved = false;
+    _neighborhoodAmenitiesLoading = false;
+    _amenitiesEnrichmentInFlight = false;
+    _neighborhoodAmenityTags = [];
+    _extraProximityTransit = [];
+    _locationIdentifierController.clear();
+    _eircodeController.clear();
+    _localityLabel = '';
+    _listingAreaKey = null;
+    _locationController.clear();
+    _clearAutoProximityFields();
+  }
+
+  void _applyResolvedAddressSuggestion(
+    IrishAddressSuggestion suggestion, {
+    required bool fromGps,
+  }) {
+    _selectedAddress = suggestion;
+    _resolvedLatitude = suggestion.latitude;
+    _resolvedLongitude = suggestion.longitude;
+    _locationFromGps = fromGps;
+    _locationPrefillLocked = false;
+    _locationIdentifierController.text = _resolvedStreetLineFromSuggestion(
+      suggestion,
+    );
+    _localityLabel = suggestion.area.trim();
+    _eircodeController.clear();
+    if (suggestion.eircode != null) {
+      _eircodeController.text =
+          EircodeGeocodingService.normalize(suggestion.eircode!);
+    }
+    _syncListingAreaKey(
+      lat: suggestion.latitude,
+      lon: suggestion.longitude,
+      areaLabel: suggestion.county.trim().isNotEmpty ? suggestion.county : null,
+    );
+    if (_listingAreaKey != null) {
+      _locationController.text = TargetSearchAreas.labelForKey(_listingAreaKey!);
+    } else if (suggestion.area.isNotEmpty) {
+      _locationController.text = suggestion.area;
+    }
+    _reverseGeocodedAddress = IrishAddressFormat.sanitizeCommaSeparatedLabel(
+      suggestion.displayLabel,
+    );
+    if (fromGps) {
+      final label = _reverseGeocodedAddress;
+      if (label != null && label.isNotEmpty) {
+        _externalLocationLabel = label;
+        _externalLocationEpoch++;
+      }
+    }
+  }
+
+  void _onMapPinDraft() {
+    setState(() => _resetLocationDerivedFields(clearCoordinates: true));
+  }
+
+  void _onMapPinPlaced(double lat, double lon, {bool fromGps = false}) {
+    final generation = ++_proximityGeneration;
     setState(() {
       _resolvedLatitude = lat;
       _resolvedLongitude = lon;
-      _locationFromGps = false;
+      _locationFromGps = fromGps;
       _locationPrefillLocked = false;
       _reverseGeocodedAddress = null;
     });
-    _resolveProximityFromPin(lat, lon);
+    unawaited(
+      _resolveProximityFromPin(
+        lat,
+        lon,
+        generation: generation,
+        fromGps: fromGps,
+      ),
+    );
   }
 
-  Future<void> _resolveProximityFromPin(double lat, double lon) async {
-    // Fire proximity first (Overpass), then reverse geocode (Nominatim) after
-    // a short delay to avoid rate-limiting collisions.
-    await _resolveProximity();
-    if (!mounted) return;
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
+  Future<void> _resolveProximityFromPin(
+    double lat,
+    double lon, {
+    required int generation,
+    bool fromGps = false,
+  }) async {
+    unawaited(
+      _resolveProximityAt(
+        lat,
+        lon,
+        generation: generation,
+        usedGpsCoords: fromGps,
+      ),
+    );
+
+    final cellKey = ProximityResolutionCache.keyFor(lat, lon);
+    final cachedGeocode = ProximityResolutionCache.getGeocode(cellKey);
+    if (cachedGeocode != null) {
+      if (!mounted || generation != _proximityGeneration) return;
+      setState(
+        () => _applyResolvedAddressSuggestion(cachedGeocode, fromGps: fromGps),
+      );
+      return;
+    }
+
+    final suggestion = await EircodeLookupService.resolveFromCoordinates(
+      lat,
+      lon,
+    );
+    if (!mounted || generation != _proximityGeneration) return;
+    if (suggestion != null) {
+      ProximityResolutionCache.putGeocode(cellKey, suggestion);
+      setState(
+        () => _applyResolvedAddressSuggestion(suggestion, fromGps: fromGps),
+      );
+      return;
+    }
     final address = await NominatimForward.reverseGeocode(lat, lon);
-    if (!mounted) return;
+    if (!mounted || generation != _proximityGeneration) return;
     setState(() {
-      _reverseGeocodedAddress = address;
-      if (address != null && address.isNotEmpty) {
-        _locationIdentifierController.text = address;
-        final parts = address.split(',');
-        if (parts.length >= 2) {
-          _locationController.text = parts[1].trim();
-        } else {
-          _locationController.text = address;
+      final cleaned = address != null
+          ? IrishAddressFormat.sanitizeCommaSeparatedLabel(address)
+          : null;
+      _reverseGeocodedAddress = cleaned;
+      if (cleaned != null && cleaned.isNotEmpty) {
+        if (!_isEircodeOnlyLabel(cleaned)) {
+          final first = cleaned.split(',').first.trim();
+          _locationIdentifierController.text =
+              _isEircodeOnlyLabel(first) ? '' : first;
+        }
+        _syncListingAreaKey(lat: lat, lon: lon);
+        if (_listingAreaKey != null) {
+          _locationController.text =
+              TargetSearchAreas.labelForKey(_listingAreaKey!);
+        }
+        if (fromGps) {
+          _externalLocationLabel = cleaned;
+          _externalLocationEpoch++;
         }
       }
     });
@@ -690,19 +966,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     }
   }
 
-  void _addCustomProximityRow() {
-    if (widget.saving) return;
-    setState(() => _customProximityRows.add(_CustomProximityRowState()));
-  }
-
-  void _removeCustomProximityRow(int index) {
-    if (widget.saving) return;
-    setState(() {
-      _customProximityRows[index].dispose();
-      _customProximityRows.removeAt(index);
-    });
-  }
-
   void _syncProximityControllers() {
     _transportLineController.text = _proximityDraft.transportLine;
     _transportWalkController.text =
@@ -742,20 +1005,157 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         .toList();
   }
 
+  void _onStepActivated(int step) {
+    if (step != 2) return;
+    _applyProximityFromControllers();
+    _generateSmartListingCopy();
+  }
+
+  String _smartCopyAreaName() {
+    if (_localityLabel.isNotEmpty) return _localityLabel;
+    final location = _locationController.text.trim();
+    if (location.isNotEmpty) {
+      final districtMatch = RegExp(r'Dublin \d+[W]?').firstMatch(location);
+      if (districtMatch != null) {
+        final beforeDistrict = location
+            .substring(0, districtMatch.start)
+            .replaceAll(RegExp(r'[,\s]+$'), '')
+            .trim();
+        if (beforeDistrict.isNotEmpty) return beforeDistrict;
+      }
+      final first = location.split(',').first.trim();
+      if (first.isNotEmpty && !RegExp(r'^Dublin \d').hasMatch(first)) {
+        return first;
+      }
+    }
+    return 'Dublin';
+  }
+
+  String _smartCopyPostalDistrict() => _districtShortLabel() ?? 'Dublin';
+
+  bool _isAutoDraftedTitle() =>
+      _autoDraftedTitle != null && _titleController.text == _autoDraftedTitle;
+
+  bool _isAutoDraftedDescription() =>
+      _autoDraftedDescription != null &&
+      _descriptionController.text == _autoDraftedDescription;
+
+  String _smartCopyPropertyTypeLabel() =>
+      _propertySubType == ListingPropertySubType.house ? 'House' : 'Apartment';
+
+  int _parsedMonthlyRent() {
+    final digits = _rentController.text.replaceAll(RegExp(r'[^\d]'), '');
+    return int.tryParse(digits) ?? 0;
+  }
+
+  String _formatWalkTimeLabel(int minutes) {
+    if (minutes <= 0) return '5 min';
+    return '$minutes min';
+  }
+
+  void _generateSmartListingCopy() {
+    final generated = ListingSmartCopyGenerator.generate(
+      ListingSmartCopyInput(
+        isSharedLiving: _isShare,
+        areaName: _smartCopyAreaName(),
+        postalDistrict: _smartCopyPostalDistrict(),
+        propertyType: _smartCopyPropertyTypeLabel(),
+        isFurnished: _isFurnished,
+        bedrooms: _bedrooms,
+        bathrooms: _bathrooms,
+        monthlyRent: _parsedMonthlyRent(),
+        closestTransit: _proximityDraft.transportLine,
+        transitWalkTime: _formatWalkTimeLabel(_proximityDraft.transportWalkMin),
+        closestShop: _proximityDraft.groceryBrand,
+        shopWalkTime: _formatWalkTimeLabel(_proximityDraft.groceryWalkMin),
+        roomArchitecture: _primaryRoomArchitecture,
+        existingTitle: _titleController.text,
+        existingDescription: _descriptionController.text,
+      ),
+    );
+
+    var changed = false;
+    final title = generated.title;
+    if (title != null && title.trim().isNotEmpty) {
+      _autoDraftedTitle = title;
+      _titleController.text = title;
+      changed = true;
+    }
+    final description = generated.description;
+    if (description != null && description.trim().isNotEmpty) {
+      _autoDraftedDescription = description;
+      _descriptionController.text = description;
+      changed = true;
+    }
+    if (changed) setState(() {});
+  }
+
+  String? _validateRent() {
+    final text = stripThousandsFormatting(_rentController.text.trim());
+    if (text.isEmpty) return 'Enter monthly rent';
+    if (!RegExp(r'^\d+$').hasMatch(text)) {
+      return 'Enter a valid rent amount';
+    }
+    return null;
+  }
+
+  String? _validateStep2() {
+    if (!_hasResolvableLocation()) {
+      return 'Drop a pin on the map or use current location.';
+    }
+    if (_locationIdentifierController.text.trim().length < 3) {
+      return 'Confirm the resolved address — edit it if the pin is slightly off.';
+    }
+    if (_locationController.text.trim().length < 2) {
+      return 'Confirm the property area used for seeker matching.';
+    }
+    return null;
+  }
+
   /// Returns the first validation error for a wizard step, or null when valid.
   String? validateStep(int step) {
     switch (step) {
       case 0:
-        if (!(_step1Key.currentState?.validate() ?? false)) {
-          return 'Fix the highlighted fields before continuing.';
+        if (_isShare) {
+          final costError = _validateSharedCosts();
+          if (costError != null) {
+            setState(() => _sharedCostsShowErrors = true);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final ctx = _sharedCostsSectionKey.currentContext;
+              if (ctx != null) {
+                Scrollable.ensureVisible(
+                  ctx,
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.easeInOut,
+                  alignment: 0.2,
+                );
+              }
+            });
+            return costError;
+          }
+          setState(() => _sharedCostsShowErrors = false);
         }
-        if (_agreementType == ListingAgreementType.temporary) {
-          if (_availableFrom == null) {
-            return 'Pick an available-from date for temporary stays.';
-          }
-          if (_subletDurationController.text.trim().isEmpty) {
-            return 'Enter an estimated sublet duration.';
-          }
+        final rentError = _validateRent();
+        if (rentError != null) {
+          setState(() {
+            _rentShowError = true;
+            _rentErrorText = rentError;
+          });
+          return rentError;
+        }
+        setState(() {
+          _rentShowError = false;
+          _rentErrorText = null;
+        });
+        if (_availableFrom == null) {
+          return _agreementType == ListingAgreementType.temporary
+              ? 'Pick an available-from date for temporary stays.'
+              : 'Pick an available-from date for this long-term listing.';
+        }
+        if (_subletDurationController.text.trim().isEmpty) {
+          return _agreementType == ListingAgreementType.temporary
+              ? 'Enter an estimated sublet duration.'
+              : 'Enter the lease duration in years.';
         }
         if (!_isShare) {
           if (_bedrooms < 1) return 'Enter the number of bedrooms.';
@@ -763,20 +1163,20 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         }
         return null;
       case 1:
-        if (!(_step2Key.currentState?.validate() ?? false)) {
-          return 'Fix the highlighted fields before continuing.';
+        final locationError = _validateStep2();
+        if (locationError != null) {
+          setState(() => _locationShowErrors = true);
+          return locationError;
         }
-        if (!_hasResolvableLocation()) {
-          return 'Search and select an address, or use current location.';
-        }
+        setState(() => _locationShowErrors = false);
         return null;
       case 2:
-        if (!(_step3Key.currentState?.validate() ?? false)) {
-          return 'Fix the highlighted fields before continuing.';
-        }
-        if (_titleController.text.trim().length < 3) {
+        final title = _titleController.text.trim();
+        if (title.length < 3) {
+          setState(() => _titleShowError = true);
           return 'Enter a listing title (at least 3 characters).';
         }
+        setState(() => _titleShowError = false);
         if (_images.length < ListingCreationFormConstants.minPhotoCount) {
           return 'Add at least ${ListingCreationFormConstants.minPhotoCount} photos before publishing.';
         }
@@ -788,7 +1188,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             return 'Select who lives in the household.';
           }
           if (_hasSharedBedRoom && _flatmateCohort == null) {
-            return 'Select the shared-bed cohort profile.';
+            return 'Select the shared room cohort profile.';
           }
         }
         final description = _descriptionController.text.trim();
@@ -810,7 +1210,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     final baseErrors = ListingData.validateListingForm(
       title: _titleController.text,
-      price: _formattedPrice(),
+      price: stripThousandsFormatting(_rentController.text.trim()),
       location: _effectiveLocationLabel(),
       type: _type,
       description: _descriptionController.text,
@@ -860,9 +1260,8 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       'hostName': ListingData.text(hostFields['hostName']).isEmpty
           ? 'Guest host'
           : ListingData.text(hostFields['hostName']),
-      'hostCity': ProfileData.text(hostFields['hostCity']).isNotEmpty
-          ? ProfileData.text(hostFields['hostCity'])
-          : 'Dublin',
+      'hostCity': _resolvedHostCityForMatching(hostFields),
+      if (_listingAreaKey != null) 'listing_area_key': _listingAreaKey,
       'hostLanguage': ProfileData.text(hostFields['hostLanguage']),
       'hostMotherTongue': ProfileData.text(hostFields['hostMotherTongue']),
       'hostFoodPreference': ProfileData.text(hostFields['hostFoodPreference']),
@@ -904,12 +1303,23 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         'spoken_languages':
             ProfileData.languageList(profile['spoken_languages']),
       'is_owner_occupier': _isOwnerOccupier,
+      ListingCreationFieldKeys.secureBikeStorage: _secureBikeStorage,
+      'description_is_edited': !_isAutoDraftedDescription(),
+      'description_auto_drafted': _isAutoDraftedDescription(),
+      'listing_strength_score':
+          ListingStrengthCalculator.fromListing(_listingPreviewSnapshot()).scorePercent,
     };
 
-    if (_agreementType == ListingAgreementType.temporary) {
+    if (_availableFrom != null &&
+        _subletDurationController.text.trim().isNotEmpty) {
       payload['available_from'] = _availableFrom!.toIso8601String();
+      payload[ListingCreationFieldKeys.availabilityFlexibility] =
+          _availabilityFlexibility.storageToken;
       payload['sublet_duration_value'] = _subletDurationController.text.trim();
-      payload['sublet_duration_unit'] = _subletDurationUnit.name;
+      payload['sublet_duration_unit'] =
+          _agreementType == ListingAgreementType.longTerm
+              ? SubletDurationUnit.years.name
+              : _subletDurationUnit.name;
     }
 
     if (!_isShare) {
@@ -918,7 +1328,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     } else {
       payload.addAll({
         'rooms_to_share': _roomsToShare,
-        'shared_rooms': _sharedRoomSlots.map((s) => s.toJson()).toList(),
+        'shared_rooms': _sharedRoomSlots
+            .map((s) {
+              s.tenantsInRoom = _housemateCount;
+              return s.toJson();
+            })
+            .toList(),
         if (_primaryRoomArchitecture != null)
           'shared_room_architecture': _primaryRoomArchitecture!.storageValue,
         'current_occupants': _housemateCount,
@@ -960,12 +1375,14 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   }
 
   Map<String, dynamic> _applyAddressPrivacy(Map<String, dynamic> payload) {
-    return AddressPrivacy.applyToPayload(
+    final result = AddressPrivacy.applyToPayload(
       payload: payload,
       hideExactAddress: _hideExactAddress,
       selected: _selectedAddress,
-      area: _locationController.text.trim(),
-      county: _selectedAddress?.county ?? 'Dublin',
+      area: _localityLabel.isNotEmpty
+          ? _localityLabel
+          : _locationController.text.trim(),
+      county: _districtShortLabel() ?? _selectedAddress?.county ?? 'Dublin',
       streetLine: _locationIdentifierController.text.trim(),
       exactLat: _resolvedLatitude,
       exactLon: _resolvedLongitude,
@@ -973,6 +1390,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           ? null
           : EircodeGeocodingService.normalize(_eircodeController.text),
     );
+    if (_hideExactAddress) {
+      result['property_location_identifier'] = '';
+      result['location'] = _publicLocationPreviewLabel();
+      result['public_location'] = _publicLocationPreviewLabel();
+    }
+    return result;
   }
 
   Map<String, String>? _mapRoomArchitecture(SharedRoomArchitecture? arch) {
@@ -999,6 +1422,41 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   String _costValue(TextEditingController controller, bool included) {
     if (included) return '0';
     return controller.text.trim();
+  }
+
+  bool _isSharedCostResolved(TextEditingController controller, bool included) {
+    if (included) return true;
+    final raw = controller.text.trim();
+    if (raw.isEmpty) return false;
+    return int.tryParse(raw.replaceAll(RegExp(r'[^\d]'), '')) != null;
+  }
+
+  String? _validateSharedCosts() {
+    if (!_isShare) return null;
+    final resolved = [
+      _isSharedCostResolved(_electricityCostController, _electricityIncluded),
+      _isSharedCostResolved(_binsCostController, _binsIncluded),
+      _isSharedCostResolved(_internetCostController, _internetIncluded),
+    ];
+    if (resolved.every((v) => v)) return null;
+    return 'Enter monthly shared costs or mark each as included in rent.';
+  }
+
+  Map<String, dynamic> _listingPreviewSnapshot() {
+    return {
+      'title': _titleController.text.trim(),
+      'price': _formattedPrice(),
+      'location': _effectiveLocationLabel(),
+      'description': _descriptionController.text.trim(),
+      'description_is_edited': !_isAutoDraftedDescription(),
+      'description_auto_drafted': _isAutoDraftedDescription(),
+      ListingCreationFieldKeys.secureBikeStorage: _secureBikeStorage,
+      'ber_rating': _berRating,
+      'images': _images,
+      'rtb_registered': false,
+      'parking_available': false,
+      'furnishing': _isFurnished ? 'Furnished' : 'Unfurnished',
+    };
   }
 
   String _formattedPrice() {
@@ -1145,39 +1603,59 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     IrishAddressSuggestion suggestion, {
     required bool fromGps,
   }) {
-    _selectedAddress = suggestion;
-    _resolvedLatitude = suggestion.latitude;
-    _resolvedLongitude = suggestion.longitude;
-    _locationController.text = suggestion.area;
-    _locationIdentifierController.text = suggestion.streetLine;
-    _locationFromGps = fromGps;
-    _locationPrefillLocked = false;
-    if (suggestion.eircode != null) {
-      _eircodeController.text =
-          EircodeGeocodingService.normalize(suggestion.eircode!);
+    _resetLocationDerivedFields();
+    if (fromGps) {
+      _externalLocationEpoch++;
+      _externalLocationLabel = null;
     }
-    // #region agent log
-    agentLog(
-      location: 'listing_creation_form.dart:_applyAddressSuggestion',
-      message: 'address applied',
-      hypothesisId: 'H-D',
-      data: {
-        'fromGps': fromGps,
-        'displayLabel': suggestion.displayLabel,
-        'eircode': suggestion.eircode ?? '',
-        'area': suggestion.area,
-      },
+    _onMapPinPlaced(
+      suggestion.latitude,
+      suggestion.longitude,
+      fromGps: fromGps,
     );
-    // #endregion
-    // LocationPinField picks up pin coordinates from pinLat/pinLon props.
   }
 
-  void _seedProximityFromTransit(double lat, double lon) {
+  void _applyProximityPayload(
+    Map<String, dynamic> extracted, {
+    bool phase1Local = false,
+  }) {
+    if (_proximityEditing) return;
+    final transitType = ProfileData.text(extracted['transit_type']);
+    final stopName = ProfileData.text(extracted['nearest_stop_name']);
+    final walk = (extracted['walk_minutes'] as num?)?.toInt() ?? 0;
+    if (phase1Local && !isConfidentProximityPayload(extracted)) {
+      return;
+    }
+    final line = stopName.isNotEmpty
+        ? (transitType.isNotEmpty ? '$transitType · $stopName' : stopName)
+        : transitType;
+    if (line.isEmpty) return;
+    _proximityDraft.transportLine = line;
+    _proximityDraft.transportWalkMin = walk;
+    _transportLineController.text = line;
+    _transportWalkController.text = walk > 0 ? '$walk' : '';
+  }
+
+  void _seedProximityFromTransit(
+    double lat,
+    double lon, {
+    bool phase1Local = false,
+  }) {
     if (_proximityEditing) return;
     final extracted = TransitExtractionService.extractLocally(
       latitude: lat,
       longitude: lon,
     );
+    if (extracted == null && !phase1Local) {
+      final nearest = TransitExtractionService.extractNearest(
+        latitude: lat,
+        longitude: lon,
+      );
+      if (nearest != null && isConfidentProximityPayload(nearest)) {
+        _applyProximityPayload(nearest);
+        return;
+      }
+    }
     if (extracted == null) {
       _transportLineController.clear();
       _transportWalkController.clear();
@@ -1185,19 +1663,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       _proximityDraft.transportWalkMin = 0;
       return;
     }
-
-    final transitType = ProfileData.text(extracted['transit_type']);
-    final stopName = ProfileData.text(extracted['nearest_stop_name']);
-    final walk = (extracted['walk_minutes'] as num?)?.toInt() ?? 0;
-
-    final line = stopName.isNotEmpty
-        ? (transitType.isNotEmpty ? '$transitType · $stopName' : stopName)
-        : transitType;
-
-    _proximityDraft.transportLine = line;
-    _proximityDraft.transportWalkMin = walk;
-    _transportLineController.text = line;
-    _transportWalkController.text = walk > 0 ? '$walk' : '';
+    _applyProximityPayload(extracted, phase1Local: phase1Local);
   }
 
   void _clearAutoProximityFields() {
@@ -1218,40 +1684,77 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     _proximityDraft.secondarySchool = '';
     _proximityDraft.crecheName = '';
     _proximityDraft.crecheWalkMin = 0;
+    _extraProximityTransit = [];
+    _profileGroceries = [];
+    _collegeSchool = '';
+    _collegeWalkMin = null;
+    _gpClinic = '';
+    _gpWalkMin = null;
+    _showMoreLocalAmenities = false;
   }
 
   /// Populates grocery/schools/crèche fields from an Overpass result.
-  void _applyAmenities(NearbyAmenities amenities) {
-    _fillEircodeIfEmpty(amenities.eircode);
-    if (amenities.transitLine != null) {
-      _transportLineController.text = amenities.transitLine!;
+  void _applyAmenities(
+    NearbyAmenities amenities, {
+    bool phase1Local = false,
+  }) {
+    final resolved = phase1Local
+        ? filterNearbyAmenitiesForPhase1(amenities)
+        : amenities;
+    _fillEircodeIfEmpty(resolved.eircode);
+    if (resolved.transitLine != null) {
+      _transportLineController.text = resolved.transitLine!;
       _transportWalkController.text =
-          amenities.transitWalkMin != null ? '${amenities.transitWalkMin}' : '';
-      _proximityDraft.transportLine = amenities.transitLine!;
-      _proximityDraft.transportWalkMin = amenities.transitWalkMin ?? 0;
+          resolved.transitWalkMin != null ? '${resolved.transitWalkMin}' : '';
+      _proximityDraft.transportLine = resolved.transitLine!;
+      _proximityDraft.transportWalkMin = resolved.transitWalkMin ?? 0;
     }
-    if (amenities.supermarketName != null) {
-      final brand = _normalisedGroceryBrand(amenities.supermarketName!);
+    if (resolved.supermarketName != null) {
+      final brand = _normalisedGroceryBrand(resolved.supermarketName!);
       _groceryBrand = brand;
       _groceryWalkController.text =
-          amenities.supermarketWalkMin != null ? '${amenities.supermarketWalkMin}' : '';
+          resolved.supermarketWalkMin != null
+              ? '${resolved.supermarketWalkMin}'
+              : '';
       _proximityDraft.groceryBrand = brand;
-      _proximityDraft.groceryWalkMin = amenities.supermarketWalkMin ?? 0;
+      _proximityDraft.groceryWalkMin = resolved.supermarketWalkMin ?? 0;
     }
-    if (amenities.primarySchool != null) {
-      _primarySchoolController.text = amenities.primarySchool!;
-      _proximityDraft.primarySchool = amenities.primarySchool!;
+    if (resolved.primarySchool != null) {
+      _primarySchoolController.text = resolved.primarySchool!;
+      _proximityDraft.primarySchool = resolved.primarySchool!;
     }
-    if (amenities.secondarySchool != null) {
-      _secondarySchoolController.text = amenities.secondarySchool!;
-      _proximityDraft.secondarySchool = amenities.secondarySchool!;
+    if (resolved.secondarySchool != null) {
+      _secondarySchoolController.text = resolved.secondarySchool!;
+      _proximityDraft.secondarySchool = resolved.secondarySchool!;
     }
-    if (amenities.crecheName != null) {
-      _crecheNameController.text = amenities.crecheName!;
+    if (resolved.crecheName != null) {
+      _crecheNameController.text = resolved.crecheName!;
       _crecheWalkController.text =
-          amenities.crecheWalkMin != null ? '${amenities.crecheWalkMin}' : '';
-      _proximityDraft.crecheName = amenities.crecheName!;
-      _proximityDraft.crecheWalkMin = amenities.crecheWalkMin ?? 0;
+          resolved.crecheWalkMin != null ? '${resolved.crecheWalkMin}' : '';
+      _proximityDraft.crecheName = resolved.crecheName!;
+      _proximityDraft.crecheWalkMin = resolved.crecheWalkMin ?? 0;
+    }
+    if (resolved.extraTransit.isNotEmpty) {
+      _extraProximityTransit = List<NearbyExtraTransit>.from(
+        resolved.extraTransit,
+      );
+    }
+    _profileGroceries = List<NearbyGroceryOption>.from(resolved.groceries);
+    if (_profileGroceries.isEmpty && resolved.supermarketName != null) {
+      _profileGroceries = [
+        NearbyGroceryOption(
+          brand: _normalisedGroceryBrand(resolved.supermarketName!),
+          walkMin: resolved.supermarketWalkMin ?? 0,
+        ),
+      ];
+    }
+    if (resolved.collegeSchool != null) {
+      _collegeSchool = resolved.collegeSchool!;
+      _collegeWalkMin = resolved.collegeWalkMin;
+    }
+    if (resolved.gpClinic != null) {
+      _gpClinic = resolved.gpClinic!;
+      _gpWalkMin = resolved.gpWalkMin;
     }
   }
 
@@ -1309,6 +1812,190 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     return (lat: coords.lat, lon: coords.lon);
   }
 
+  void _applyCachedProximitySnapshot(
+    ProximityResolutionSnapshot snapshot,
+    double lat,
+    double lon, {
+    bool usedGpsCoords = false,
+  }) {
+    _resolvedLatitude = lat;
+    _resolvedLongitude = lon;
+    _neighborhoodAmenityTags = List<NeighborhoodAmenityTag>.from(
+      snapshot.lifestyleTags,
+    );
+    _neighborhoodAmenitiesLoading = false;
+    _amenitiesEnrichmentInFlight = false;
+    if (usedGpsCoords) {
+      final coordLabel = dublinDistrictLabelFromCoordinates(lat, lon);
+      if (coordLabel != null) {
+        _locationController.text = coordLabel;
+      }
+    }
+    if (snapshot.amenities != null && !snapshot.amenities!.isEmpty) {
+      _applyAmenities(snapshot.amenities!);
+    }
+    if (snapshot.transitPayload != null) {
+      _applyProximityPayload(snapshot.transitPayload!);
+    } else if (_transportLineController.text.trim().isEmpty) {
+      _seedProximityFromTransit(lat, lon);
+    }
+    _proximityResolving = false;
+    _proximityResolved = true;
+  }
+
+  Future<void> _resolveProximityAt(
+    double lat,
+    double lon, {
+    bool usedGpsCoords = false,
+    bool showInitialLoading = true,
+    int? generation,
+  }) async {
+    if (_proximityEditing || widget.saving) return;
+    final activeGen = generation ?? ++_proximityGeneration;
+    final cellKey = ProximityResolutionCache.keyFor(lat, lon);
+
+    final cached = ProximityResolutionCache.getProximity(cellKey);
+    if (cached != null) {
+      if (showInitialLoading) {
+        setState(() {
+          _proximityResolving = true;
+          _proximityResolved = false;
+          _neighborhoodAmenitiesLoading = true;
+          _neighborhoodAmenityTags = [];
+          _clearAutoProximityFields();
+        });
+      }
+      if (!mounted || activeGen != _proximityGeneration || _proximityEditing) {
+        return;
+      }
+      setState(
+        () => _applyCachedProximitySnapshot(
+          cached,
+          lat,
+          lon,
+          usedGpsCoords: usedGpsCoords,
+        ),
+      );
+      return;
+    }
+
+    if (showInitialLoading) {
+      setState(() {
+        _proximityResolving = true;
+        _proximityResolved = false;
+        _neighborhoodAmenitiesLoading = true;
+        _amenitiesEnrichmentInFlight = false;
+        _neighborhoodAmenityTags = [];
+        _clearAutoProximityFields();
+      });
+    }
+
+    final overpassFuture = OverpassAmenitiesService.fetchNearby(
+      latitude: lat,
+      longitude: lon,
+    );
+    final edgeTransitFuture = TransitExtractionService.enrichViaEdgeFunction(
+      latitude: lat,
+      longitude: lon,
+    );
+    if (mounted && activeGen == _proximityGeneration && !_proximityEditing) {
+      setState(() => _amenitiesEnrichmentInFlight = true);
+    }
+
+    try {
+      final catalogLifestyle = await NeighborhoodAmenitiesService.resolve(
+        latitude: lat,
+        longitude: lon,
+      );
+      if (!mounted || activeGen != _proximityGeneration || _proximityEditing) {
+        return;
+      }
+
+      final structuredFallback = StructuredAmenitiesFallbackService.resolve(
+        latitude: lat,
+        longitude: lon,
+      );
+      final phase1LifestyleTags = mergeAmenityTags(
+        catalogLifestyle,
+        structuredFallback?.lifestyleTags ?? const [],
+      );
+
+      setState(() {
+        _resolvedLatitude = lat;
+        _resolvedLongitude = lon;
+        _neighborhoodAmenityTags = phase1LifestyleTags;
+        _neighborhoodAmenitiesLoading = false;
+        if (usedGpsCoords) {
+          _syncListingAreaKey(lat: lat, lon: lon);
+          if (_listingAreaKey != null) {
+            _locationController.text =
+                TargetSearchAreas.labelForKey(_listingAreaKey!);
+          }
+        }
+        if (structuredFallback != null && !structuredFallback.isEmpty) {
+          _applyAmenities(structuredFallback, phase1Local: true);
+        }
+        if (_transportLineController.text.trim().isEmpty) {
+          _seedProximityFromTransit(lat, lon, phase1Local: true);
+        }
+        _proximityResolving = false;
+        _proximityResolved = true;
+      });
+
+      final amenities = await overpassFuture;
+      if (!mounted || activeGen != _proximityGeneration || _proximityEditing) {
+        return;
+      }
+
+      final transitPayload = await edgeTransitFuture;
+      if (!mounted || activeGen != _proximityGeneration || _proximityEditing) {
+        return;
+      }
+
+      final overpassLifestyle = amenities?.lifestyleTags ?? [];
+      final lifestyleTags = mergeAmenityTags(
+        mergeAmenityTags(
+          catalogLifestyle,
+          structuredFallback?.lifestyleTags ?? const [],
+        ),
+        overpassLifestyle,
+      );
+
+      setState(() {
+        _amenitiesEnrichmentInFlight = false;
+        _neighborhoodAmenityTags = lifestyleTags;
+        if (amenities != null && !amenities.isEmpty) {
+          _applyAmenities(amenities);
+        }
+        if (transitPayload != null) {
+          _applyProximityPayload(transitPayload);
+        } else if (_transportLineController.text.trim().isEmpty) {
+          _seedProximityFromTransit(lat, lon);
+        }
+      });
+
+      ProximityResolutionCache.putProximity(
+        cellKey,
+        ProximityResolutionSnapshot(
+          lifestyleTags: lifestyleTags,
+          amenities: amenities,
+          transitPayload: transitPayload,
+        ),
+      );
+    } catch (_) {
+      if (!mounted || activeGen != _proximityGeneration) return;
+      setState(() {
+        _amenitiesEnrichmentInFlight = false;
+        if (_transportLineController.text.trim().isEmpty) {
+          _seedProximityFromTransit(lat, lon, phase1Local: true);
+        }
+        _neighborhoodAmenitiesLoading = false;
+        _proximityResolving = false;
+        _proximityResolved = true;
+      });
+    }
+  }
+
   Future<void> _resolveProximity() async {
     if (_proximityEditing || widget.saving) return;
 
@@ -1337,6 +2024,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       _proximityResolving = true;
       _proximityResolved = false;
       _neighborhoodAmenitiesLoading = true;
+      _amenitiesEnrichmentInFlight = false;
       _neighborhoodAmenityTags = [];
       _clearAutoProximityFields();
     });
@@ -1346,55 +2034,20 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           _resolvedLatitude != null &&
           _resolvedLongitude != null;
       final pin = await _resolveProximityCoordinates(location, eircode);
-      final lat = pin.lat;
-      final lon = pin.lon;
-
       if (!mounted) return;
-
-      final amenities = await OverpassAmenitiesService.fetchNearby(
-        latitude: lat,
-        longitude: lon,
+      final gen = ++_proximityGeneration;
+      await _resolveProximityAt(
+        pin.lat,
+        pin.lon,
+        usedGpsCoords: usedGpsCoords,
+        showInitialLoading: false,
+        generation: gen,
       );
-      // Prefer live Overpass lifestyle tags; fall back to static catalog when
-      // the Overpass query returns nothing useful (e.g. rural / sparse data).
-      final overpassLifestyle = amenities?.lifestyleTags ?? [];
-      final catalogLifestyle = await NeighborhoodAmenitiesService.resolve(
-        latitude: lat,
-        longitude: lon,
-      );
-      final lifestyleTags = overpassLifestyle.isNotEmpty
-          ? overpassLifestyle
-          : catalogLifestyle;
-      if (!mounted || _proximityEditing) return;
-
-      setState(() {
-        _resolvedLatitude = lat;
-        _resolvedLongitude = lon;
-        _neighborhoodAmenityTags = lifestyleTags;
-        _neighborhoodAmenitiesLoading = false;
-        if (usedGpsCoords) {
-          final coordLabel = dublinDistrictLabelFromCoordinates(lat, lon);
-          if (coordLabel != null) {
-            _locationController.text = coordLabel;
-          }
-          // Option 1 display is set by _applyAddressSuggestion — do not downgrade
-          // a building-level Google/Places address to "district + Eircode" here.
-        }
-        // Prefer OSM stops (accurate in suburbs); fall back to local Luas/DART
-        // graph only when OSM has nothing nearby.
-        if (amenities?.transitLine == null) {
-          _seedProximityFromTransit(lat, lon);
-        }
-        if (amenities != null && !amenities.isEmpty) {
-          _applyAmenities(amenities);
-        }
-        _proximityResolving = false;
-        _proximityResolved = true;
-      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _proximityResolving = false;
+        _neighborhoodAmenitiesLoading = false;
         _proximityResolved = false;
       });
     }
@@ -1429,6 +2082,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       curve: Curves.easeInOutCubic,
     );
     setState(() => _currentStep = step);
+    _onStepActivated(step);
   }
 
   void _handleNext() {
@@ -1439,11 +2093,13 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       return;
     }
     if (_currentStep >= _stepCount - 1) return;
+    final nextStep = _currentStep + 1;
     _pageController.nextPage(
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeInOutCubic,
     );
-    setState(() => _currentStep += 1);
+    setState(() => _currentStep = nextStep);
+    _onStepActivated(nextStep);
   }
 
   void _handlePublish() {
@@ -1455,25 +2111,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         return;
       }
     }
-
-    final baseErrors = ListingData.validateListingForm(
-      title: _titleController.text,
-      price: _formattedPrice(),
-      location: _effectiveLocationLabel(),
-      type: _type,
-      description: _descriptionController.text,
-    );
-    if (baseErrors.isNotEmpty) {
-      final entry = baseErrors.entries.first;
-      final step = switch (entry.key) {
-        'location' => 1,
-        'title' || 'description' => 2,
-        _ => 0,
-      };
-      _jumpToStepWithError(step, entry.value);
-      return;
-    }
-
     widget.onPublish?.call();
   }
 
@@ -1485,26 +2122,28 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         curve: Curves.easeInOutCubic,
       );
       setState(() => _currentStep = step);
+      _onStepActivated(step);
     }
-    switch (step) {
-      case 0:
-        _step1Key.currentState?.validate();
-      case 1:
-        _step2Key.currentState?.validate();
-      case 2:
-        _step3Key.currentState?.validate();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final ctx = _descriptionFieldKey.currentContext;
-          if (ctx != null) {
-            Scrollable.ensureVisible(
-              ctx,
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeInOut,
-              alignment: 0.2,
-            );
-          }
-        });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final GlobalKey? scrollKey = switch (step) {
+        0 => _sharedCostsShowErrors
+            ? _sharedCostsSectionKey
+            : _rentSectionKey,
+        1 => _locationPanelKey,
+        2 => _titleShowError ? _titleFieldKey : null,
+        _ => null,
+      };
+      final ctx = scrollKey?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeInOut,
+          alignment: 0.15,
+        );
+      }
+    });
     _message(message);
   }
 
@@ -1513,10 +2152,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     setState(() {
       _fetchingLocation = true;
       _locationPrefillLocked = false;
-      if (_isDublinCityCentre(_resolvedLatitude, _resolvedLongitude)) {
-        _resolvedLatitude = null;
-        _resolvedLongitude = null;
-      }
     });
 
     try {
@@ -1541,18 +2176,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       }
 
       final resolved = await FastLocationService.resolveForUserAction();
-      // #region agent log
-      agentLog(
-        location: 'listing_creation_form.dart:_useCurrentLocation',
-        message: 'gps resolved',
-        hypothesisId: 'H-E',
-        data: {
-          'gpsHit': resolved != null,
-          'lat': resolved?.latitude,
-          'lon': resolved?.longitude,
-        },
-      );
-      // #endregion
       if (resolved == null) {
         await _handleLocationFailure(
           'Could not read your location. Enter your Eircode or search for your address instead.',
@@ -1572,23 +2195,18 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         return;
       }
 
-      final suggestion = await EircodeLookupService.resolveFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-      if (suggestion == null) {
-        await _handleLocationFailure(
-          'Could not resolve your nearest Eircode. Enter it manually instead.',
-        );
-        return;
-      }
-
       if (!mounted) return;
       setState(() {
         _fetchingLocation = false;
-        _applyAddressSuggestion(suggestion, fromGps: true);
+        _resetLocationDerivedFields();
+        _externalLocationEpoch++;
+        _externalLocationLabel = null;
       });
-      unawaited(_resolveProximity());
+      _onMapPinPlaced(
+        position.latitude,
+        position.longitude,
+        fromGps: true,
+      );
     } catch (_) {
       if (mounted) setState(() => _fetchingLocation = false);
       await _handleLocationFailure(
@@ -1612,7 +2230,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         setState(() {
           _applyAddressSuggestion(suggestion, fromGps: false);
         });
-        await _resolveProximity();
         _message('$message Using your profile area instead.');
         return;
       }
@@ -1669,6 +2286,9 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
   @override
   Widget build(BuildContext context) {
+    final maxContentWidth = _currentStep == 1
+        ? _locationStepMaxContentWidth
+        : _standardMaxContentWidth;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1677,7 +2297,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           padding: const EdgeInsets.fromLTRB(24, 10, 24, 8),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
               child: GamifiedFormProgress(
                 current: _currentStep,
                 total: _stepCount,
@@ -1689,11 +2309,14 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         Expanded(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
               child: PageView(
                 controller: _pageController,
                 physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (index) => setState(() => _currentStep = index),
+                onPageChanged: (index) {
+                  setState(() => _currentStep = index);
+                  _onStepActivated(index);
+                },
                 children: [
                   _stepScroll(
                     Form(key: _step1Key, child: _step1Content()),
@@ -1749,11 +2372,23 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           subtitle: 'Set the basics — rent, type, and furnishing.',
         ),
         const SizedBox(height: listingSectionSpacing),
+        _listingTypeSection(),
+        const SizedBox(height: listingFieldSpacing),
+        _propertyTypeSection(),
+        if (!_isShare) ...[
+          const SizedBox(height: listingFieldSpacing),
+          _bedroomsBathroomsSection(),
+        ],
+        const SizedBox(height: listingFieldSpacing),
+        _monthlyRentSection(),
+        const SizedBox(height: listingFieldSpacing),
+        _furnishingSection(),
+        const SizedBox(height: listingFieldSpacing),
         _tenureSection(),
         const SizedBox(height: listingFieldSpacing),
-        _categorySection(),
+        _propertyHighlightsSection(),
         const SizedBox(height: listingFieldSpacing),
-        _financialsSection(),
+        _berRatingSection(),
       ],
     );
   }
@@ -1765,7 +2400,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         const GamifiedFormPageHeader(
           title: '📍 Location',
           subtitle:
-              'Search by Eircode or address — nearby transport and amenities are detected automatically.',
+              'Search by location or address, drop a pin on the map, then confirm — nearby transport and amenities load after you confirm.',
         ),
         const SizedBox(height: listingSectionSpacing),
         _locationSection(),
@@ -1827,7 +2462,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         ListingDaftRadioChoiceList<ListingAgreementType>(
           enabled: !widget.saving,
           selected: _agreementType,
-          onChanged: (v) => setState(() => _agreementType = v),
+          onChanged: (v) => setState(() {
+            _agreementType = v;
+            if (v == ListingAgreementType.longTerm) {
+              _subletDurationUnit = SubletDurationUnit.years;
+            }
+          }),
           options: const {
             ListingAgreementType.longTerm: 'Long term',
             ListingAgreementType.temporary: 'Temporary',
@@ -1841,18 +2481,46 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           duration: const Duration(milliseconds: 240),
           curve: Curves.easeInOut,
           alignment: Alignment.topCenter,
-          child: _agreementType == ListingAgreementType.temporary
-              ? Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: _temporaryDurationRow(),
-                )
-              : const SizedBox.shrink(),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _tenureDurationRow(),
+                const SizedBox(height: 12),
+                ListingLabeledField(
+                  label: 'Availability flexibility',
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final flex in LandlordAvailabilityFlexibility.values)
+                        ListingOutlineChoiceTile(
+                          label: flex.label,
+                          selected: _availabilityFlexibility == flex,
+                          enabled: !widget.saving,
+                          height: listingFieldHeight,
+                          textAlign: TextAlign.center,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          onTap: () => setState(
+                            () => _availabilityFlexibility = flex,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _temporaryDurationRow() {
+  Widget _tenureDurationRow() {
     final availableFrom = ListingLabeledField(
       label: 'Available from',
       child: ListingDateInputField(
@@ -1879,11 +2547,18 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     final unit = ListingLabeledField(
       label: 'Unit',
-      child: _DurationUnitDropdown(
-        value: _subletDurationUnit,
-        enabled: !widget.saving,
-        onChanged: (v) => setState(() => _subletDurationUnit = v),
-      ),
+      child: _agreementType == ListingAgreementType.longTerm
+          ? const _DurationUnitDropdown(
+              value: SubletDurationUnit.years,
+              enabled: false,
+              locked: true,
+              onChanged: _noopDurationUnit,
+            )
+          : _DurationUnitDropdown(
+              value: _subletDurationUnit,
+              enabled: !widget.saving,
+              onChanged: (v) => setState(() => _subletDurationUnit = v),
+            ),
     );
 
     return LayoutBuilder(
@@ -1915,17 +2590,60 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     );
   }
 
-  String _roomArchDisplayLabel(SharedRoomArchitecture arch) {
-    final raw = arch.label;
-    final spaceIdx = raw.indexOf(' ');
-    if (spaceIdx > 0 && spaceIdx <= 3) {
-      return raw.substring(spaceIdx + 1);
-    }
-    return raw;
-  }
+  static void _noopDurationUnit(SubletDurationUnit _) {}
 
-  String _roomArchSummary(SharedRoomArchitecture arch) =>
-      _roomArchDisplayLabel(arch);
+  String _roomArchDisplayLabel(SharedRoomArchitecture arch) =>
+      '${arch.tileEmoji} ${arch.tileLabel}';
+
+  String _roomArchSummary(SharedRoomArchitecture arch) => arch.tileLabel;
+
+  Widget _roomTypeSelector(SharedRoomSlot slot) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 360;
+        final options = SharedRoomArchitecture.values;
+
+        Widget tile(SharedRoomArchitecture arch, {bool fullWidth = false}) {
+          final child = ListingOutlineChoiceTile(
+            label: _roomArchDisplayLabel(arch),
+            selected: slot.architecture == arch,
+            enabled: !widget.saving,
+            height: listingFieldHeight,
+            textAlign: TextAlign.center,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            onTap: () => setState(() => slot.architecture = arch),
+          );
+          return fullWidth ? child : Expanded(child: child);
+        }
+
+        if (!narrow) {
+          return Row(
+            children: [
+              for (var i = 0; i < options.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                tile(options[i]),
+              ],
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                tile(SharedRoomArchitecture.privateSharedBath),
+                const SizedBox(width: 8),
+                tile(SharedRoomArchitecture.privateEnsuite),
+              ],
+            ),
+            const SizedBox(height: 8),
+            tile(SharedRoomArchitecture.sharedBed, fullWidth: true),
+          ],
+        );
+      },
+    );
+  }
 
   Widget _sharedRoomAccordion(int index) {
     final slot = _sharedRoomSlots[index];
@@ -2002,35 +2720,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 children: [
                   Text('Room type', style: listingFieldLabelStyle),
                   const SizedBox(height: listingLabelSpacing),
-                  ListingOutlineChoiceGrid<SharedRoomArchitecture>(
-                    enabled: !widget.saving,
-                    selected: slot.architecture,
-                    onChanged: (arch) => setState(() => slot.architecture = arch),
-                    options: {
-                      for (final arch in SharedRoomArchitecture.values)
-                        arch: _roomArchDisplayLabel(arch),
-                    },
-                  ),
-                  const SizedBox(height: listingFieldSpacing),
-                  ListingCompactCounter(
-                    label: 'Occupants',
-                    value: slot.tenantsInRoom,
-                    min: 1,
-                    max: slot.isSharedBed ? 6 : 2,
-                    compact: true,
-                    onDecrement: widget.saving
-                        ? () {}
-                        : () => setState(
-                              () => slot.tenantsInRoom = (slot.tenantsInRoom - 1)
-                                  .clamp(1, slot.isSharedBed ? 6 : 2),
-                            ),
-                    onIncrement: widget.saving
-                        ? () {}
-                        : () => setState(
-                              () => slot.tenantsInRoom = (slot.tenantsInRoom + 1)
-                                  .clamp(1, slot.isSharedBed ? 6 : 2),
-                            ),
-                  ),
+                  _roomTypeSelector(slot),
                   const SizedBox(height: listingFieldSpacing),
                   Text('Tenant composition', style: listingFieldLabelStyle),
                   const SizedBox(height: listingLabelSpacing),
@@ -2044,16 +2734,16 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                       TargetTenantPreference.maleOnly: 'Male',
                       TargetTenantPreference.mixed: 'Mixed',
                     },
-                    icons: const {
-                      TargetTenantPreference.femaleOnly: Icons.person_outline,
-                      TargetTenantPreference.maleOnly: Icons.person_outline,
-                      TargetTenantPreference.mixed: Icons.people_outline,
+                    emojis: const {
+                      TargetTenantPreference.femaleOnly: '👩',
+                      TargetTenantPreference.maleOnly: '👨',
+                      TargetTenantPreference.mixed: '👥',
                     },
                   ),
                   if (slot.isSharedBed) ...[
                     const SizedBox(height: listingFieldSpacing),
                     ListingCompactCounter(
-                      label: 'Sharing this bed',
+                      label: 'Sharing this room',
                       value: slot.bedOccupants,
                       min: 2,
                       max: 6,
@@ -2071,6 +2761,11 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                                     (slot.bedOccupants + 1).clamp(2, 6),
                               ),
                     ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'How many people will share this room — including the new tenant.',
+                      style: listingOptionHintStyle,
+                    ),
                   ],
                 ],
               ),
@@ -2087,6 +2782,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         const ListingSectionHeader(
           title: '👥 Household profile',
           subtitle: 'Who lives here?',
+          required: true,
         ),
         if (_sharedProfilePrefillLocked)
           _inheritedSummaryCard(
@@ -2094,7 +2790,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             subtitle:
                 'Using your onboarding host profile as the starting point for this listing.',
             lines: [
-              'Total housemates in home: $_housemateCount',
+              'Total housemates in house: $_housemateCount',
               if (_householdLanguages.isNotEmpty)
                 'Languages: ${_householdLanguages.join(', ')}',
               'Owner occupier: ${_isOwnerOccupier ? 'Yes' : 'No'}',
@@ -2107,6 +2803,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             enabled: !widget.saving,
             selected: _householdCohort ?? FlatmateCohort.mixedCohort,
             onChanged: (v) => setState(() => _householdCohort = v),
+            emojis: _cohortEmojis,
             segments: {
               for (final c in FlatmateCohort.values)
                 c: _cohortSegmentLabels[c] ?? c.label,
@@ -2114,7 +2811,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           ),
           const SizedBox(height: listingFieldSpacing),
           ListingCompactCounter(
-            label: 'Total housemates in home',
+            label: 'Total housemates in house',
             value: _housemateCount,
             min: 1,
             max: 12,
@@ -2129,6 +2826,11 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 : () => setState(
                       () => _housemateCount = (_housemateCount + 1).clamp(1, 12),
                     ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Everyone currently living in the property — set once for the whole household.',
+            style: listingOptionHintStyle,
           ),
           const SizedBox(height: listingFieldSpacing),
           Text('Household languages spoken', style: listingFieldLabelStyle),
@@ -2207,10 +2909,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           _sharedRoomAccordion(i),
         if (_hasSharedBedRoom) ...[
           const SizedBox(height: listingFieldSpacing),
-          Text('Shared-bed cohort profile', style: listingFieldLabelStyle),
+          Text('Shared room cohort profile', style: listingFieldLabelStyle),
           const SizedBox(height: 6),
           const Text(
-            'Only applies to rooms with a shared bed in shared occupancy.',
+            'Only applies to rooms with a shared room in shared occupancy.',
             style: listingOptionHintStyle,
           ),
           const SizedBox(height: listingLabelSpacing),
@@ -2218,6 +2920,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             enabled: !widget.saving,
             selected: _flatmateCohort ?? FlatmateCohort.mixedCohort,
             onChanged: (v) => setState(() => _flatmateCohort = v),
+            emojis: _cohortEmojis,
             segments: {
               for (final c in FlatmateCohort.values)
                 c: _cohortSegmentLabels[c] ?? c.label,
@@ -2228,7 +2931,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     );
   }
 
-  Widget _categorySection() {
+  Widget _listingTypeSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2239,7 +2942,9 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             subtitle:
                 'Your onboarding listing defaults already set this preference.',
             lines: [
-              _isShare ? 'Shared room' : 'Entire place',
+              _isShare
+                  ? 'Shared room'
+                  : MarketplaceSpace.fullRental.option2Title,
             ],
             actionLabel: 'Edit category',
             onAction: () => setState(() => _categoryPrefillLocked = false),
@@ -2253,21 +2958,33 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                   ? MarketplaceSpace.sharedSpace
                   : MarketplaceSpace.fullRental,
             ),
-            options: const {
-              false: 'Entire place',
+            options: {
+              false: MarketplaceSpace.fullRental.option2Title,
               true: 'Shared room',
             },
             emojis: const {
-              false: '🏠',
+              false: '🏡',
               true: '🛏️',
             },
           ),
-        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _propertyTypeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         const ListingSectionHeader(title: 'Property type'),
         ListingDaftRadioChoiceList<ListingPropertySubType>(
           enabled: !widget.saving,
           selected: _propertySubType,
-          onChanged: (v) => setState(() => _propertySubType = v),
+          onChanged: (v) => setState(() {
+            _propertySubType = v;
+            if (v == ListingPropertySubType.house) {
+              _secureBikeStorage = false;
+            }
+          }),
           options: const {
             ListingPropertySubType.apartment: 'Apartment',
             ListingPropertySubType.house: 'House',
@@ -2277,7 +2994,60 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             ListingPropertySubType.house: '🏡',
           },
         ),
-        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _bedroomsBathroomsSection() {
+    return Row(
+      children: [
+        Expanded(
+          child: ListingCompactCounter(
+            label: 'Bedrooms',
+            value: _bedrooms,
+            min: 1,
+            max: 6,
+            compact: true,
+            onDecrement: widget.saving
+                ? () {}
+                : () => setState(
+                      () => _bedrooms = (_bedrooms - 1).clamp(1, 6),
+                    ),
+            onIncrement: widget.saving
+                ? () {}
+                : () => setState(
+                      () => _bedrooms = (_bedrooms + 1).clamp(1, 6),
+                    ),
+          ),
+        ),
+        const SizedBox(width: listingFieldSpacing),
+        Expanded(
+          child: ListingCompactCounter(
+            label: 'Bathrooms',
+            value: _bathrooms,
+            min: 1,
+            max: 4,
+            compact: true,
+            onDecrement: widget.saving
+                ? () {}
+                : () => setState(
+                      () => _bathrooms = (_bathrooms - 1).clamp(1, 4),
+                    ),
+            onIncrement: widget.saving
+                ? () {}
+                : () => setState(
+                      () => _bathrooms = (_bathrooms + 1).clamp(1, 4),
+                    ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _furnishingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         const ListingSectionHeader(title: 'Furnishing'),
         if (_furnishingPrefillLocked)
           _inheritedSummaryCard(
@@ -2304,87 +3074,86 @@ class ListingCreationFormState extends State<ListingCreationForm> {
               false: '📦',
             },
           ),
-        if (!_isShare) ...[
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: ListingCompactCounter(
-                  label: 'Bedrooms',
-                  value: _bedrooms,
-                  min: 1,
-                  max: 6,
-                  compact: true,
-                  onDecrement: widget.saving
-                      ? () {}
-                      : () => setState(
-                            () => _bedrooms = (_bedrooms - 1).clamp(1, 6),
-                          ),
-                  onIncrement: widget.saving
-                      ? () {}
-                      : () => setState(
-                            () => _bedrooms = (_bedrooms + 1).clamp(1, 6),
-                          ),
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: ListingCompactCounter(
-                  label: 'Bathrooms',
-                  value: _bathrooms,
-                  min: 1,
-                  max: 4,
-                  compact: true,
-                  onDecrement: widget.saving
-                      ? () {}
-                      : () => setState(
-                            () => _bathrooms = (_bathrooms - 1).clamp(1, 4),
-                          ),
-                  onIncrement: widget.saving
-                      ? () {}
-                      : () => setState(
-                            () => _bathrooms = (_bathrooms + 1).clamp(1, 4),
-                          ),
-                ),
-              ),
-            ],
-          ),
+      ],
+    );
+  }
+
+  Widget _monthlyRentSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ListingSectionHeader(
+          title: 'Monthly rent',
+          required: true,
+        ),
+        ListingPremiumRentField(
+          key: _rentSectionKey,
+          controller: _rentController,
+          enabled: !widget.saving,
+          showLabel: false,
+          showError: _rentShowError,
+          errorText: _rentErrorText,
+          onChanged: (_) {
+            if (_rentShowError) {
+              setState(() {
+                _rentShowError = false;
+                _rentErrorText = null;
+              });
+            }
+          },
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const Text(
+          'Landlord reminder: annual management fees, service charges, and '
+          'block insurance are included in this base rent where required by '
+          'local regulations.',
+          style: listingFormHelperStyle,
+        ),
+        if (_isShare) ...[
+          const SizedBox(height: listingSectionSpacing),
+          _sharedCostsSection(),
         ],
       ],
     );
   }
 
-  Widget _financialsSection() {
+  Widget _berRatingSection() {
+    return ListingBerRatingField(
+      value: _berRating,
+      enabled: !widget.saving,
+      ratings: ListingCreationFormConstants.berRatings,
+      onChanged: (v) => setState(() => _berRating = v),
+    );
+  }
+
+  Widget _propertyHighlightsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ListingSectionHeader(title: '💰 Monthly rent'),
-        ListingPremiumRentField(
-          controller: _rentController,
-          enabled: !widget.saving,
-          validator: (v) {
-            final text = (v ?? '').trim();
-            if (text.isEmpty) return ' ';
-            if (!RegExp(r'^\d+$').hasMatch(text)) {
-              return ' ';
-            }
-            return null;
-          },
+        const ListingSectionHeader(
+          title: 'Property highlights',
+          subtitle: 'Optional features shown on your public listing preview.',
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Landlord reminder: annual management fees, service charges, and '
-          'block insurance are included in this base rent where required by '
-          'local regulations.',
-          style: listingSubLabelStyle,
-        ),
-        const SizedBox(height: 14),
-        ListingBerRatingField(
-          value: _berRating,
-          enabled: !widget.saving,
-          ratings: ListingCreationFormConstants.berRatings,
-          onChanged: (v) => setState(() => _berRating = v),
-        ),
+        if (_propertySubType == ListingPropertySubType.apartment)
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _secureBikeStorage,
+            onChanged: widget.saving
+                ? null
+                : (value) => setState(() => _secureBikeStorage = value ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text(
+              'Secure Bike Parking Available',
+              style: listingFieldValueStyle,
+            ),
+            subtitle: const Text(
+              'Shown when your building offers secure bicycle storage.',
+              style: listingFormHelperStyle,
+            ),
+            activeColor: const Color(0xFF4B5563),
+            checkColor: Colors.white,
+            side: const BorderSide(color: Color(0xFF9CA3AF), width: 1.2),
+          ),
       ],
     );
   }
@@ -2394,8 +3163,9 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const ListingSectionHeader(
-          title: '📸 Photos',
+          title: 'Photos',
           subtitle: 'Minimum 3 photos · 5+ recommended',
+          required: true,
         ),
         ListingMediaPicker(
           images: _images,
@@ -2423,11 +3193,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             children: [
               const Text(
                 'Good photos receive more enquiries.',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF4B5563),
-                ),
+                style: listingFieldValueStyle,
               ),
               Align(
                 alignment: Alignment.centerLeft,
@@ -2478,9 +3244,14 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
   Widget _sharedCostsSection() {
     return Column(
+      key: _sharedCostsSectionKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ListingSectionHeader(title: 'Monthly shared costs (per person)'),
+        const ListingSectionHeader(
+          title: 'Monthly shared costs (per person)',
+          subtitle: 'Required — enter an amount or mark each as included in rent.',
+          required: true,
+        ),
         Row(
           children: [
             Expanded(
@@ -2489,9 +3260,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 label: 'Gas & electricity',
                 controller: _electricityCostController,
                 included: _electricityIncluded,
+                showError: _sharedCostsShowErrors &&
+                    !_isSharedCostResolved(
+                      _electricityCostController,
+                      _electricityIncluded,
+                    ),
                 onIncludedChanged: (v) => setState(() {
                   _electricityIncluded = v;
                   if (v) _electricityCostController.text = '0';
+                  _sharedCostsShowErrors = false;
                 }),
               ),
             ),
@@ -2502,9 +3279,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 label: 'Bin collection',
                 controller: _binsCostController,
                 included: _binsIncluded,
+                showError: _sharedCostsShowErrors &&
+                    !_isSharedCostResolved(
+                      _binsCostController,
+                      _binsIncluded,
+                    ),
                 onIncludedChanged: (v) => setState(() {
                   _binsIncluded = v;
                   if (v) _binsCostController.text = '0';
+                  _sharedCostsShowErrors = false;
                 }),
               ),
             ),
@@ -2515,9 +3298,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 label: 'Internet / broadband',
                 controller: _internetCostController,
                 included: _internetIncluded,
+                showError: _sharedCostsShowErrors &&
+                    !_isSharedCostResolved(
+                      _internetCostController,
+                      _internetIncluded,
+                    ),
                 onIncludedChanged: (v) => setState(() {
                   _internetIncluded = v;
                   if (v) _internetCostController.text = '0';
+                  _sharedCostsShowErrors = false;
                 }),
               ),
             ),
@@ -2533,52 +3322,75 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     required TextEditingController controller,
     required bool included,
     required ValueChanged<bool> onIncludedChanged,
+    bool showError = false,
   }) {
+    // Material parent required: CheckboxListTile ink is invisible under a
+    // painted Container/DecoratedBox surface.
     return Opacity(
       opacity: included ? 0.45 : 1,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          border: listingDaftBorder(),
+          side: BorderSide(
+            color: showError
+                ? const Color(0xFFEF4444)
+                : listingDaftBorderColor,
+            width: showError ? 1.5 : listingDaftBorderWidth,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 16, color: const Color(0xFF6B7280)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    '$label (€)',
-                    style: listingSectionTitleStyle.copyWith(fontSize: 11),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 16, color: const Color(0xFF6B7280)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '$label (€)',
+                      style: listingSectionTitleStyle.copyWith(fontSize: 11),
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: controller,
+                enabled: !widget.saving && !included,
+                keyboardType: TextInputType.number,
+                onChanged: (_) {
+                  if (_sharedCostsShowErrors) {
+                    setState(() => _sharedCostsShowErrors = false);
+                  }
+                },
+                decoration: listingInlineInputDecoration(hint: 'Per month'),
+              ),
+              if (showError) ...[
+                const SizedBox(height: 4),
+                const Text(
+                  'Required',
+                  style: TextStyle(fontSize: 11, color: Color(0xFFEF4444)),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: controller,
-              enabled: !widget.saving && !included,
-              keyboardType: TextInputType.number,
-              decoration: listingInlineInputDecoration(hint: 'Per month'),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              value: included,
-              onChanged: widget.saving
-                  ? null
-                  : (v) => onIncludedChanged(v ?? false),
-              title: const Text(
-                'Included in rent',
-                style: TextStyle(fontSize: 11),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: included,
+                onChanged: widget.saving
+                    ? null
+                    : (v) => onIncludedChanged(v ?? false),
+                title: const Text(
+                  'Included in rent',
+                  style: TextStyle(fontSize: 11),
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
               ),
-              controlAffinity: ListTileControlAffinity.leading,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2606,613 +3418,608 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         }),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Drop a pin on the map where your property is located',
-          style: listingOptionLabelStyle,
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Tap the map to place a pin, or use the search box to centre it. '
-          'We detect nearby transport & amenities from the pin location.',
-          style: listingOptionHintStyle,
-        ),
-        const SizedBox(height: 12),
-        LocationPinField(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sideBySide = constraints.maxWidth >= 560;
+        final mapHeight = sideBySide ? 400.0 : 260.0;
+
+        final mapField = LocationPinField(
           pinLat: _resolvedLatitude,
           pinLon: _resolvedLongitude,
+          externalLocationEpoch: _externalLocationEpoch,
+          externalLocationLabel: _externalLocationLabel,
           onPinPlaced: _onMapPinPlaced,
+          onPinDraft: _onMapPinDraft,
           enabled: !widget.saving,
-        ),
-        const SizedBox(height: 12),
-        if (_reverseGeocodedAddress != null && _reverseGeocodedAddress!.isNotEmpty) ...[
-          Text(
-            _reverseGeocodedAddress!,
-            style: listingFieldValueStyle.copyWith(
-              fontSize: 13,
-              color: const Color(0xFF374151),
+          mapHeight: mapHeight,
+        );
+
+        final pinConfirmed = _hasResolvableLocation();
+
+        final locationDetails = pinConfirmed
+            ? _resolvedAddressPanel()
+            : (_locationShowErrors
+                ? Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF1F2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFEF4444)),
+                    ),
+                    child: const Text(
+                      'Confirm your pin on the map or use current location to continue.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                    ),
+                  )
+                : null);
+
+        // Left: search + map + address/area/eircode (below fold for Nearby avoided).
+        final leftColumn = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            mapField,
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: widget.saving || _fetchingLocation
+                  ? null
+                  : _useCurrentLocation,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF374151),
+                side: BorderSide(color: listingDaftBorderColor, width: 1),
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              icon: _fetchingLocation
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.my_location_outlined, size: 18),
+              label: const Text('Use current location'),
             ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        OutlinedButton.icon(
-          onPressed: widget.saving || _fetchingLocation
-              ? null
-              : _useCurrentLocation,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF374151),
-            side: BorderSide(color: listingDaftBorderColor, width: 1),
-            backgroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-          ),
-          icon: _fetchingLocation
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.my_location_outlined, size: 18),
-          label: const Text('Use current location'),
+            if (locationDetails != null) ...[
+              const SizedBox(height: 12),
+              locationDetails,
+            ],
+          ],
+        );
+
+        // Right: What's Nearby + Edit Proximity only (top-aligned beside map).
+        final nearbyColumn =
+            pinConfirmed ? _nearbyDiscoverySection() : null;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            listingFieldLabel(
+              'Drop a pin on the map where your property is located',
+              required: true,
+              style: listingOptionLabelStyle,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Search to centre the map or tap to drop a pin, then tap Confirm on the map. '
+              'Nearby transport and amenities load only after you confirm.',
+              style: listingOptionHintStyle,
+            ),
+            const SizedBox(height: 12),
+            if (sideBySide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: leftColumn),
+                  if (nearbyColumn != null) ...[
+                    const SizedBox(width: 16),
+                    Expanded(child: nearbyColumn),
+                  ],
+                ],
+              )
+            else ...[
+              leftColumn,
+              if (nearbyColumn != null) ...[
+                const SizedBox(height: 12),
+                nearbyColumn,
+              ],
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _resolvedAddressPanel() {
+    final previewLabel = _publicLocationPreviewLabel();
+    final addressInvalid = _locationShowErrors &&
+        _locationIdentifierController.text.trim().length < 3;
+    // Material (not Container/DecoratedBox fill) so CheckboxListTile ink stays visible.
+    return Material(
+      key: _locationPanelKey,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: addressInvalid
+              ? const Color(0xFFEF4444)
+              : const Color(0xFFE5E7EB),
+          width: addressInvalid ? 1.5 : 1,
         ),
-        const SizedBox(height: 16),
-        // Eircode (optional text-only)
-        SizedBox(
-          height: listingFieldHeight,
-          child: TextFormField(
-            controller: _eircodeController,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+          listingFieldLabel('Resolved address', required: true),
+          const SizedBox(height: 6),
+          const Text(
+            'Street or building name for your listing. Seeker area matching uses Property area below.',
+            style: listingOptionHintStyle,
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _locationIdentifierController,
             enabled: !widget.saving,
+            minLines: 1,
+            maxLines: 2,
             style: listingFieldValueStyle,
             decoration: listingInlineInputDecoration(
-              hint: 'Eircode (optional, e.g. D15 FT9N)',
+              hint: 'Street or building address',
+            ).copyWith(
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: addressInvalid
+                      ? const Color(0xFFEF4444)
+                      : listingDaftBorderColor,
+                  width: addressInvalid ? 1.5 : listingDaftBorderWidth,
+                ),
+              ),
+            ),
+            onChanged: (_) => setState(() {
+              if (_locationShowErrors) _locationShowErrors = false;
+            }),
+          ),
+          if (addressInvalid) ...[
+            const SizedBox(height: 4),
+            const Text(
+              'Required — confirm or edit the resolved address.',
+              style: TextStyle(fontSize: 11, color: Color(0xFFEF4444)),
+            ),
+          ],
+          const SizedBox(height: 12),
+          if (MarketConfig.current.profileUseAreaPicker) ...[
+            // Options: dublin_districts via MarketConfig.areaOptions (full labels).
+            // Stored key remains listing_area_key (e.g. dublin15). Macros are
+            // seeker-only (homepage / Area filter) via dublin_macro_areas.
+            ShadcnSelect(
+              label: 'Property area (for matching) *',
+              value: _listingAreaSelectValue,
+              options: MarketConfig.current.areaOptions.map((e) => e.$2).toList(),
+              onChanged: widget.saving
+                  ? (_) {}
+                  : (label) {
+                      setState(() {
+                        for (final (key, areaLabel)
+                            in MarketConfig.current.areaOptions) {
+                          if (areaLabel == label) {
+                            _listingAreaKey = key;
+                            _locationController.text = areaLabel;
+                            break;
+                          }
+                        }
+                      });
+                    },
+            ),
+          ] else ...[
+            listingFieldLabel('Property area', required: true),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: _locationController,
+              enabled: !widget.saving,
+              style: listingFieldValueStyle,
+              decoration: listingInlineInputDecoration(
+                hint: 'Neighbourhood or district',
+              ),
+              onChanged: (v) => setState(
+                () => _syncListingAreaKey(areaLabel: v),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          listingFieldLabel('Eircode (Optional)'),
+          const SizedBox(height: 6),
+          const Text(
+            'Auto-filled when available. Used to help identify the property location. Not used by renters for search.',
+            style: listingOptionHintStyle,
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: listingFieldHeight,
+            child: TextFormField(
+              controller: _eircodeController,
+              enabled: !widget.saving,
+              style: listingFieldValueStyle.copyWith(
+                color: const Color(0xFF374151),
+              ),
+              decoration: listingInlineInputDecoration(
+                hint: 'e.g. D24 KV89',
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        // Privacy checkbox
-        Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: Checkbox(
-                value: _hideExactAddress,
-                onChanged: widget.saving
-                    ? null
-                    : (v) => setState(() => _hideExactAddress = v ?? false),
-                activeColor: const Color(0xFF374151),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'I don\'t want to display the exact address',
-                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _neighborhoodAmenityTagsSection(),
-        const SizedBox(height: 20),
-        _proximityRevealSection(),
-      ],
-    );
-  }
-
-  Widget _neighborhoodAmenityTagsSection() {
-    if (_neighborhoodAmenitiesLoading || _proximityResolving || _fetchingLocation) {
-      return const SizedBox.shrink();
-    }
-    if (_neighborhoodAmenityTags.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Nearby lifestyle',
-          style: listingSectionTitleStyle.copyWith(fontSize: 13),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final tag in _neighborhoodAmenityTags)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(999),
-                  border: listingDaftBorder(),
-                ),
-                child: Text(
-                  tag.displayLabel,
-                  style: listingFieldValueStyle.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF374151),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _proximityRevealSection() {
-    if (_proximityResolving || _fetchingLocation) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 32),
-        child: Column(
-          children: [
-            const SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Auto-detecting neighborhood amenities…',
-              textAlign: TextAlign.center,
+          const SizedBox(height: 10),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _hideExactAddress,
+            onChanged: widget.saving
+                ? null
+                : (v) => setState(() => _hideExactAddress = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text(
+              "I don't want to display the exact address",
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
+                color: Color(0xFF374151),
+              ),
+            ),
+            activeColor: const Color(0xFF4B5563),
+            checkColor: Colors.white,
+            side: const BorderSide(color: Color(0xFF9CA3AF), width: 1.2),
+          ),
+          if (_hideExactAddress) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Public preview',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_localityLabel.isNotEmpty)
+                    _locationPreviewRow('Locality', _localityLabel),
+                  if (_listingAreaKey != null) ...[
+                    const SizedBox(height: 6),
+                    _locationPreviewRow(
+                      'District',
+                      TargetSearchAreas.labelForKey(_listingAreaKey!),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    previewLabel.isNotEmpty
+                        ? previewLabel
+                        : 'Area will appear here once resolved',
+                    style: listingFieldValueStyle.copyWith(
+                      fontSize: 13,
+                      color: const Color(0xFF475569),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Neighborhood proximity',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF374151),
-                ),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: widget.saving
-                  ? null
-                  : () => setState(() {
-                        _proximityEditing = !_proximityEditing;
-                        _proximityDraft.manualEdit = _proximityEditing;
-                        if (_proximityEditing) _proximityResolved = true;
-                      }),
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              label: Text(
-                _proximityEditing ? 'Done editing' : '✏️ Edit Proximity',
-              ),
-            ),
           ],
         ),
-        if (!_proximityEditing) ...[
-          const SizedBox(height: 8),
-          if (_proximityResolved)
-            _proximityReadOnlyChips()
-          else if (!_proximityResolving && !_fetchingLocation)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: Text(
-                'Tap "Use current location" or type your Eircode to auto-detect, or add manually.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade500,
-                  height: 1.4,
-                ),
-              ),
-            ),
-        ] else ...[
-          const SizedBox(height: 8),
-          _proximityEditFields(),
-        ],
-      ],
-    );
-  }
-
-  Widget _proximityReadOnlyChips() {
-    final chips = <Widget>[];
-
-    final transport = _transportLineController.text.trim();
-    final transportWalk = _transportWalkController.text.trim();
-    if (transport.isNotEmpty) {
-      chips.add(_proximityChip(
-        icon: Icons.train_outlined,
-        label: transportWalk.isNotEmpty
-            ? '$transport • $transportWalk min walk'
-            : transport,
-      ));
-    }
-
-    final groceryWalk = _groceryWalkController.text.trim();
-    if (_groceryBrand.isNotEmpty && groceryWalk.isNotEmpty) {
-      chips.add(_proximityChip(
-        icon: Icons.shopping_bag_outlined,
-        label: '$_groceryBrand • $groceryWalk min walk',
-      ));
-    }
-
-    final primary = _primarySchoolController.text.trim();
-    if (primary.isNotEmpty) {
-      chips.add(_proximityChip(
-        icon: Icons.school_outlined,
-        label: 'Primary: $primary',
-      ));
-    }
-
-    final secondary = _secondarySchoolController.text.trim();
-    if (secondary.isNotEmpty) {
-      chips.add(_proximityChip(
-        icon: Icons.school_outlined,
-        label: 'Secondary: $secondary',
-      ));
-    }
-
-    final creche = _crecheNameController.text.trim();
-    final crecheWalk = _crecheWalkController.text.trim();
-    if (creche.isNotEmpty) {
-      chips.add(_proximityChip(
-        icon: Icons.child_care_outlined,
-        label: crecheWalk.isNotEmpty
-            ? '$creche • $crecheWalk min walk'
-            : creche,
-      ));
-    }
-
-    for (final row in _customProximityRows) {
-      final name = row.nameController.text.trim();
-      if (name.isEmpty) continue;
-      final walk = row.walkController.text.trim();
-      chips.add(_proximityChip(
-        icon: _proximityCategoryIcon(row.category),
-        label: walk.isNotEmpty ? '$name • $walk min walk' : name,
-      ));
-    }
-
-    if (chips.isEmpty) {
-      return Text(
-        'No proximity details detected yet — tap ✏️ Edit Proximity to add manually.',
-        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-      );
-    }
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: chips,
-    );
-  }
-
-  IconData _proximityCategoryIcon(ProximityPointCategory category) {
-    return switch (category) {
-      ProximityPointCategory.transport => Icons.train_outlined,
-      ProximityPointCategory.grocery => Icons.shopping_bag_outlined,
-      ProximityPointCategory.school => Icons.school_outlined,
-      ProximityPointCategory.amenity => Icons.place_outlined,
-    };
-  }
-
-  Widget _proximityChip({required IconData icon, required String label}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.accent.withValues(alpha: 0.25)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: AppColors.accentDark),
-          const SizedBox(width: 6),
-          Text(
+    );
+  }
+
+  Widget _locationPreviewRow(String label, String value) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 64,
+          child: Text(
             label,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF374151),
+              color: Color(0xFF111827),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _proximityEditFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _proximityChipCard(
-          emoji: '🚇',
-          title: 'Transport Hub',
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextFormField(
-                  controller: _transportLineController,
-                  enabled: !widget.saving,
-                  decoration: listingInputDecoration(
-                    label: 'Line / stop',
-                    hint: 'Luas Green Line',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  controller: _transportWalkController,
-                  enabled: !widget.saving,
-                  keyboardType: TextInputType.number,
-                  decoration: listingInputDecoration(
-                    label: 'Min walk',
-                    hint: '5',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        _proximityChipCard(
-          emoji: '🛒',
-          title: 'Nearest Grocery',
-          child: Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _groceryBrand.isEmpty ? null : _groceryBrand,
-                  decoration: listingInputDecoration(label: 'Brand'),
-                  hint: const Text('Select brand'),
-                  items: ListingCreationFormConstants.groceryBrands
-                      .map(
-                        (b) => DropdownMenuItem(value: b, child: Text(b)),
-                      )
-                      .toList(),
-                  onChanged: widget.saving
-                      ? null
-                      : (v) {
-                          if (v != null) setState(() => _groceryBrand = v);
-                        },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  controller: _groceryWalkController,
-                  enabled: !widget.saving,
-                  keyboardType: TextInputType.number,
-                  decoration: listingInputDecoration(
-                    label: 'Min walk',
-                    hint: '8',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        _proximityChipCard(
-          emoji: '🏫',
-          title: 'Local Schools',
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _primarySchoolController,
-                enabled: !widget.saving,
-                decoration: listingInputDecoration(
-                  label: 'Primary school name',
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _secondarySchoolController,
-                enabled: !widget.saving,
-                decoration: listingInputDecoration(
-                  label: 'Secondary school name',
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        _proximityChipCard(
-          emoji: '👶',
-          title: 'Childcare / Crèche',
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextFormField(
-                  controller: _crecheNameController,
-                  enabled: !widget.saving,
-                  decoration: listingInputDecoration(
-                    label: 'Crèche name',
-                    hint: 'Optional',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  controller: _crecheWalkController,
-                  enabled: !widget.saving,
-                  keyboardType: TextInputType.number,
-                  decoration: listingInputDecoration(
-                    label: 'Min walk',
-                    hint: '10',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        for (var i = 0; i < _customProximityRows.length; i++) ...[
-          const SizedBox(height: 10),
-          _customProximityRowEditor(i),
-        ],
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: widget.saving ? null : _addCustomProximityRow,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('➕ Add custom proximity point'),
           ),
         ),
       ],
     );
   }
 
-  Widget _customProximityRowEditor(int index) {
-    final row = _customProximityRows[index];
-    return _proximityChipCard(
-      emoji: row.category.emoji,
-      title: 'Custom point',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<ProximityPointCategory>(
-                  initialValue: row.category,
-                  decoration: listingInputDecoration(label: 'Category'),
-                  items: ProximityPointCategory.values
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c,
-                          child: Text('${c.emoji} ${c.label}'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: widget.saving
-                      ? null
-                      : (v) {
-                          if (v != null) {
-                            setState(() => row.category = v);
-                          }
-                        },
-                ),
-              ),
-              if (!widget.saving) ...[
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: 'Remove',
-                  onPressed: () => _removeCustomProximityRow(index),
-                  icon: const Icon(Icons.close, size: 18),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextFormField(
-                  controller: row.nameController,
-                  enabled: !widget.saving,
-                  decoration: listingInputDecoration(
-                    label: 'Place name',
-                    hint: 'Phoenix Park',
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  controller: row.walkController,
-                  enabled: !widget.saving,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: listingInputDecoration(
-                    label: 'Min walk',
-                    hint: '5',
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  bool get _isProximityLoading =>
+      _proximityResolving || _neighborhoodAmenitiesLoading || _fetchingLocation;
 
-  Widget _proximityChipCard({
-    required String emoji,
-    required String title,
-    required Widget child,
-  }) {
+  Widget _nearbyDiscoverySection() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            '$emoji $title',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
+          if (_isProximityLoading)
+            const LinearProgressIndicator(minHeight: 2),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        "What's nearby",
+                        style: listingFormSectionHeaderStyle,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: widget.saving || _isProximityLoading
+                          ? null
+                          : () => setState(() {
+                                _proximityEditing = !_proximityEditing;
+                                _proximityDraft.manualEdit = _proximityEditing;
+                                if (_proximityEditing) {
+                                  _proximityResolved = true;
+                                } else {
+                                  _applyProximityFromControllers();
+                                }
+                              }),
+                      icon: Icon(
+                        _proximityEditing
+                            ? Icons.check_outlined
+                            : Icons.edit_outlined,
+                        size: 16,
+                      ),
+                      label: Text(
+                        _proximityEditing ? 'Done editing' : '✏️ Edit Proximity',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_isProximityLoading)
+                  const SkeletonAmenityChipWrap()
+                else
+                  UnifiedProximityDisplay(
+                    input: _proximityDisplayInput(),
+                    showTier4: _showMoreLocalAmenities,
+                    onToggleTier4: () => setState(
+                      () => _showMoreLocalAmenities = !_showMoreLocalAmenities,
+                    ),
+                    enrichmentInFlight: _amenitiesEnrichmentInFlight,
+                    resolved: _proximityResolved,
+                    editing: _proximityEditing,
+                    onToggleHide: _proximityEditing
+                        ? (key) => setState(() {
+                              _proximityDraft.toggleHiddenKey(key);
+                            })
+                        : null,
+                    onTogglePin: _proximityEditing
+                        ? (key) => setState(() {
+                              _proximityDraft.togglePinnedKey(key);
+                            })
+                        : null,
+                    onAddCustom:
+                        _proximityEditing ? _showAddCustomProximityDialog : null,
+                    onRemoveCustom: _proximityEditing
+                        ? (key) => _removeCustomProximityByKey(key)
+                        : null,
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          child,
         ],
       ),
     );
   }
 
+  ProximityDisplayInput _proximityDisplayInput() {
+    int? walkFromText(String text) {
+      final value = int.tryParse(text.trim());
+      if (value == null || value <= 0) return null;
+      return value;
+    }
+
+    return ProximityDisplayInput(
+      transportLine: _transportLineController.text.trim(),
+      transportWalkMin: walkFromText(_transportWalkController.text),
+      groceryBrand: _groceryBrand,
+      groceryWalkMin: walkFromText(_groceryWalkController.text),
+      groceries: _profileGroceries,
+      primarySchool: _primarySchoolController.text.trim(),
+      secondarySchool: _secondarySchoolController.text.trim(),
+      collegeSchool: _collegeSchool,
+      collegeWalkMin: _collegeWalkMin,
+      crecheName: _crecheNameController.text.trim(),
+      crecheWalkMin: walkFromText(_crecheWalkController.text),
+      gpClinic: _gpClinic,
+      gpWalkMin: _gpWalkMin,
+      extraTransit: _extraProximityTransit,
+      lifestyleTags: _neighborhoodAmenityTags,
+      customPoints: _customProximityRows
+          .map(
+            (row) => CustomProximityPoint(
+              category: row.category,
+              name: row.nameController.text.trim(),
+              walkMin: int.tryParse(row.walkController.text.trim()) ?? 0,
+            ),
+          )
+          .where((point) => point.name.isNotEmpty)
+          .toList(),
+      hiddenChipKeys: List<String>.from(_proximityDraft.hiddenChipKeys),
+      pinnedChipKeys: List<String>.from(_proximityDraft.pinnedChipKeys),
+      includeHidden: _proximityEditing,
+    );
+  }
+
+  Future<void> _showAddCustomProximityDialog() async {
+    if (widget.saving) return;
+    var category = ProximityPointCategory.amenity;
+    final nameController = TextEditingController();
+    final walkController = TextEditingController();
+
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('Add custom proximity'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<ProximityPointCategory>(
+                    initialValue: category,
+                    decoration: listingInputDecoration(label: 'Category'),
+                    items: ProximityPointCategory.values
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c,
+                            child: Text('${c.emoji} ${c.label}'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setDialogState(() => category = v);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: nameController,
+                    decoration: listingInputDecoration(
+                      label: 'Place name',
+                      hint: 'Phoenix Park',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: walkController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: listingInputDecoration(
+                      label: 'Min walk',
+                      hint: '5',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (nameController.text.trim().isEmpty) return;
+                    Navigator.of(ctx).pop(true);
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (added == true && mounted) {
+      setState(() {
+        _customProximityRows.add(
+          _CustomProximityRowState(
+            category: category,
+            name: nameController.text.trim(),
+            walkMin: walkController.text.trim(),
+          ),
+        );
+        _applyProximityFromControllers();
+      });
+    }
+    nameController.dispose();
+    walkController.dispose();
+  }
+
+  void _removeCustomProximityByKey(String preferenceKey) {
+    if (widget.saving) return;
+    setState(() {
+      final remaining = <_CustomProximityRowState>[];
+      for (final row in _customProximityRows) {
+        final name = row.nameController.text.trim();
+        final key = name.isEmpty
+            ? ''
+            : ProximityChipKeys.build(ProximityChipKeys.custom, name);
+        if (key == preferenceKey) {
+          row.dispose();
+        } else {
+          remaining.add(row);
+        }
+      }
+      _customProximityRows
+        ..clear()
+        ..addAll(remaining);
+      _proximityDraft.hiddenChipKeys =
+          List<String>.from(_proximityDraft.hiddenChipKeys)
+            ..remove(preferenceKey);
+      _proximityDraft.pinnedChipKeys =
+          List<String>.from(_proximityDraft.pinnedChipKeys)
+            ..remove(preferenceKey);
+      _applyProximityFromControllers();
+    });
+  }
+
+  // Controllers remain for enrich sync + backward-compatible draft storage.
+
   Widget _lifestyleSection() {
     if (_rulesPrefillLocked) {
       final ruleChips = <Widget>[
         ListingRuleChip(
-          icon: Icons.smoke_free_outlined,
+          emoji: '🚭',
           label: _smokingAllowed ? 'Smoking allowed' : 'No smoking',
           active: true,
           expand: true,
         ),
         ListingRuleChip(
-          icon: Icons.pets_outlined,
+          emoji: '🚫',
           label: _petsAllowed ? 'Pets welcome' : 'No pets',
           active: true,
           expand: true,
         ),
         if (_isShare)
           ListingRuleChip(
-            icon: Icons.restaurant_outlined,
-            label: _vegetarianKitchen ? 'Veg kitchen' : 'Open kitchen',
+            emoji: '🥦',
+            label: _vegetarianKitchen ? 'Veg kitchen' : 'Non-veg kitchen',
             active: true,
             expand: true,
           ),
         if (_isShare)
           ListingRuleChip(
-            icon: Icons.laptop_mac_outlined,
-            label: _wfhFriendly ? 'WFH friendly' : 'Commuter',
-            active: true,
+            emoji: '🧑‍💻',
+            label: _wfhFriendly
+                ? 'Work from home friendly'
+                : 'Not WFH friendly',
+            active: _wfhFriendly,
             expand: true,
           ),
       ];
@@ -3271,6 +4078,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 onLabel: 'No smoking',
                 active: !_smokingAllowed,
                 enabled: !widget.saving,
+                emoji: '🚭',
+                activeIcon: Icons.smoke_free_outlined,
+                inactiveIcon: Icons.smoking_rooms_outlined,
+                activeIconColor: const Color(0xFF0EA5E9),
                 onChanged: (v) => setState(() => _smokingAllowed = !v),
               ),
             ),
@@ -3281,6 +4092,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 onLabel: 'No pets',
                 active: !_petsAllowed,
                 enabled: !widget.saving,
+                emoji: '🚫',
                 onChanged: (v) => setState(() => _petsAllowed = !v),
               ),
             ),
@@ -3292,21 +4104,24 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             children: [
               Expanded(
                 child: ListingCompactRuleTile(
-                  offLabel: 'Non-veg welcome',
+                  offLabel: 'Non-veg kitchen',
                   onLabel: 'Veg kitchen',
                   active: _vegetarianKitchen,
                   enabled: !widget.saving,
+                  emoji: _vegetarianKitchen ? '🥦' : '🍖',
                   onChanged: (v) => setState(() => _vegetarianKitchen = v),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: ListingCompactRuleTile(
-                  offLabel: 'Commuter',
-                  onLabel: 'WFH friendly',
+                child: ListingAnimatedRuleChip(
+                  label: 'Work from home friendly',
                   active: _wfhFriendly,
                   enabled: !widget.saving,
-                  onChanged: (v) => setState(() => _wfhFriendly = v),
+                  emoji: '🧑‍💻',
+                  onTap: widget.saving
+                      ? () {}
+                      : () => setState(() => _wfhFriendly = !_wfhFriendly),
                 ),
               ),
             ],
@@ -3378,22 +4193,38 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ListingSectionHeader(title: '🏷 Listing title'),
-        TextFormField(
-          controller: _titleController,
-          enabled: !widget.saving,
-          style: listingFieldValueStyle,
-          decoration: listingInputDecoration(
-            label: 'Title',
-            hint: _isShare
-                ? 'Bright ensuite room in friendly Dublin 8 household'
-                : 'Bright 2-bed near Luas Green Line',
-          ),
-          validator: (v) {
-            if ((v ?? '').trim().length < 3) {
-              return 'Enter a title (at least 3 characters).';
-            }
-            return null;
+        ListingSectionHeader(
+          title: '🏷 Listing title',
+          required: true,
+          trailing: ListingAutoDraftBadge(visible: _isAutoDraftedTitle()),
+        ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _titleController,
+          builder: (context, value, _) {
+            return TextFormField(
+              key: _titleFieldKey,
+              controller: _titleController,
+              enabled: !widget.saving,
+              style: listingSmartCopyFieldStyle(
+                base: listingFieldValueStyle,
+                isAutoDrafted: _isAutoDraftedTitle(),
+              ),
+              decoration: listingInputDecoration(
+                label: 'Title',
+                hint: _isShare
+                    ? 'Bright ensuite room in friendly Dublin 8 household'
+                    : 'Bright & Modern 2-Bed House | Rathmines, Dublin 6',
+              ).copyWith(
+                errorText: _titleShowError
+                    ? 'Enter a title (at least 3 characters).'
+                    : null,
+              ),
+              onChanged: (_) {
+                setState(() {
+                  if (_titleShowError) _titleShowError = false;
+                });
+              },
+            );
           },
         ),
       ],
@@ -3427,17 +4258,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           ],
         ),
         _lifestyleSection(),
-        if (_neighborhoodAmenityTags.isNotEmpty)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('✨ Lifestyle tags', style: listingFieldLabelStyle),
-              const SizedBox(height: listingLabelSpacing),
-              _neighborhoodAmenityTagsSection(),
-            ],
-          ),
-        if (_isShare) ...[
-          _sharedCostsSection(),
+        if (_isShare)
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: Text(
@@ -3453,38 +4274,90 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                 ? null
                 : (v) => setState(() => _isOwnerOccupier = v),
           ),
-        ],
       ],
     );
   }
 
   Widget _descriptionSection() {
+    final guidance = _isShare
+        ? 'Describe the household vibe and daily routines\n'
+            'Mention what is included in the room\n'
+            'Say who would fit well as a flatmate\n'
+            'Note house rules and shared spaces'
+        : 'Highlight transport links and the local area\n'
+            'Describe layout, light, and standout features\n'
+            'Mention who the home suits best\n'
+            'Be honest about any trade-offs';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ListingSectionHeader(
+        ListingSectionHeader(
           title: '📝 Description',
-          subtitle: 'Optional — tell applicants more about the space or household.',
-        ),
-        TextFormField(
-          key: _descriptionFieldKey,
-          controller: _descriptionController,
-          enabled: !widget.saving,
-          minLines: 6,
-          maxLines: 12,
-          style: listingFieldValueStyle,
-          decoration: listingInputDecoration(
-            label: 'Description (optional)',
-            hint: _isShare
-                ? 'Share the household vibe, routines, and what kind of flatmate fits…'
-                : 'Tell applicants about the local vibe, transport links, and what to expect…',
+          subtitle:
+              'Optional — tell applicants more about the space or household.',
+          trailing: ListingAutoDraftBadge(
+            visible: _isAutoDraftedDescription(),
           ),
-          validator: (v) {
-            final text = (v ?? '').trim();
-            if (text.isNotEmpty && text.length < 10) {
-              return 'If you add a description, use at least 10 characters.';
-            }
-            return null;
+        ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _descriptionController,
+          builder: (context, value, _) {
+            final showGuidance = value.text.trim().isEmpty;
+            return Stack(
+              children: [
+                TextFormField(
+                  key: _descriptionFieldKey,
+                  controller: _descriptionController,
+                  enabled: !widget.saving,
+                  minLines: 6,
+                  maxLines: 12,
+                  textAlignVertical: TextAlignVertical.top,
+                  style: listingSmartCopyFieldStyle(
+                    base: listingFieldValueStyle,
+                    isAutoDrafted: _isAutoDraftedDescription(),
+                  ),
+                  decoration: listingInlineInputDecoration().copyWith(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  validator: (v) {
+                    final text = (v ?? '').trim();
+                    if (text.isNotEmpty && text.length < 10) {
+                      return 'If you add a description, use at least 10 characters.';
+                    }
+                    return null;
+                  },
+                ),
+                if (showGuidance)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 24,
+                        ),
+                        child: Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            guidance,
+                            textAlign: TextAlign.center,
+                            style: listingFieldLabelStyle.copyWith(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              height: 1.55,
+                              color: const Color(0xFFD1D5DB),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
           },
         ),
       ],
@@ -3523,10 +4396,12 @@ class _DurationUnitDropdown extends StatefulWidget {
     required this.value,
     required this.enabled,
     required this.onChanged,
+    this.locked = false,
   });
 
   final SubletDurationUnit value;
   final bool enabled;
+  final bool locked;
   final ValueChanged<SubletDurationUnit> onChanged;
 
   @override
@@ -3552,7 +4427,7 @@ class _DurationUnitDropdownState extends State<_DurationUnitDropdown> {
   }
 
   void _toggleMenu() {
-    if (!widget.enabled) return;
+    if (!widget.enabled || widget.locked) return;
     _open ? _closeMenu() : _openMenu();
   }
 
@@ -3674,7 +4549,7 @@ class _DurationUnitDropdownState extends State<_DurationUnitDropdown> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
-            onTap: widget.enabled ? _toggleMenu : null,
+            onTap: widget.enabled && !widget.locked ? _toggleMenu : null,
             borderRadius: BorderRadius.circular(10),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -3692,13 +4567,14 @@ class _DurationUnitDropdownState extends State<_DurationUnitDropdown> {
                   Expanded(
                     child: Text(label, style: listingFieldValueStyle),
                   ),
-                  Icon(
-                    _open ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
-                    color: widget.enabled
-                        ? const Color(0xFF374151)
-                        : const Color(0xFFD1D5DB),
-                  ),
+                  if (!widget.locked)
+                    Icon(
+                      _open ? Icons.expand_less : Icons.expand_more,
+                      size: 18,
+                      color: widget.enabled
+                          ? const Color(0xFF374151)
+                          : const Color(0xFFD1D5DB),
+                    ),
                 ],
               ),
             ),

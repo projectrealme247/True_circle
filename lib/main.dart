@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/app_env.dart';
 import 'config/market/market_config.dart';
+import 'data/poi_catalog_repository.dart';
 import 'router/app_router.dart';
 import 'services/auth_service.dart';
 import 'services/marketplace_context_notifier.dart';
@@ -122,8 +123,27 @@ Future<void> _initializeApp() async {
 
   assert(() {
     debugPrint('TrueCircle market: ${MarketConfig.current.id.name}');
+    _debugLogPoiCatalogFreshness();
     return true;
   }());
+}
+
+void _debugLogPoiCatalogFreshness() {
+  if (!PoiCatalogRepository.hasSeededDublinCatalog) {
+    debugPrint(
+      'POI catalog: empty — run tool/seed_dublin_pois.dart after dry-run approval',
+    );
+    return;
+  }
+  final ageDays = PoiCatalogRepository.dublinCatalogAgeDays;
+  if (ageDays == null) return;
+  debugPrint('POI catalog last refreshed: $ageDays days ago');
+  if (ageDays > 90) {
+    debugPrint(
+      'POI catalog is stale (>90 days) — consider re-running '
+      'tool/seed_dublin_pois.dart --full --region=dublin',
+    );
+  }
 }
 
 String _normalizeSupabaseUrl(String raw) {

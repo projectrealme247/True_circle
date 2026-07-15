@@ -91,25 +91,19 @@ class TenantVerificationCredentials {
     return TrustStage.casual;
   }
 
+  static const _neutralTextColor = 0xFF717171;
+  static const _neutralBackgroundColor = 0xFFF0F0F0;
+
   static _TierBadge _badgeForStage(TrustStage stage) {
-    if (stage == TrustStage.idVerified) {
-      return const _TierBadge(
-        label: 'Sound',
-        textColor: 0xFF2563EB,
-        backgroundColor: 0xFFDBEAFE,
-      );
-    }
-    if (stage == TrustStage.socialVerified) {
-      return const _TierBadge(
-        label: 'Grand',
-        textColor: 0xFF10B981,
-        backgroundColor: 0xFFD1FAE5,
-      );
-    }
-    return const _TierBadge(
-      label: 'Just Landed',
-      textColor: 0xFFEAB308,
-      backgroundColor: 0xFFFEF9C3,
+    final label = switch (stage) {
+      TrustStage.idVerified => 'Sound',
+      TrustStage.socialVerified => 'Grand',
+      _ => 'Just Landed',
+    };
+    return _TierBadge(
+      label: label,
+      textColor: _neutralTextColor,
+      backgroundColor: _neutralBackgroundColor,
     );
   }
 }

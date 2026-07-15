@@ -8,11 +8,11 @@ import 'package:go_router/go_router.dart';
 
 import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
+import '../navigation/navigate_after_identity.dart';
 import '../navigation/space_gateway_navigation.dart';
 import '../services/auth_service.dart';
 import '../services/demo_auth_service.dart';
 import '../services/user_session_store.dart';
-import '../services/view_preference_service.dart';
 import '../utils/listing_data.dart';
 import '../models/spoken_language_entry.dart';
 import '../utils/profile_data.dart';
@@ -447,13 +447,12 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _authLoading = true);
     try {
       await DemoAuthService.enterAsDemoLandlord();
-      await ViewPreferenceService.setOverride(DashboardViewMode.host);
       if (!mounted) return;
       if (context.canPop()) {
         context.pop(true);
       }
       if (!mounted) return;
-      context.go('/?promptFirstListing=1');
+      await navigateAfterIdentity(context, force: true);
     } catch (e) {
       if (!mounted) return;
       _showNotification('Could not enter demo landlord mode: $e');
@@ -467,13 +466,12 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _authLoading = true);
     try {
       await DemoAuthService.enterAsDemoSeeker();
-      await ViewPreferenceService.setOverride(DashboardViewMode.seeker);
       if (!mounted) return;
       if (context.canPop()) {
         context.pop(true);
       }
       if (!mounted) return;
-      context.go('/?welcomeFeed=1');
+      await navigateAfterIdentity(context, force: true);
     } catch (e) {
       if (!mounted) return;
       _showNotification('Could not enter demo seeker mode: $e');
@@ -542,7 +540,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (!mounted) return;
       _showNotification('Profile created. Welcome to TrueCircle.');
-      context.go('/profile');
+      await navigateAfterIdentity(context, force: true);
     } catch (e) {
       if (!mounted) return;
       _showNotification(AuthService.friendlyError(e));

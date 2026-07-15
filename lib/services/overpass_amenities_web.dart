@@ -6,82 +6,176 @@ import 'dart:math' as math;
 import 'package:web/web.dart' as web;
 
 import '../models/neighborhood_amenity_tag.dart';
+import '../utils/transit_ranking.dart';
 import 'overpass_amenities_service.dart';
+import 'overpass_config.dart';
+import 'overpass_full_query.dart';
 
 Future<NearbyAmenities?> fetchNearbyAmenities(double lat, double lon) async {
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ];
+
+  final fullResults = await Future.wait([
+    for (final endpoint in endpoints)
+      _fetchFromEndpoint(endpoint, lat, lon, full: true),
+  ]);
+
+  NearbyAmenities? merged;
+  for (final result in fullResults) {
+    merged = NearbyAmenities.merge(merged, result);
+  }
+  if (merged != null && !merged.isEmpty) return merged;
+
+  final essentialResults = await Future.wait([
+    for (final endpoint in endpoints)
+      _fetchFromEndpoint(endpoint, lat, lon, full: false),
+  ]);
+  for (final result in essentialResults) {
+    merged = NearbyAmenities.merge(merged, result);
+    if (merged != null && !merged.isEmpty) return merged;
+  }
+  return merged;
+}
+
+Future<NearbyAmenities?> _fetchFromEndpoint(
+  String endpoint,
+  double lat,
+  double lon, {
+  required bool full,
+}) async {
+  final queryType =
+      full ? OverpassQueryType.full : OverpassQueryType.essentials;
+  final startedAt = DateTime.now();
+
   try {
     final latStr = lat.toStringAsFixed(6);
     final lonStr = lon.toStringAsFixed(6);
-    final query = '''
-[out:json][timeout:14];
-(
-  node["shop"~"supermarket|convenience"](around:900,$latStr,$lonStr);
-  way["shop"~"supermarket|convenience"](around:900,$latStr,$lonStr);
-  node["amenity"="school"](around:1400,$latStr,$lonStr);
-  way["amenity"="school"](around:1400,$latStr,$lonStr);
-  node["amenity"~"childcare|kindergarten"](around:1400,$latStr,$lonStr);
-  way["amenity"~"childcare|kindergarten"](around:1400,$latStr,$lonStr);
-  node["railway"~"tram_stop|station|halt"](around:2500,$latStr,$lonStr);
-  node["highway"="bus_stop"](around:1200,$latStr,$lonStr);
-  node["addr:postcode"](around:350,$latStr,$lonStr);
-  way["addr:postcode"](around:350,$latStr,$lonStr);
-  node["amenity"~"pub|bar|biergarten"](around:1200,$latStr,$lonStr);
-  node["amenity"="atm"](around:1000,$latStr,$lonStr);
-  node["amenity"="bank"](around:1000,$latStr,$lonStr);
-  node["shop"~"pizza"](around:1500,$latStr,$lonStr);
-  node["amenity"~"fast_food"](around:1500,$latStr,$lonStr);
-  node["shop"~"supermarket"](around:1500,$latStr,$lonStr);
-  node["shop"~"asian|asian_supermarket|oriental"](around:2000,$latStr,$lonStr);
-  node["leisure"~"fitness_centre|sports_centre"](around:1500,$latStr,$lonStr);
-  way["leisure"~"fitness_centre|sports_centre"](around:1500,$latStr,$lonStr);
-  node["leisure"="park"](around:1200,$latStr,$lonStr);
-  way["leisure"="park"](around:1200,$latStr,$lonStr);
-  node["amenity"="pharmacy"](around:1000,$latStr,$lonStr);
-  node["amenity"="cafe"](around:800,$latStr,$lonStr);
-  node["amenity"~"restaurant"](around:1000,$latStr,$lonStr);
-  node["landuse"~"commercial|industrial"](around:2000,$latStr,$lonStr);
-  way["landuse"~"commercial|industrial"](around:2000,$latStr,$lonStr);
-  node["office"](around:1500,$latStr,$lonStr);
-  way["office"](around:1500,$latStr,$lonStr);
-  node["tourism"~"attraction|museum|gallery"](around:2000,$latStr,$lonStr);
-  way["tourism"~"attraction|museum|gallery"](around:2000,$latStr,$lonStr);
-);
-out center;
-''';
+    final query = full
+        ? buildFullOverpassQuery(latStr, lonStr)
+        : buildEssentialsOverpassQuery(latStr, lonStr);
+    final requestTimeout = OverpassConfig.requestTimeoutFor(queryType);
 
-    final completer = Completer<NearbyAmenities?>();
+    final completer = Completer<_OverpassFetchResult>();
     final xhr = web.XMLHttpRequest();
-    xhr.open('POST', 'https://overpass-api.de/api/interpreter');
+    xhr.open('POST', endpoint);
     xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
     xhr.onload = ((web.Event _) {
       try {
         if (xhr.status < 200 || xhr.status >= 300) {
-          completer.complete(null);
+          completer.complete(
+            _OverpassFetchResult.failure(
+              outcome: 'http_error',
+              statusCode: xhr.status,
+            ),
+          );
           return;
         }
         final decoded = jsonDecode(xhr.responseText);
         if (decoded is! Map) {
-          completer.complete(null);
+          completer.complete(
+            _OverpassFetchResult.failure(outcome: 'parse_error'),
+          );
           return;
         }
         final elements = decoded['elements'];
         if (elements is! List) {
-          completer.complete(null);
+          completer.complete(
+            _OverpassFetchResult.failure(outcome: 'parse_error'),
+          );
           return;
         }
-        completer.complete(_parseElements(elements, lat, lon));
+        completer.complete(
+          _OverpassFetchResult.success(
+            amenities: _parseElements(elements, lat, lon),
+            elementCount: elements.length,
+          ),
+        );
       } catch (_) {
-        completer.complete(null);
+        completer.complete(
+          _OverpassFetchResult.failure(outcome: 'parse_error'),
+        );
       }
     }).toJS;
-    xhr.onerror = ((web.Event _) => completer.complete(null)).toJS;
+    xhr.onerror = ((web.Event _) {
+      completer.complete(_OverpassFetchResult.failure(outcome: 'xhr_error'));
+    }).toJS;
     xhr.send('data=${Uri.encodeComponent(query)}'.toJS);
-    return completer.future.timeout(
-      const Duration(seconds: 14),
-      onTimeout: () => null,
+
+    final result = await completer.future.timeout(
+      requestTimeout,
+      onTimeout: () => _OverpassFetchResult.failure(
+        outcome: 'client_timeout',
+        timedOut: true,
+      ),
     );
+
+    OverpassConfig.logFetch(
+      queryType: queryType,
+      endpoint: endpoint,
+      duration: DateTime.now().difference(startedAt),
+      elementCount: result.elementCount,
+      outcome: result.outcome,
+    );
+    return result.amenities;
   } catch (_) {
+    OverpassConfig.logFetch(
+      queryType: queryType,
+      endpoint: endpoint,
+      duration: DateTime.now().difference(startedAt),
+      outcome: 'unexpected_error',
+    );
     return null;
+  }
+}
+
+class _OverpassFetchResult {
+  const _OverpassFetchResult({
+    this.amenities,
+    this.elementCount,
+    required this.outcome,
+  });
+
+  final NearbyAmenities? amenities;
+  final int? elementCount;
+  final String outcome;
+
+  factory _OverpassFetchResult.success({
+    required NearbyAmenities? amenities,
+    required int elementCount,
+  }) {
+    if (elementCount == 0) {
+      return const _OverpassFetchResult(
+        elementCount: 0,
+        outcome: 'empty_elements',
+      );
+    }
+    if (amenities == null || amenities.isEmpty) {
+      return _OverpassFetchResult(
+        elementCount: elementCount,
+        outcome: 'no_usable_amenities',
+      );
+    }
+    return _OverpassFetchResult(
+      amenities: amenities,
+      elementCount: elementCount,
+      outcome: 'success',
+    );
+  }
+
+  factory _OverpassFetchResult.failure({
+    required String outcome,
+    int? statusCode,
+    bool timedOut = false,
+  }) {
+    if (statusCode != null) {
+      return _OverpassFetchResult(outcome: '${outcome}_$statusCode');
+    }
+    if (timedOut) {
+      return _OverpassFetchResult(outcome: outcome);
+    }
+    return _OverpassFetchResult(outcome: outcome);
   }
 }
 
@@ -92,15 +186,28 @@ out center;
 NearbyAmenities? _parseElements(List elements, double originLat, double originLon) {
   String? supermarketName;
   double supermarketDist = double.infinity;
+  final groceryCandidates = <({String brand, double dist})>[];
   String? primarySchool;
   double primaryDist = double.infinity;
   String? secondarySchool;
   double secondaryDist = double.infinity;
+  String? collegeSchool;
+  double collegeDist = double.infinity;
   String? crecheName;
   double crecheDist = double.infinity;
   String? transitLine;
   double transitDist = double.infinity;
-  int transitPriority = -1;
+  final extraTransit = <NearbyExtraTransit>[];
+  String? bestBusLine;
+  double bestBusDist = double.infinity;
+  String? bestDartLine;
+  double bestDartDist = double.infinity;
+  String? bestLuasLine;
+  double bestLuasDist = double.infinity;
+  String? nearestHospital;
+  double hospitalDist = double.infinity;
+  String? nearestGpClinic;
+  double gpClinicDist = double.infinity;
 
   // Lifestyle POI tracking.
   String? nearestPub;
@@ -150,12 +257,15 @@ NearbyAmenities? _parseElements(List elements, double originLat, double originLo
 
     if (shop == 'supermarket' || shop == 'convenience') {
       if (name.isEmpty) continue;
+      final brand = _normalisedGroceryBrand(name);
+      groceryCandidates.add((brand: brand, dist: dist));
       if (dist < supermarketDist) {
         supermarketDist = dist;
-        supermarketName = _normalisedGroceryBrand(name);
+        supermarketName = brand;
       }
     } else if (shop == 'asian' || shop == 'asian_supermarket' || shop == 'oriental') {
       if (name.isEmpty) continue;
+      groceryCandidates.add((brand: name, dist: dist));
       if (dist < asianDist) {
         asianDist = dist;
         nearestAsian = name;
@@ -230,6 +340,13 @@ NearbyAmenities? _parseElements(List elements, double originLat, double originLo
       }
     } else if (amenity == 'school') {
       if (name.isEmpty) continue;
+      if (_isCollegeSchool(name, tags)) {
+        if (dist < collegeDist) {
+          collegeDist = dist;
+          collegeSchool = name;
+        }
+        continue;
+      }
       final isPrimary = _isPrimarySchool(name, tags);
       final isSecondary = _isSecondarySchool(name, tags);
 
@@ -254,18 +371,77 @@ NearbyAmenities? _parseElements(List elements, double originLat, double originLo
         crecheDist = dist;
         crecheName = name;
       }
+    } else if (amenity == 'hospital') {
+      if (name.isEmpty) continue;
+      if (dist < hospitalDist) {
+        hospitalDist = dist;
+        nearestHospital = name;
+      }
+    } else if (amenity == 'clinic' || amenity == 'doctors') {
+      if (name.isEmpty) continue;
+      final lower = name.toLowerCase();
+      if (lower.contains('hospital')) {
+        if (dist < hospitalDist) {
+          hospitalDist = dist;
+          nearestHospital = name;
+        }
+      } else if (dist < gpClinicDist) {
+        gpClinicDist = dist;
+        nearestGpClinic = name;
+      }
     } else {
       final transit = _transitCandidate(tags, railway: railway, highway: highway);
       if (transit != null) {
-        final shouldReplace = transit.priority > transitPriority ||
-            (transit.priority == transitPriority && dist < transitDist);
+        if (transit.line.startsWith('Dublin Bus')) {
+          if (dist < bestBusDist) {
+            bestBusDist = dist;
+            bestBusLine = transit.line;
+          }
+        } else if (transit.line.startsWith('DART')) {
+          if (dist < bestDartDist) {
+            bestDartDist = dist;
+            bestDartLine = transit.line;
+          }
+        } else if (transit.line.startsWith('Luas')) {
+          if (dist < bestLuasDist) {
+            bestLuasDist = dist;
+            bestLuasLine = transit.line;
+          }
+        }
+        final shouldReplace = TransitRanking.shouldPreferPrimary(
+          candidateWalkMin: _walkMin(dist),
+          candidateDistanceM: dist,
+          candidateLine: transit.line,
+          currentWalkMin:
+              transitLine != null ? _walkMin(transitDist) : null,
+          currentDistanceM: transitLine != null ? transitDist : null,
+          currentLine: transitLine,
+        );
         if (shouldReplace) {
-          transitPriority = transit.priority;
           transitDist = dist;
           transitLine = transit.line;
         }
       }
     }
+  }
+
+  void addExtra(String? line, double dist) {
+    if (line == null || line == transitLine || dist.isInfinite) return;
+    final walk = _walkMin(dist);
+    if (extraTransit.any((e) => e.line == line)) return;
+    extraTransit.add(NearbyExtraTransit(line: line, walkMin: walk));
+  }
+
+  addExtra(bestBusLine, bestBusDist);
+  addExtra(bestDartLine, bestDartDist);
+  addExtra(bestLuasLine, bestLuasDist);
+  if (nearestHospital != null) {
+    extraTransit.add(
+      NearbyExtraTransit(
+        line: 'Hospital · $nearestHospital',
+        walkMin: _walkMin(hospitalDist),
+      ),
+    );
   }
 
   final lifestyleTags = <NeighborhoodAmenityTag>[
@@ -348,12 +524,18 @@ NearbyAmenities? _parseElements(List elements, double originLat, double originLo
       ),
   ];
 
+  final groceries = _topGroceries(groceryCandidates);
+
   if (supermarketName == null &&
       primarySchool == null &&
       secondarySchool == null &&
+      collegeSchool == null &&
       crecheName == null &&
       transitLine == null &&
-      lifestyleTags.isEmpty) {
+      lifestyleTags.isEmpty &&
+      extraTransit.isEmpty &&
+      groceries.isEmpty &&
+      nearestGpClinic == null) {
     return null;
   }
 
@@ -364,11 +546,57 @@ NearbyAmenities? _parseElements(List elements, double originLat, double originLo
     supermarketWalkMin:
         supermarketName != null ? _walkMin(supermarketDist) : null,
     primarySchool: primarySchool,
+    primarySchoolWalkMin:
+        primarySchool != null ? _walkMin(primaryDist) : null,
     secondarySchool: secondarySchool,
+    secondarySchoolWalkMin:
+        secondarySchool != null ? _walkMin(secondaryDist) : null,
     crecheName: crecheName,
     crecheWalkMin: crecheName != null ? _walkMin(crecheDist) : null,
     lifestyleTags: lifestyleTags,
+    extraTransit: extraTransit,
+    groceries: groceries,
+    collegeSchool: collegeSchool,
+    collegeWalkMin: collegeSchool != null ? _walkMin(collegeDist) : null,
+    gpClinic: nearestGpClinic,
+    gpWalkMin: nearestGpClinic != null ? _walkMin(gpClinicDist) : null,
   );
+}
+
+List<NearbyGroceryOption> _topGroceries(
+  List<({String brand, double dist})> candidates,
+) {
+  final byBrand = <String, ({String brand, double dist})>{};
+  for (final item in candidates) {
+    final key = item.brand.trim().toLowerCase();
+    if (key.isEmpty) continue;
+    final existing = byBrand[key];
+    if (existing == null || item.dist < existing.dist) {
+      byBrand[key] = item;
+    }
+  }
+  final sorted = byBrand.values.toList()..sort((a, b) => a.dist.compareTo(b.dist));
+  return sorted
+      .take(3)
+      .map(
+        (item) => NearbyGroceryOption(
+          brand: item.brand,
+          walkMin: _walkMin(item.dist),
+        ),
+      )
+      .toList();
+}
+
+bool _isCollegeSchool(String name, Map tags) {
+  final lower = name.toLowerCase();
+  final schoolType = tags['school:type']?.toString().toLowerCase() ?? '';
+  return schoolType.contains('university') ||
+      lower.contains('university') ||
+      lower.contains('institute of technology') ||
+      (lower.contains('college') && !lower.contains('community college')) ||
+      lower.contains(' trinity') ||
+      lower.contains(' ucd') ||
+      lower.contains(' dcu');
 }
 
 class _TransitCandidate {

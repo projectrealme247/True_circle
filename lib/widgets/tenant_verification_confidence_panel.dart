@@ -4,6 +4,7 @@ import '../core/theme/app_theme.dart';
 import '../utils/tenant_verification_credentials.dart';
 import '../utils/trust_tier_tooltips.dart';
 import '../utils/viewer_profile.dart';
+import 'trust_badge.dart';
 
 /// Landlord-facing GDPR-minimized verification confidence panel.
 class TenantVerificationConfidencePanel extends StatelessWidget {
@@ -66,10 +67,8 @@ class TenantVerificationConfidencePanel extends StatelessWidget {
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerLeft,
-              child: _TierBadgePill(
-                label: credentials.tierLabel,
-                textColor: Color(credentials.tierTextColor),
-                backgroundColor: Color(credentials.tierBackgroundColor),
+              child: TrustBadge.fromTrustStage(
+                credentials.trustStage,
                 tooltip: tierTooltipForLabel?.call(credentials.tierLabel),
               ),
             ),
@@ -95,69 +94,6 @@ class TenantVerificationConfidencePanel extends StatelessWidget {
             const _ComplianceStamp(),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _TierBadgePill extends StatelessWidget {
-  const _TierBadgePill({
-    required this.label,
-    required this.textColor,
-    required this.backgroundColor,
-    this.tooltip,
-  });
-
-  final String label;
-  final Color textColor;
-  final Color backgroundColor;
-  final String? tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final pill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: textColor.withValues(alpha: 0.18)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w800,
-          color: textColor,
-          letterSpacing: -0.1,
-        ),
-      ),
-    );
-
-    if (tooltip == null || tooltip!.isEmpty) return pill;
-
-    return Theme(
-      data: Theme.of(context).copyWith(
-        tooltipTheme: const TooltipThemeData(
-          decoration: BoxDecoration(
-            color: Color(0xFF1C1E21),
-            borderRadius: BorderRadius.all(Radius.circular(10)),
-          ),
-          textStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            height: 1.45,
-          ),
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          waitDuration: Duration.zero,
-          showDuration: Duration(seconds: 4),
-        ),
-      ),
-      child: Tooltip(
-        message: tooltip!,
-        triggerMode: TooltipTriggerMode.tap,
-        preferBelow: true,
-        child: pill,
       ),
     );
   }

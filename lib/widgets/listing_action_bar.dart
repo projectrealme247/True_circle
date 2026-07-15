@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart' show AppButtonStyles;
-import '../debug/agent_log.dart';
 import '../theme/app_typography.dart';
 import '../models/marketplace_space.dart';
 import '../services/listings_storage_service.dart';
@@ -64,26 +63,7 @@ class ListingActionBar extends StatelessWidget {
     Map<String, dynamic> listing,
     Map<String, dynamic>? session,
   ) {
-    final owned = ListingsStorageService.isOwnedBySession(listing, session);
-    // #region agent log
-    agentLog(
-      location: 'listing_action_bar.dart:isOwnedListing',
-      message: 'Ownership resolution',
-      hypothesisId: 'H4',
-      data: {
-        'owned': owned,
-        'sessionUserId': ProfileData.text(session?['supabase_user_id']),
-        'sessionEmail': ProfileData.text(session?['email']),
-        'sessionName': ProfileData.text(session?['full_name']),
-        'ownerUserId': ProfileData.text(listing['owner_user_id']),
-        'landlordId': ProfileData.text(listing['landlord_id']),
-        'ownerEmail': ProfileData.text(listing['owner_email']),
-        'hostName': ListingData.hostName(listing),
-        'listingId': ListingData.id(listing),
-      },
-    );
-    // #endregion
-    return owned;
+    return ListingsStorageService.isOwnedBySession(listing, session);
   }
 
   @override

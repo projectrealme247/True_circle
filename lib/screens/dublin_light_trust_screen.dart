@@ -164,54 +164,51 @@ class _TrackCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: HomeMarketplaceTheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: onTap == null
+                ? HomeMarketplaceTheme.border
+                : HomeMarketplaceTheme.primary.withValues(alpha: 0.4),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: onTap == null
-                    ? HomeMarketplaceTheme.border
-                    : HomeMarketplaceTheme.primary.withValues(alpha: 0.4),
-              ),
-            ),
-            child: ListTile(
-              leading: Icon(icon, color: HomeMarketplaceTheme.primary),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: AppTypography.detail()
-                          .copyWith(fontWeight: FontWeight.w600),
+          child: ListTile(
+            leading: Icon(icon, color: HomeMarketplaceTheme.primary),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: AppTypography.detail()
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: HomeMarketplaceTheme.accentSurface,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    badge,
+                    style: AppTypography.detail().copyWith(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: HomeMarketplaceTheme.accent,
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: HomeMarketplaceTheme.accentSurface,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      badge,
-                      style: AppTypography.detail().copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: HomeMarketplaceTheme.accent,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              subtitle: Text(subtitle, style: AppTypography.detail()),
-              trailing: onTap != null
-                  ? const Icon(Icons.chevron_right_rounded)
-                  : const Icon(Icons.check_circle_outline,
-                      color: Color(0xFF008A05)),
+                ),
+              ],
             ),
+            subtitle: Text(subtitle, style: AppTypography.detail()),
+            trailing: onTap != null
+                ? const Icon(Icons.chevron_right_rounded)
+                : const Icon(Icons.check_circle_outline,
+                    color: Color(0xFF008A05)),
           ),
         ),
       ),
@@ -236,12 +233,13 @@ class _TrustOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: HomeMarketplaceTheme.surface,
+      child: Material(
+        color: HomeMarketplaceTheme.surface,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: HomeMarketplaceTheme.border),
+          side: const BorderSide(color: HomeMarketplaceTheme.border),
         ),
+        clipBehavior: Clip.antiAlias,
         child: ListTile(
           onTap: onTapRoute == null ? null : () => context.push(onTapRoute!),
           leading: Icon(icon, color: HomeMarketplaceTheme.textMuted),

@@ -97,7 +97,7 @@ abstract final class ProfileCompletionDialog {
                     onPressed: () {
                       Navigator.pop(dialogContext);
                       context.push(
-                        '/profile/edit',
+                        '/welcome',
                         extra: session,
                       );
                     },

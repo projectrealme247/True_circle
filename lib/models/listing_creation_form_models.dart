@@ -6,11 +6,23 @@ enum ListingPropertySubType { apartment, house }
 enum SharedRoomArchitecture {
   privateSharedBath('private_shared_bath', '🛏️ Private Room with Shared Bathroom'),
   privateEnsuite('private_ensuite', '🚿 Private Room with Ensuite'),
-  sharedBed('shared_bed', '👥 Shared Bed in a Shared Occupancy');
+  sharedBed('shared_bed', '👥 Shared Room in Shared Occupancy');
 
   const SharedRoomArchitecture(this.storageValue, this.label);
   final String storageValue;
   final String label;
+
+  String get tileLabel => switch (this) {
+        SharedRoomArchitecture.privateSharedBath => 'Private + shared bath',
+        SharedRoomArchitecture.privateEnsuite => 'Private ensuite',
+        SharedRoomArchitecture.sharedBed => 'Shared room',
+      };
+
+  String get tileEmoji => switch (this) {
+        SharedRoomArchitecture.privateSharedBath => '🛏️',
+        SharedRoomArchitecture.privateEnsuite => '🚿',
+        SharedRoomArchitecture.sharedBed => '👥',
+      };
 }
 
 enum FlatmateCohort {
@@ -22,6 +34,13 @@ enum FlatmateCohort {
   const FlatmateCohort(this.storageValue, this.label);
   final String storageValue;
   final String label;
+
+  String get emoji => switch (this) {
+        FlatmateCohort.workingProfessionals => '💼',
+        FlatmateCohort.students => '🎓',
+        FlatmateCohort.mixedCohort => '👥',
+        FlatmateCohort.families => '👨‍👩‍👧',
+      };
 }
 
 enum TargetTenantPreference {
@@ -151,7 +170,11 @@ class NeighborhoodProximityDraft {
     this.crecheWalkMin = 0,
     this.manualEdit = false,
     List<CustomProximityPoint>? customPoints,
-  }) : customPoints = customPoints ?? [];
+    List<String>? hiddenChipKeys,
+    List<String>? pinnedChipKeys,
+  })  : customPoints = customPoints ?? [],
+        hiddenChipKeys = hiddenChipKeys ?? [],
+        pinnedChipKeys = pinnedChipKeys ?? [];
 
   String transportLine;
   int transportWalkMin;
@@ -164,6 +187,12 @@ class NeighborhoodProximityDraft {
   bool manualEdit;
   List<CustomProximityPoint> customPoints;
 
+  /// Stable keys (`category|normalizedName`) for chips hidden from public display.
+  List<String> hiddenChipKeys;
+
+  /// Stable keys for chips pinned to the front of their section.
+  List<String> pinnedChipKeys;
+
   Map<String, dynamic> toJson() => {
         'transport_line': transportLine,
         'transport_walk_min': transportWalkMin,
@@ -175,6 +204,8 @@ class NeighborhoodProximityDraft {
         'creche_walk_min': crecheWalkMin,
         'manual_edit': manualEdit,
         'custom_points': customPoints.map((p) => p.toJson()).toList(),
+        'hidden_chip_keys': hiddenChipKeys,
+        'pinned_chip_keys': pinnedChipKeys,
       };
 
   static NeighborhoodProximityDraft fromJson(Map<String, dynamic>? raw) {
@@ -196,6 +227,34 @@ class NeighborhoodProximityDraft {
                   ))
               .toList() ??
           [],
+      hiddenChipKeys: _stringList(raw['hidden_chip_keys']),
+      pinnedChipKeys: _stringList(raw['pinned_chip_keys']),
     );
+  }
+
+  static List<String> _stringList(Object? raw) {
+    if (raw is! List) return [];
+    return raw
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  void toggleHiddenKey(String key) {
+    if (key.isEmpty) return;
+    if (hiddenChipKeys.contains(key)) {
+      hiddenChipKeys = List<String>.from(hiddenChipKeys)..remove(key);
+    } else {
+      hiddenChipKeys = List<String>.from(hiddenChipKeys)..add(key);
+    }
+  }
+
+  void togglePinnedKey(String key) {
+    if (key.isEmpty) return;
+    if (pinnedChipKeys.contains(key)) {
+      pinnedChipKeys = List<String>.from(pinnedChipKeys)..remove(key);
+    } else {
+      pinnedChipKeys = List<String>.from(pinnedChipKeys)..add(key);
+    }
   }
 }

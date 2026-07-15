@@ -1,4 +1,5 @@
 import 'dublin_districts.dart';
+import '../../models/listing_creation_form_models.dart';
 import 'market_config.dart';
 
 final class DublinMarketConfig implements MarketConfig {
@@ -14,13 +15,20 @@ final class DublinMarketConfig implements MarketConfig {
     ('4bed2bath', '4 bed · 2 bath'),
   ];
 
-  static const _shareRoomOptions = [
-    ('ensuite', 'Ensuite room'),
-    ('private_bath', 'Private room · own bathroom'),
-    ('bed_shared', 'Bed in shared room'),
-    ('student_room', 'Student room'),
-    ('double_ensuite', 'Double ensuite'),
-  ];
+  static List<(String, String)> get _shareRoomOptions => [
+        (
+          'private_bath',
+          '${SharedRoomArchitecture.privateSharedBath.tileEmoji} ${SharedRoomArchitecture.privateSharedBath.tileLabel}',
+        ),
+        (
+          'ensuite',
+          '${SharedRoomArchitecture.privateEnsuite.tileEmoji} ${SharedRoomArchitecture.privateEnsuite.tileLabel}',
+        ),
+        (
+          'bed_shared',
+          '${SharedRoomArchitecture.sharedBed.tileEmoji} ${SharedRoomArchitecture.sharedBed.tileLabel}',
+        ),
+      ];
 
   @override
   MarketId get id => MarketId.dublin;
@@ -52,6 +60,8 @@ final class DublinMarketConfig implements MarketConfig {
       dublinDistrictLabelForKey(defaultAreaKey) ??
       'Dublin 18 (Sandyford, Leopardstown)';
 
+  /// Canonical Dublin districts from `dublin_districts.dart` — same keys as
+  /// refine filters; full labels for listing-creation Property area picker.
   @override
   List<(String, String)> get areaOptions => dublinAreaOptions;
 

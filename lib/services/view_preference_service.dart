@@ -1,8 +1,9 @@
 import '../screens/auth_screen.dart';
+import 'active_mode_service.dart';
 import 'profile_state_notifier.dart';
 import 'profile_storage_service.dart';
 
-/// Polymorphic dashboard context: seeking vs hosting.
+/// Polymorphic dashboard context: seeking vs hosting (legacy enum).
 enum DashboardViewMode {
   seeker,
   host;
@@ -22,47 +23,41 @@ enum DashboardViewMode {
   }
 }
 
-/// Resolves and persists `view_preference_override` on the user session.
+/// Legacy compatibility — prefer [ActiveModeService] for all new code.
 abstract final class ViewPreferenceService {
-  static const _sessionKey = 'view_preference_override';
-
   static DashboardViewMode resolve({
     required Map<String, dynamic>? session,
     required int ownedListingCount,
   }) {
-    final override = DashboardViewMode.fromOverrideToken(
-      session?[_sessionKey]?.toString(),
-    );
-    if (override != null) return override;
-    return ownedListingCount > 0
-        ? DashboardViewMode.host
-        : DashboardViewMode.seeker;
+    final caps = ActiveModeService.capabilitiesFor(session)
+        .withOwnedListingCount(ownedListingCount);
+    if (ActiveModeService.current == ActiveMode.hosting && caps.canHost) {
+      return DashboardViewMode.host;
+    }
+    return DashboardViewMode.seeker;
   }
 
   static bool isHostContext({
     required Map<String, dynamic>? session,
     required int ownedListingCount,
   }) =>
-      resolve(session: session, ownedListingCount: ownedListingCount) ==
-      DashboardViewMode.host;
+      ActiveModeService.capabilitiesFor(session)
+          .withOwnedListingCount(ownedListingCount)
+          .canHost;
 
   static bool isMultiListingHost(int ownedListingCount) =>
       ownedListingCount > 1;
 
+  @Deprecated('Use ActiveModeService.setMode — never call from onboarding')
   static Future<void> setOverride(DashboardViewMode mode) async {
-    final session = AuthScreen.currentUserSession;
-    if (session == null) return;
-
-    session[_sessionKey] = mode.storageToken;
-    AuthScreen.currentUserSession = session;
-    profileStateNotifier.commitPersisted(session);
-    profileStateNotifier.broadcast();
-    await ProfileStorageService.save(session);
+    await ActiveModeService.setMode(
+      mode == DashboardViewMode.host
+          ? ActiveMode.hosting
+          : ActiveMode.explore,
+    );
   }
 
-  static String toggleLabel({
-    required DashboardViewMode current,
-  }) =>
+  static String toggleLabel({required DashboardViewMode current}) =>
       current == DashboardViewMode.seeker
           ? 'Switch to Hosting'
           : 'Switch to Searching';

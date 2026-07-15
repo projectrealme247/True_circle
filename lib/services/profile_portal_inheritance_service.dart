@@ -1,6 +1,6 @@
 import '../models/profile_onboarding_models.dart';
+import '../models/seeker_onboarding_enums.dart';
 import '../utils/listing_search_intent.dart';
-
 abstract final class ProfilePortalInheritanceService {
   static ListingSearchFilters seekerFeedDefaults(
     ProfileInheritanceSnapshot snapshot,
@@ -13,14 +13,12 @@ abstract final class ProfilePortalInheritanceService {
           ? seeker.roomBudget
           : seeker.maxBudget,
       occupantType: snapshot.track == ProfileOnboardingTrack.seekerSharedSpace
-          ? seeker.occupantGroupFit
+          ? _canonicalOccupantFilter(snapshot.seekerProfile.occupantGroupFit)
           : null,
       genderPreference: snapshot.track == ProfileOnboardingTrack.seekerSharedSpace
           ? _normalizeGender(seeker.genderPreferences)
           : null,
       preferredLeaseMonths: seeker.preferredLeaseMonths,
-      moveInWindow: seeker.moveInWindow.isEmpty ? null : seeker.moveInWindow,
-      wfhFriendly: seeker.wfhStatus ? true : null,
       foodPreference: _normalizeFood(seeker.foodPreference),
     );
   }
@@ -38,6 +36,13 @@ abstract final class ProfilePortalInheritanceService {
       currentHouseholdMakeup: snapshot.hostProfile.currentHouseholdMakeup,
       isOwnerOccupier: snapshot.hostProfile.isOwnerOccupier,
     );
+  }
+
+  static String? _canonicalOccupantFilter(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    final persona = SeekerPersona.fromSession({'occupant_type': trimmed});
+    return persona?.occupantType ?? trimmed;
   }
 
   static String? _normalizeGender(String raw) {

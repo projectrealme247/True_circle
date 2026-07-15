@@ -1,27 +1,44 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../config/market/dublin_commuter_hubs.dart';
 import '../core/theme/app_theme.dart';
-import '../services/commute_destination_geocoding_service.dart';
-import 'onboarding/onboarding_design_tokens.dart';
-import 'shadcn_select.dart';
+import '../models/dublin_destination_suggestion.dart';
+import '../models/seeker_onboarding_enums.dart';
+import '../services/fast_location_service.dart';
+import '../services/seeker_destination_nominatim_service.dart';
+import 'emoji_leading_row.dart';
+import 'listing_creation/listing_creation_primitives.dart';
+import 'onboarding/onboarding_field_block.dart';
 
-/// Static commute destination picker with curated hubs and GIS-backed custom entry.
+/// Two-tier Dublin destination picker — macro presets + live Nominatim search.
 class CommuteDestinationField extends StatefulWidget {
   const CommuteDestinationField({
     super.key,
     required this.selectedHub,
-    required this.occupantType,
     required this.onHubSelected,
     this.onCleared,
-    this.label = 'Destination',
+    this.onCommuteDestinationUnknown,
+    this.commuteDestinationUnknown = false,
+    this.persona,
+    this.label = 'Popular daily destinations',
+    this.occupantType,
+    this.enabled = true,
   });
 
   final DublinCommuterHub? selectedHub;
-  final String? occupantType;
   final ValueChanged<DublinCommuterHub> onHubSelected;
   final VoidCallback? onCleared;
+  final VoidCallback? onCommuteDestinationUnknown;
+  final bool commuteDestinationUnknown;
+  final SeekerPersona? persona;
   final String label;
+
+  /// Retained for profile-edit compatibility.
+  final String? occupantType;
+  final bool enabled;
 
   @override
   State<CommuteDestinationField> createState() =>
@@ -29,183 +46,582 @@ class CommuteDestinationField extends StatefulWidget {
 }
 
 class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
-  late final TextEditingController _customController;
-  bool _customMode = false;
-  bool _resolving = false;
-  String? _resolveError;
+  static final Object _tapGroup = Object();
 
-  List<DublinCommuterHub> get _presetHubs =>
-      DublinCommuterHubs.hubsForOccupantType(widget.occupantType);
+  static const _debounceDuration = Duration(milliseconds: 300);
+  static const _minQueryLength = 2;
+
+  late final TextEditingController _controller;
+  final _focusNode = FocusNode();
+  final _layerLink = LayerLink();
+  final _fieldAnchorKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+  Timer? _debounce;
+  int _searchGeneration = 0;
+
+  List<DublinDestinationSuggestion> _suggestions = const [];
+  bool _searching = false;
+  bool _fetchingGps = false;
+  String? _searchError;
+  String? _gpsError;
 
   @override
   void initState() {
     super.initState();
-    _customController = TextEditingController(
-      text: widget.selectedHub != null &&
-              DublinCommuterHubs.isCustomHub(widget.selectedHub!)
-          ? widget.selectedHub!.label
-          : '',
+    _controller = TextEditingController(
+      text: _customFieldLabel(widget.selectedHub),
     );
-    _customMode = widget.selectedHub != null &&
-        (DublinCommuterHubs.isCustomHub(widget.selectedHub!) ||
-            !_presetHubs.any((hub) => hub.id == widget.selectedHub!.id));
+    _focusNode.addListener(_onFocusChanged);
   }
 
   @override
   void didUpdateWidget(covariant CommuteDestinationField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.occupantType != widget.occupantType &&
-        widget.selectedHub != null &&
-        !_presetHubs.any((hub) => hub.id == widget.selectedHub!.id) &&
-        !DublinCommuterHubs.isCustomHub(widget.selectedHub!)) {
-      setState(() {
-        _customMode = false;
-        _customController.clear();
-        _resolveError = null;
-      });
-      widget.onCleared?.call();
+    final hub = widget.selectedHub;
+    if (hub != oldWidget.selectedHub) {
+      final label = _customFieldLabel(hub);
+      if (_controller.text.trim() != label) {
+        _controller.text = label;
+        _controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: _controller.text.length),
+        );
+      }
     }
+  }
+
+  bool _isMacroPresetHub(DublinCommuterHub? hub) {
+    if (hub == null) return false;
+    return DublinCommuterHubs.seekerOnboardingPresets
+        .any((preset) => preset.hub.id == hub.id);
+  }
+
+  /// Custom search field shows only free-text / Nominatim picks — not macro presets.
+  String _customFieldLabel(DublinCommuterHub? hub) {
+    if (hub == null || _isMacroPresetHub(hub)) return '';
+    return hub.label;
   }
 
   @override
   void dispose() {
-    _customController.dispose();
+    _debounce?.cancel();
+    _removeOverlay();
+    _focusNode.removeListener(_onFocusChanged);
+    _focusNode.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  String? get _selectValue {
-    if (_customMode) return DublinCommuterHubs.otherLocationLabel;
-    final hub = widget.selectedHub;
-    if (hub == null) return null;
-    if (_presetHubs.any((preset) => preset.id == hub.id)) return hub.label;
-    return DublinCommuterHubs.otherLocationLabel;
+  void _onFocusChanged() {
+    if (!_focusNode.hasFocus) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (!mounted || _focusNode.hasFocus) return;
+        _removeOverlay();
+      });
+    } else if (_suggestions.isNotEmpty || _searching) {
+      _renderOverlay();
+    }
   }
 
-  Future<void> _resolveCustomDestination() async {
-    final query = _customController.text.trim();
+  void _dismissOverlay() {
+    _debounce?.cancel();
+    _removeOverlay();
+  }
+
+  void _onQueryChanged(String value) {
+    final query = value.trim();
+
     if (query.isEmpty) {
-      setState(() => _resolveError = 'Enter a Dublin-area place or address.');
+      _debounce?.cancel();
+      setState(() {
+        _suggestions = const [];
+        _searching = false;
+        _searchError = null;
+      });
+      _removeOverlay();
+      widget.onCleared?.call();
+      return;
+    }
+
+    if (_isMacroPresetHub(widget.selectedHub)) {
+      widget.onCleared?.call();
+    }
+
+    _debounce?.cancel();
+
+    if (query.length < _minQueryLength) {
+      setState(() {
+        _suggestions = const [];
+        _searching = false;
+        _searchError = null;
+      });
+      _removeOverlay();
       return;
     }
 
     setState(() {
-      _resolving = true;
-      _resolveError = null;
+      _searching = true;
+      _searchError = null;
+      _gpsError = null;
+      _suggestions = const [];
     });
+    if (_focusNode.hasFocus) {
+      _renderOverlay();
+    }
 
-    final hub = await CommuteDestinationGeocodingService.resolveCustomDestination(
-      query,
+    _debounce = Timer(_debounceDuration, _runSearch);
+  }
+
+  void _selectPreset(SeekerMacroPreset preset) {
+    _debounce?.cancel();
+    _controller.clear();
+    setState(() {
+      _suggestions = const [];
+      _searching = false;
+      _searchError = null;
+      _gpsError = null;
+    });
+    _removeOverlay();
+    _focusNode.unfocus();
+    widget.onHubSelected(preset.hub);
+  }
+
+  Future<void> _runSearch() async {
+    final gen = ++_searchGeneration;
+    final query = _controller.text.trim();
+
+    if (query.length < _minQueryLength) return;
+
+    if (mounted && gen == _searchGeneration) {
+      setState(() {
+        _searching = true;
+        _searchError = null;
+        _gpsError = null;
+      });
+      if (_focusNode.hasFocus) {
+        _renderOverlay();
+      }
+    }
+
+    try {
+      final results =
+          await SeekerDestinationNominatimService.searchOnSubmit(query);
+      if (!mounted || gen != _searchGeneration) return;
+      setState(() {
+        _suggestions = results;
+        _searching = false;
+        if (results.isEmpty) {
+          _searchError =
+              'No Dublin matches found. Try a neighbourhood or campus name.';
+        }
+      });
+      if (_focusNode.hasFocus) {
+        _renderOverlay();
+      } else {
+        _removeOverlay();
+      }
+    } catch (_) {
+      if (!mounted || gen != _searchGeneration) return;
+      setState(() {
+        _suggestions = const [];
+        _searching = false;
+        _searchError = 'Search failed — try again in a moment.';
+      });
+      _removeOverlay();
+    }
+  }
+
+  void _applySuggestion(DublinDestinationSuggestion suggestion) {
+    final selectedLocation = suggestion.displayLabel.trim();
+    final hub = SeekerDestinationNominatimService.hubFromSuggestion(suggestion);
+
+    _debounce?.cancel();
+    _searchGeneration++;
+
+    // 1. Force the text input state update before hiding the overlay.
+    _controller.text = selectedLocation;
+    _controller.selection = TextSelection.fromPosition(
+      TextPosition(offset: _controller.text.length),
     );
 
-    if (!mounted) return;
-    setState(() => _resolving = false);
+    // 2. Commit selection to the parent onboarding / profile payload.
+    widget.onHubSelected(hub);
 
-    if (hub == null) {
+    // 3. Clear focus and hide the suggestion list.
+    setState(() {
+      _suggestions = const [];
+      _searching = false;
+      _searchError = null;
+      _gpsError = null;
+    });
+    _removeOverlay();
+    _focusNode.unfocus();
+  }
+
+  Future<void> _useCurrentLocation() async {
+    if (_fetchingGps || !widget.enabled) return;
+
+    setState(() {
+      _fetchingGps = true;
+      _gpsError = null;
+      _searchError = null;
+    });
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() {
+          _gpsError =
+              'Location services are off. Search for your destination instead.';
+        });
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() {
+          _gpsError =
+              'Location permission denied. Search for your destination instead.';
+        });
+        return;
+      }
+
+      final resolved = await FastLocationService.resolveForUserAction();
+      if (resolved == null) {
+        setState(() {
+          _gpsError =
+              'Could not read GPS. Search for your destination instead.';
+        });
+        return;
+      }
+
+      final suggestion = await SeekerDestinationNominatimService.reverseGeocode(
+        resolved.latitude,
+        resolved.longitude,
+      );
+      if (suggestion == null) {
+        setState(() {
+          _gpsError =
+              'Your location is outside Dublin. Search for a Dublin destination.';
+        });
+        return;
+      }
+
+      _applySuggestion(suggestion);
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
-        _resolveError =
-            'Could not locate that place in Dublin. Try a neighbourhood or landmark.';
+        _gpsError = 'Could not read GPS. Search for your destination instead.';
       });
+    } finally {
+      if (mounted) setState(() => _fetchingGps = false);
+    }
+  }
+
+  void _renderOverlay() {
+    final showLoading = _searching;
+    final showSuggestions = _suggestions.isNotEmpty;
+    if (!showLoading && !showSuggestions) {
+      _removeOverlay();
       return;
     }
 
-    widget.onHubSelected(hub);
+    _removeOverlay();
+    _overlayEntry = OverlayEntry(
+      builder: (context) => _buildOverlay(),
+    );
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  Widget _buildOverlay() {
+    final showLoading = _searching && _suggestions.isEmpty;
+    final showSuggestions = _suggestions.isNotEmpty;
+
+    return Positioned(
+      width: _fieldWidth(),
+      child: CompositedTransformFollower(
+        link: _layerLink,
+        showWhenUnlinked: false,
+        offset: const Offset(0, listingFieldHeight + 4),
+        child: TapRegion(
+          groupId: _tapGroup,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+            elevation: 12,
+            color: Colors.transparent,
+            shadowColor: Colors.black.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: listingDaftBorderColor, width: 1),
+              ),
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: showLoading
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 16,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Searching Dublin…',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : showSuggestions
+                      ? ListView.separated(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: _suggestions.length,
+                          separatorBuilder: (_, __) => Divider(
+                            height: 1,
+                            color: Colors.grey.shade200,
+                          ),
+                          itemBuilder: (context, index) {
+                            final item = _suggestions[index];
+                            return InkWell(
+                              onTap: () => _applySuggestion(item),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 13,
+                                ),
+                                child: EmojiLeadingRow(
+                                  emoji: '📍',
+                                  text: item.displayLabel,
+                                  style: listingFieldValueStyle.copyWith(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  emojiWidth: 20,
+                                  emojiFontSize: 14,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+
+  double _fieldWidth() {
+    final box =
+        _fieldAnchorKey.currentContext?.findRenderObject() as RenderBox?;
+    return box?.size.width ?? MediaQuery.sizeOf(context).width - 48;
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  Widget _searchPrefix() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 4),
+      child: _searching
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(
+              Icons.search,
+              size: 18,
+              color: Color(0xFF9CA3AF),
+            ),
+    );
+  }
+
+  Widget _locationSuffix() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 2),
+      child: TextButton(
+        onPressed: widget.enabled && !_fetchingGps ? _useCurrentLocation : null,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: const Color(0xFF374151),
+        ),
+        child: _fetchingGps
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    child: Text(
+                      '📍',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Use Current Location',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Set<int> _selectedIndicesForRow(List<SeekerMacroPreset> rowPresets) {
+    final hub = widget.selectedHub;
+    if (hub == null) return const {};
+    for (var i = 0; i < rowPresets.length; i++) {
+      if (rowPresets[i].hub.id == hub.id) return {i};
+    }
+    return const {};
+  }
+
+  Widget _buildPresetGrid() {
+    final presets =
+        DublinCommuterHubs.seekerOnboardingPresetsForPersona(widget.persona);
+    const columns = 3;
+    final rows = <List<SeekerMacroPreset>>[];
+    for (var i = 0; i < presets.length; i += columns) {
+      rows.add(presets.sublist(i, (i + columns).clamp(0, presets.length)));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var r = 0; r < rows.length; r++) ...[
+          if (r > 0) const SizedBox(height: 8),
+          OnboardingEqualGridRow(
+            labels: [for (final preset in rows[r]) preset.chipLabel],
+            selectedIndices: _selectedIndicesForRow(rows[r]),
+            onSelected: widget.enabled
+                ? (index) => _selectPreset(rows[r][index])
+                : (_) {},
+          ),
+        ],
+        const SizedBox(height: 8),
+        OnboardingEqualGridRow(
+          labels: const ['Not sure yet'],
+          selectedIndices: widget.commuteDestinationUnknown ? {0} : const {},
+          onSelected: widget.enabled
+              ? (_) => widget.onCommuteDestinationUnknown?.call()
+              : (_) {},
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final options = [
-      ..._presetHubs.map((hub) => hub.label),
-      DublinCommuterHubs.otherLocationLabel,
-    ];
-
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ShadcnSelect(
-          label: widget.label,
-          value: _selectValue ?? '',
-          hint: 'Select destination',
-          options: options,
-          onChanged: (value) {
-            if (value == DublinCommuterHubs.otherLocationLabel) {
-              setState(() {
-                _customMode = true;
-                _resolveError = null;
-              });
-              widget.onCleared?.call();
-              return;
-            }
-
-            final hub = _presetHubs.firstWhere(
-              (preset) => preset.label == value,
-              orElse: () => _presetHubs.first,
-            );
-            setState(() {
-              _customMode = false;
-              _customController.clear();
-              _resolveError = null;
-            });
-            widget.onHubSelected(hub);
-          },
+        if (widget.label.isNotEmpty) ...[
+          Text(widget.label, style: listingFieldLabelStyle),
+          const SizedBox(height: listingLabelSpacing),
+        ],
+        _buildPresetGrid(),
+        const SizedBox(height: listingFieldSpacing),
+        OnboardingFieldBlock(
+          labelEmoji: '🎯',
+          label: 'Custom destination',
+          child: TapRegion(
+            groupId: _tapGroup,
+            onTapOutside: (_) {
+              _focusNode.unfocus();
+              _dismissOverlay();
+            },
+            child: CompositedTransformTarget(
+              link: _layerLink,
+              child: SizedBox(
+                key: _fieldAnchorKey,
+                height: listingFieldHeight,
+                child: TextFormField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  enabled: widget.enabled,
+                  textInputAction: TextInputAction.done,
+                  onChanged: _onQueryChanged,
+                  onTap: () {
+                    if (_suggestions.isNotEmpty || _searching) {
+                      _renderOverlay();
+                    }
+                  },
+                  style: listingFieldValueStyle.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: listingInlineInputDecoration(
+                    hint: 'Neighbourhood, campus, or workplace…',
+                  ).copyWith(
+                    prefixIcon: _searchPrefix(),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 40,
+                    ),
+                    suffixIcon: _locationSuffix(),
+                    suffixIconConstraints: const BoxConstraints(
+                      minHeight: 40,
+                      minWidth: 0,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: AppColors.accent,
+                        width: listingDaftBorderWidth,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-        if (_customMode) ...[
-          const SizedBox(height: 12),
+        if (_searchError != null) ...[
+          const SizedBox(height: 6),
           Text(
-            'Custom destination',
-            style: OnboardingTokens.sectionLabelStyle,
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _customController,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF0F172A),
-            ),
-            decoration: OnboardingTokens.inputDecoration(
-              hint: 'e.g. Smithfield, Sandyford Industrial Estate',
-            ),
-            onFieldSubmitted: (_) => _resolveCustomDestination(),
-          ),
-          if (_resolveError != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              _resolveError!,
-              style: const TextStyle(fontSize: 12, color: Color(0xFFBE123C)),
-            ),
-          ],
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _resolving ? null : _resolveCustomDestination,
-              icon: _resolving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.pin_drop_outlined, size: 18),
-              label: Text(
-                _resolving ? 'Locating…' : 'Use this location',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.accent,
-              ),
+            _searchError!,
+            style: listingSubLabelStyle.copyWith(
+              color: const Color(0xFFB45309),
             ),
           ),
-          if (widget.selectedHub != null &&
-              DublinCommuterHubs.isCustomHub(widget.selectedHub!)) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Pinned: ${widget.selectedHub!.label}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: OnboardingTokens.subtitleColor,
-              ),
+        ],
+        if (_gpsError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _gpsError!,
+            style: listingSubLabelStyle.copyWith(
+              color: const Color(0xFFBE123C),
             ),
-          ],
+          ),
         ],
       ],
     );

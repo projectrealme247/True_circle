@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart' as core;
 import '../models/applicant_trust_tier.dart';
 import '../models/landlord_applicant_card_model.dart';
 import '../theme/trust_tier_design.dart';
@@ -25,17 +26,14 @@ class TrustTierLegendScale extends StatelessWidget {
     (
       filter: LandlordTrustFilter.sound,
       tier: ApplicantTrustTier.sound,
-      label: 'Sound (Vouched & Secured)',
     ),
     (
       filter: LandlordTrustFilter.grand,
       tier: ApplicantTrustTier.grand,
-      label: 'Grand (Verified Intent)',
     ),
     (
       filter: LandlordTrustFilter.justLanded,
       tier: ApplicantTrustTier.justLanded,
-      label: 'Just Landed (Casual / Inbound)',
     ),
   ];
 
@@ -68,8 +66,7 @@ class TrustTierLegendScale extends StatelessWidget {
                 children: [
                   for (final item in _items)
                     _MicroToggle(
-                      tier: item.tier,
-                      label: item.label,
+                      label: TrustTierDesign.trustScaleLegendLabel(item.tier),
                       selected: selectedFilter == item.filter,
                       interactive: interactive,
                       mutedTextColor: mutedTextColor,
@@ -99,8 +96,7 @@ class TrustTierLegendScale extends StatelessWidget {
                   ),
                 ),
               _MicroToggle(
-                tier: _items[i].tier,
-                label: _items[i].label,
+                label: TrustTierDesign.trustScaleLegendLabel(_items[i].tier),
                 selected: selectedFilter == _items[i].filter,
                 interactive: interactive,
                 mutedTextColor: mutedTextColor,
@@ -147,7 +143,6 @@ class TrustTierLegendScale extends StatelessWidget {
 
 class _MicroToggle extends StatelessWidget {
   const _MicroToggle({
-    required this.tier,
     required this.label,
     required this.selected,
     required this.interactive,
@@ -156,7 +151,6 @@ class _MicroToggle extends StatelessWidget {
     required this.onTap,
   });
 
-  final ApplicantTrustTier tier;
   final String label;
   final bool selected;
   final bool interactive;
@@ -166,24 +160,19 @@ class _MicroToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = TrustTierDesign.colorsFor(tier).$3;
-    final child = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TrustTierDot(tier: tier, size: 7),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: compact ? 15 : 16,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            color: selected ? text : mutedTextColor,
-            decoration: selected ? TextDecoration.underline : null,
-            decorationColor: text,
-            height: 1.25,
-          ),
-        ),
-      ],
+    final selectedColor = core.AppColors.secondaryText;
+    final child = Text(
+      label,
+      style: TextStyle(
+        fontSize: compact ? 15 : 16,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+        color: selected ? selectedColor : mutedTextColor,
+        decoration: selected ? TextDecoration.underline : null,
+        decorationColor: selectedColor,
+        height: 1.25,
+        fontFamily: core.AppTypography.fontFamily,
+        fontFamilyFallback: core.AppTypography.emojiFontFallback,
+      ),
     );
 
     if (!interactive) {

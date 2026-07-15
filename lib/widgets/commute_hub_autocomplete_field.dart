@@ -61,13 +61,16 @@ class CommuteHubAutocompleteField extends StatelessWidget {
                 itemCount: options.length,
                 itemBuilder: (context, index) {
                   final hub = options.elementAt(index);
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      hub.label,
-                      style: const TextStyle(fontSize: 15),
+                  return Material(
+                    color: AppColors.surface,
+                    child: ListTile(
+                      dense: true,
+                      title: Text(
+                        hub.label,
+                        style: const TextStyle(fontSize: 15),
+                      ),
+                      onTap: () => onSelected(hub),
                     ),
-                    onTap: () => onSelected(hub),
                   );
                 },
               ),

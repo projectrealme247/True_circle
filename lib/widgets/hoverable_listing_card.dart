@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_match_engine.dart';
-import '../debug/agent_log.dart';
 
 /// Listing card shell with premium 3D hover lift on desktop/web.
 class HoverableListingCard extends StatefulWidget {
@@ -65,18 +64,10 @@ class _HoverableListingCardState extends State<HoverableListingCard> {
           decoration: BoxDecoration(
             color: HomeMarketplaceTheme.surface,
             borderRadius: BorderRadius.circular(widget.borderRadius),
-            border: hoverActive
-                ? null
-                : Border.all(color: HomeMarketplaceTheme.border),
-            boxShadow: hoverActive
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 16,
-                      offset: const Offset(0, 12),
-                    ),
-                  ]
-                : HomeMarketplaceTheme.cardShadowRest,
+            border: Border.all(
+              color: HomeMarketplaceTheme.border,
+              width: 0.5,
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: Opacity(

@@ -136,4 +136,51 @@ abstract final class IrishAddressFormat {
     final west = (match.group(2) ?? '').toUpperCase();
     return west == 'W' ? 'Dublin ${match.group(1)}W' : 'Dublin ${match.group(1)}';
   }
+
+  /// Filters electoral-division noise (DED/FED/ED) from Nominatim labels.
+  static bool isNoisyAdministrativePart(String part) {
+    final lower = part.toLowerCase().trim();
+    if (RegExp(r'\bded\b', caseSensitive: false).hasMatch(lower)) return true;
+    if (RegExp(r'\bfed\b', caseSensitive: false).hasMatch(lower)) return true;
+    if (RegExp(r'\bed\b', caseSensitive: false).hasMatch(lower) &&
+        RegExp(r'\d').hasMatch(lower)) {
+      return true;
+    }
+    if (lower.contains('the ward')) return true;
+    if (lower.contains('civil parish')) return true;
+    if (lower.contains('electoral division')) return true;
+    return false;
+  }
+
+  /// Strips inline DED/FED/ED tokens from a single address segment.
+  static String cleanAdministrativeTokens(String part) {
+    var cleaned = part.trim();
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\s+DED\s+\d+', caseSensitive: false),
+      '',
+    );
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\s+FED\s+\d+', caseSensitive: false),
+      '',
+    );
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\s+ED\s+\d+', caseSensitive: false),
+      '',
+    );
+    return cleaned.trim();
+  }
+
+  /// Comma-separated display label with DED/FED/ED segments removed.
+  static String sanitizeCommaSeparatedLabel(String raw) {
+    if (raw.trim().isEmpty) return raw;
+    final cleaned = <String>[];
+    for (final part in raw.split(',')) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) continue;
+      if (isNoisyAdministrativePart(trimmed)) continue;
+      final scrubbed = cleanAdministrativeTokens(trimmed);
+      if (scrubbed.isNotEmpty) cleaned.add(scrubbed);
+    }
+    return cleaned.join(', ');
+  }
 }

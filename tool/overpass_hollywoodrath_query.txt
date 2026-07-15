@@ -1,0 +1,9 @@
+[out:json][timeout:25];
+(
+  node["shop"~"supermarket|convenience"](around:1200,53.424890,-6.372960);
+  node["amenity"="school"](around:1800,53.424890,-6.372960);
+  node["highway"="bus_stop"](around:2200,53.424890,-6.372960);
+  node["railway"~"tram_stop|station|halt"](around:2800,53.424890,-6.372960);
+  node["amenity"="pharmacy"](around:1000,53.424890,-6.372960);
+);
+out center;

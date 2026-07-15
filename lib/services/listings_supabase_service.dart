@@ -76,6 +76,8 @@ abstract final class ListingsSupabaseService {
       if (local['intent_type'] != null) 'intent_type': local['intent_type'],
       if (local['hostName'] != null) 'hostName': local['hostName'],
       if (local['hostCity'] != null) 'hostCity': local['hostCity'],
+      if (local['listing_area_key'] != null)
+        'listing_area_key': local['listing_area_key'],
       if (local['hostLanguage'] != null) 'hostLanguage': local['hostLanguage'],
       if (local['hostMotherTongue'] != null)
         'hostMotherTongue': local['hostMotherTongue'],

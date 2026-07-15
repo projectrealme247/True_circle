@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../utils/listing_data.dart';
 import '../utils/profile_data.dart';
+import '../utils/rental_date_format.dart';
 
 /// Platform-mediated contact — apply notifications and milestone handoff (MVP).
 abstract final class ListingContactService {
@@ -24,7 +25,10 @@ abstract final class ListingContactService {
     required int compatibilityScore,
   }) {
     final budget = ProfileData.text(session['budget_max']);
-    final moveIn = ProfileData.text(session['earliest_move_in_date']);
+    final moveInRaw = ProfileData.text(session['move_in_window']).isNotEmpty
+        ? ProfileData.text(session['move_in_window'])
+        : ProfileData.text(session['earliest_move_in_date']);
+    final moveIn = RentalDateFormat.formatMoveInWindowDisplay(moveInRaw);
     final trustRaw = ProfileData.text(session['trust_tier']);
     final trust = trustRaw.isEmpty ? 'Just Landed' : trustRaw;
     final nameRaw = ProfileData.text(session['full_name']);
@@ -71,7 +75,7 @@ abstract final class ListingContactService {
       'Match: $compatibilityScore%',
       if (summary['budget_label'] != null) 'Budget: ${summary['budget_label']}',
       if (summary['move_in_window'] != null)
-        'Move-in: ${summary['move_in_window']}',
+        'Move-in: ${RentalDateFormat.formatRentalAvailabilityDate(summary['move_in_window']?.toString())}',
       'Trust: ${summary['trust_tier']}',
       if (viewingSlot != null && viewingSlot.isNotEmpty)
         'Requested slot: $viewingSlot',

@@ -7,6 +7,7 @@ abstract final class ListingCreationFieldKeys {
   static const bedsCount = 'beds_count';
   static const rtbStatus = 'rtb_status';
   static const parkingAvailable = 'parking_available';
+  static const secureBikeStorage = 'secure_bike_storage';
   static const roomType = 'room_type';
   static const householdDynamic = 'household_dynamic';
   static const kitchenCulture = 'kitchen_culture';
@@ -14,6 +15,7 @@ abstract final class ListingCreationFieldKeys {
   static const latitude = 'latitude';
   static const longitude = 'longitude';
   static const locationGeom = 'location_geom';
+  static const availabilityFlexibility = 'availability_flexibility';
 
   /// Permanently deprecated — never serialize on create.
   static const forbiddenKeys = <String>{

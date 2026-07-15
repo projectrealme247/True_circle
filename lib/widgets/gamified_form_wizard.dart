@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import 'emoji_leading_row.dart';
 import 'listing_creation/listing_creation_primitives.dart';
 
 /// Conversational page header for gamified multi-step forms.
@@ -9,20 +10,33 @@ class GamifiedFormPageHeader extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
+    this.titleEmoji,
   });
 
   final String title;
   final String subtitle;
+  final String? titleEmoji;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          title,
-          style: listingPageTitleStyle,
-        ),
+        if (titleEmoji != null)
+          EmojiLeadingRow(
+            emoji: titleEmoji!,
+            text: title,
+            style: listingPageTitleStyle,
+            emojiFontSize: 22,
+            emojiWidth: 28,
+            gap: 10,
+            crossAxisAlignment: CrossAxisAlignment.start,
+          )
+        else
+          Text(
+            title,
+            style: listingPageTitleStyle,
+          ),
         const SizedBox(height: 6),
         Text(
           subtitle,
@@ -225,7 +239,7 @@ class GamifiedFormNavBar extends StatelessWidget {
                 ),
                 child: Text(backLabel),
               ),
-            if (showBack && (showNext || showSubmit)) const SizedBox(width: 12),
+            if (showBack || showNext || showSubmit) const Spacer(),
             if (showNext)
               _PrimaryActionButton(
                 label: nextLabel,
@@ -266,7 +280,7 @@ class GamifiedFormNavBar extends StatelessWidget {
         child: Align(
           alignment: Alignment.center,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
+            constraints: const BoxConstraints(maxWidth: 600),
             child: content,
           ),
         ),
@@ -319,15 +333,6 @@ class _PrimaryActionButton extends StatelessWidget {
             ),
     );
 
-    if (!floating) {
-      return Expanded(child: button);
-    }
-
-    return Expanded(
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: button,
-      ),
-    );
+    return button;
   }
 }

@@ -1,7 +1,57 @@
+import '../models/marketplace_space.dart';
+import '../models/move_in_timing.dart';
 import '../models/profile_onboarding_models.dart';
+import '../services/active_mode_service.dart';
+import '../services/profile_storage_service.dart';
 import '../utils/profile_data.dart';
 
 abstract final class ProfileOnboardingRepository {
+  /// Authoritative host listing track — shared by Host Profile UI and Listing Creation.
+  ///
+  /// Precedence: `profile_onboarding_track` → `active_marketplace_space` →
+  /// `listingSeed_listingMode` → [ProfileOnboardingTrack.landlordEntirePlace].
+  /// Does not use `preferred_arrangement` (seeker/tower residue).
+  static ProfileOnboardingTrack resolveHostTrack(Map<String, dynamic> raw) {
+    final explicit = ProfileData.text(raw['profile_onboarding_track']);
+    if (explicit.isNotEmpty) {
+      final track = ProfileOnboardingTrack.fromToken(explicit);
+      if (track.isLandlord) return track;
+    }
+
+    final spaceToken = ProfileData.text(raw['active_marketplace_space']);
+    if (spaceToken.isNotEmpty) {
+      final space = MarketplaceSpace.fromStorageToken(spaceToken);
+      return space == MarketplaceSpace.sharedSpace
+          ? ProfileOnboardingTrack.landlordSharedSpace
+          : ProfileOnboardingTrack.landlordEntirePlace;
+    }
+
+    final listingMode =
+        ProfileData.text(raw['listingSeed_listingMode']).toLowerCase();
+    if (listingMode.contains('shared')) {
+      return ProfileOnboardingTrack.landlordSharedSpace;
+    }
+    if (listingMode.contains('entire')) {
+      return ProfileOnboardingTrack.landlordEntirePlace;
+    }
+
+    return ProfileOnboardingTrack.landlordEntirePlace;
+  }
+
+  /// One-time backfill when [host_profile_complete] is set but track is missing.
+  static Future<Map<String, dynamic>> ensureLegacyHostTrackPersisted(
+    Map<String, dynamic> session,
+  ) async {
+    if (session['host_profile_complete'] != true) return session;
+    if (ProfileData.text(session['profile_onboarding_track']).isNotEmpty) {
+      return session;
+    }
+    final next = Map<String, dynamic>.from(session);
+    next['profile_onboarding_track'] = resolveHostTrack(session).storageToken;
+    await ProfileStorageService.save(next);
+    return next;
+  }
+
   static ProfileInheritanceSnapshot snapshotFromSession(
     Map<String, dynamic>? session,
   ) {
@@ -45,7 +95,11 @@ abstract final class ProfileOnboardingRepository {
     final seeker = SeekerProfile(
       maxBudget: _parseInt(raw['budget_max']),
       roomBudget: _parseInt(raw['budget_max']),
-      moveInWindow: ProfileData.text(raw['earliest_move_in_date']),
+      moveInWindow: () {
+        final direct = ProfileData.text(raw['move_in_window']);
+        if (SeekerMoveInWindow.parse(direct) != null) return direct;
+        return MoveInTimingMigration.fromLegacySession(raw)?.storageToken ?? '';
+      }(),
       preferredLeaseMonths: _parseInt(raw['preferred_lease_months']),
       occupantGroupFit: ProfileData.text(raw['occupant_type']),
       genderPreferences: ProfileData.text(raw['gender_preference']),
@@ -148,7 +202,11 @@ abstract final class ProfileOnboardingRepository {
       'prefers_whatsapp': snapshot.identityProfile.prefersWhatsapp,
       'occupant_type': snapshot.seekerProfile.occupantGroupFit,
       'gender_preference': snapshot.seekerProfile.genderPreferences,
-      'earliest_move_in_date': snapshot.seekerProfile.moveInWindow,
+      if (snapshot.seekerProfile.moveInWindow.isNotEmpty)
+        ...MoveInTimingMigration.seekerPayload(
+          SeekerMoveInWindow.parse(snapshot.seekerProfile.moveInWindow) ??
+              SeekerMoveInWindow.flexible,
+        ),
       'preferred_lease_months': snapshot.seekerProfile.preferredLeaseMonths,
       'budget_max': snapshot.track.isSharedSpace
           ? snapshot.seekerProfile.roomBudget
@@ -170,18 +228,20 @@ abstract final class ProfileOnboardingRepository {
       return ProfileOnboardingTrack.fromToken(explicit);
     }
 
+    final caps = ActiveModeService.capabilitiesFor(raw);
     final intent = ProfileData.text(raw['onboarding_intent']).toLowerCase();
-    final arrangement = ProfileData.text(raw['preferred_arrangement']).toLowerCase();
-    final listingMode = ProfileData.text(raw['listingSeed_listingMode']).toLowerCase();
+
+    if (caps.canHost && intent != 'seeker') {
+      return resolveHostTrack(raw);
+    }
+
+    final arrangement =
+        ProfileData.text(raw['preferred_arrangement']).toLowerCase();
+    final listingMode =
+        ProfileData.text(raw['listingSeed_listingMode']).toLowerCase();
     final isShared = arrangement.contains('shared') ||
         arrangement.contains('room') ||
         listingMode.contains('shared');
-
-    if (intent == 'provider' || intent == 'landlord' || intent == 'host') {
-      return isShared
-          ? ProfileOnboardingTrack.landlordSharedSpace
-          : ProfileOnboardingTrack.landlordEntirePlace;
-    }
 
     return isShared
         ? ProfileOnboardingTrack.seekerSharedSpace

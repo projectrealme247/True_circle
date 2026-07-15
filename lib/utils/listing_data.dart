@@ -5,6 +5,7 @@ import 'commute_profile.dart';
 import 'geo_math.dart';
 import 'listing_sample_images.dart';
 import 'profile_data.dart';
+import 'rental_date_format.dart';
 import 'address_privacy.dart';
 import '../services/commute_scoring_service.dart';
 import 'student_track_preference.dart';
@@ -92,6 +93,10 @@ abstract final class ListingData {
     if (raw.isEmpty) return 'Rent not set';
     return raw;
   }
+
+  /// Card/chip label for listing availability — e.g. `4 Aug`.
+  static String availableFromDisplayLabel(Map<String, dynamic> item) =>
+      RentalDateFormat.formatRentalAvailabilityDate(text(item['available_from']));
 
   /// Parses numeric amount from price strings like `22000/month` or `₹25,000/month`.
   static int? listingPriceAmount(Map<String, dynamic> item) {
@@ -280,6 +285,7 @@ abstract final class ListingData {
       bathrooms(item).replaceAll(' ', ''),
       layoutSearchToken(item),
       shareRoomKind(item),
+      ProfileData.text(item['shared_room_architecture']),
       propertyCategory(item),
       furnishing(item),
       possessionStatus(item),
@@ -348,6 +354,10 @@ abstract final class ListingData {
     'bachelors': 'working professionals',
     'working professionals': 'bachelors',
     'working': 'working professionals',
+    'professional': 'working professionals',
+    'professionals': 'working professionals',
+    'student': 'students',
+    'students': 'students',
   };
 
   /// Flexible match: listing occupant type equals [expected], case-insensitive.
@@ -658,6 +668,13 @@ abstract final class ListingData {
 
   static bool isRoomShare(Map<String, dynamic> item) => listingType(item) == 'Share';
 
+  /// True when secure bike parking is available (apartment listings).
+  static bool hasBikeStorage(Map<String, dynamic> item) {
+    if (item['secure_bike_storage'] == true) return true;
+    if (item['has_bike_storage'] == true) return true;
+    return false;
+  }
+
   static String parkingType(Map<String, dynamic> item) => text(item['parking_type']);
 
   /// True when the host explicitly provides parking (not no_parking / false flag).
@@ -742,14 +759,16 @@ abstract final class ListingData {
   static String parkingMatrixLabel(Map<String, dynamic> item) {
     final label = parkingDisplayLabel(item);
     if (label.isNotEmpty) return label;
-    return 'Secure Bike Storage Available';
+    return 'Ask Host About Parking';
   }
 
   /// RTB status copy for entire-place detail matrix.
-  static String rtbMatrixLabel(Map<String, dynamic> item) =>
-      isRtbRegistered(item)
-          ? 'RTB Registered Landlord'
-          : 'RTB Registered Tenant Vetted';
+  static String rtbMatrixLabel(Map<String, dynamic> item) {
+    if (isRtbRegistered(item)) return 'RTB Registered Landlord';
+    final status = text(item['rtb_status']).toLowerCase();
+    if (status == 'not_registered') return 'RTB Not Registered';
+    return 'RTB Status Not Provided';
+  }
 
   /// Walk/transit profile parsed from listing copy when proximity data is absent.
   static ({int minutes, String destination})? detailTransitWalkProfile(
@@ -1024,6 +1043,14 @@ abstract final class ListingData {
       transitTypeLabel(item).isNotEmpty && transitWalkMinutes(item) != null;
 
   static LatLng? listingCoordinates(Map<String, dynamic> item) {
+    final hidden = item[AddressPrivacy.hideExactAddressKey] == true;
+    if (hidden) {
+      final exactLat = item[AddressPrivacy.exactLatitudeKey];
+      final exactLon = item[AddressPrivacy.exactLongitudeKey];
+      if (exactLat is num && exactLon is num) {
+        return LatLng(exactLat.toDouble(), exactLon.toDouble());
+      }
+    }
     final lat = item['latitude'];
     final lon = item['longitude'];
     if (lat is num && lon is num) {
@@ -1365,6 +1392,9 @@ abstract final class ListingData {
 
   static bool smokingAllowed(Map<String, dynamic> item) =>
       item['smoking_allowed'] == true;
+
+  static bool petsAllowed(Map<String, dynamic> item) =>
+      item['pets_allowed'] == true;
 
   static bool drinkingAllowed(Map<String, dynamic> item) =>
       item['drinking_allowed'] == true;

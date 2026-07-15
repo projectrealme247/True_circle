@@ -1,3 +1,4 @@
+import '../../models/seeker_onboarding_enums.dart';
 import '../../utils/geo_math.dart';
 import 'dublin_transit_network.dart';
 
@@ -20,6 +21,14 @@ class DublinCommuterHub {
   final String anchorStationId;
 
   LatLng get location => LatLng(latitude, longitude);
+}
+
+/// Display chip + canonical hub for seeker macro destination quick picks.
+class SeekerMacroPreset {
+  const SeekerMacroPreset({required this.chipLabel, required this.hub});
+
+  final String chipLabel;
+  final DublinCommuterHub hub;
 }
 
 /// Fixed hub registry — no free-text geocoding for commute destinations.
@@ -88,12 +97,52 @@ abstract final class DublinCommuterHubs {
     anchorStationId: 'luas_green_parnell',
   );
 
+  static const sandyford = DublinCommuterHub(
+    id: 'sandyford',
+    label: 'Sandyford',
+    latitude: 53.2775,
+    longitude: -6.2040,
+    anchorStationId: 'luas_green_sandyford',
+  );
+
   static const dublinAirport = DublinCommuterHub(
     id: 'dublin_airport',
     label: 'Dublin Airport',
     latitude: 53.4264,
     longitude: -6.2499,
     anchorStationId: 'dart_clontarf_road',
+  );
+
+  static const stJamesHospital = DublinCommuterHub(
+    id: 'st_james_hospital',
+    label: "St James's Hospital",
+    latitude: 53.3419,
+    longitude: -6.2954,
+    anchorStationId: 'luas_red_heuston',
+  );
+
+  static const beaumontHospital = DublinCommuterHub(
+    id: 'beaumont_hospital',
+    label: 'Beaumont Hospital',
+    latitude: 53.3884,
+    longitude: -6.2275,
+    anchorStationId: 'luas_green_parnell',
+  );
+
+  static const rcsi = DublinCommuterHub(
+    id: 'rcsi',
+    label: 'RCSI (Royal College of Surgeons)',
+    latitude: 53.3412,
+    longitude: -6.2575,
+    anchorStationId: 'luas_green_st_stephens_green',
+  );
+
+  static const tuDublin = DublinCommuterHub(
+    id: 'tu_dublin',
+    label: 'TU Dublin',
+    latitude: 53.3547,
+    longitude: -6.2797,
+    anchorStationId: 'luas_green_parnell',
   );
 
   static const otherLocationLabel = 'Other location…';
@@ -107,8 +156,87 @@ abstract final class DublinCommuterHubs {
     cherrywoodBusinessPark,
     ifscDocklands,
     dcu,
+    sandyford,
     dublinAirport,
+    stJamesHospital,
+    beaumontHospital,
+    rcsi,
+    tuDublin,
   ];
+
+  /// Quick-tap macro presets for seeker onboarding screen 3 (default order).
+  static const seekerMacroPresets = <SeekerMacroPreset>[
+    SeekerMacroPreset(chipLabel: '🎓 Trinity College', hub: tcd),
+    SeekerMacroPreset(chipLabel: '🎓 UCD', hub: ucd),
+    SeekerMacroPreset(chipLabel: '🎓 DCU', hub: dcu),
+    SeekerMacroPreset(chipLabel: '🧑‍💻 Silicon Docks', hub: siliconDocks),
+    SeekerMacroPreset(chipLabel: '💼 IFSC', hub: ifscDocklands),
+    SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
+  ];
+
+  /// Full onboarding destination grid (10 hubs).
+  static const seekerOnboardingPresets = <SeekerMacroPreset>[
+    SeekerMacroPreset(chipLabel: '🎓 Trinity College', hub: tcd),
+    SeekerMacroPreset(chipLabel: '🎓 UCD', hub: ucd),
+    SeekerMacroPreset(chipLabel: '🎓 DCU', hub: dcu),
+    SeekerMacroPreset(chipLabel: '🧑‍💻 Silicon Docks', hub: siliconDocks),
+    SeekerMacroPreset(chipLabel: '💼 IFSC', hub: ifscDocklands),
+    SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
+    SeekerMacroPreset(chipLabel: '🏥 St James\'s', hub: stJamesHospital),
+    SeekerMacroPreset(chipLabel: '🏥 Beaumont', hub: beaumontHospital),
+    SeekerMacroPreset(chipLabel: '🩺 RCSI', hub: rcsi),
+    SeekerMacroPreset(chipLabel: '🎓 TU Dublin', hub: tuDublin),
+  ];
+
+  /// Persona-aware ordering for the onboarding destination grid.
+  static List<SeekerMacroPreset> seekerOnboardingPresetsForPersona(
+    SeekerPersona? persona,
+  ) {
+    const presets = seekerOnboardingPresets;
+    final byId = {for (final p in presets) p.hub.id: p};
+
+    List<SeekerMacroPreset> orderedIds(List<String> ids) {
+      final seen = <String>{};
+      final result = <SeekerMacroPreset>[];
+      for (final id in ids) {
+        if (seen.add(id) && byId.containsKey(id)) {
+          result.add(byId[id]!);
+        }
+      }
+      for (final preset in presets) {
+        if (seen.add(preset.hub.id)) result.add(preset);
+      }
+      return result;
+    }
+
+    return switch (persona) {
+      SeekerPersona.student => orderedIds([
+          'tcd',
+          'ucd',
+          'dcu',
+          'tu_dublin',
+          'rcsi',
+          'silicon_docks',
+          'ifsc_docklands',
+          'sandyford',
+          'st_james_hospital',
+          'beaumont_hospital',
+        ]),
+      SeekerPersona.professional || SeekerPersona.relocating => orderedIds([
+          'ifsc_docklands',
+          'silicon_docks',
+          'sandyford',
+          'tcd',
+          'ucd',
+          'dcu',
+          'tu_dublin',
+          'rcsi',
+          'st_james_hospital',
+          'beaumont_hospital',
+        ]),
+      _ => List<SeekerMacroPreset>.from(presets),
+    };
+  }
 
   /// Curated anchors for working professionals and families.
   static const professionalPopular = <DublinCommuterHub>[

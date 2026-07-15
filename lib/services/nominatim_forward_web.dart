@@ -4,6 +4,7 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
+import '../utils/nominatim_label_sanitizer.dart';
 import 'eircode_geocoding_service.dart';
 import 'nominatim_forward.dart';
 
@@ -247,68 +248,52 @@ Future<List<NominatimAddressResult>> searchAddress(String query) async {
           final lat = double.tryParse(item['lat']?.toString() ?? '');
           final lon = double.tryParse(item['lon']?.toString() ?? '');
           if (lat == null || lon == null) continue;
-          if (!_isWithinDublinMetro(lat, lon)) continue;
-
-          final address = item['address'];
-
-          String houseNumber = '';
-          String road = '';
-          String suburb = '';
-          String neighbourhood = '';
-          String quarter = '';
-          String cityDistrict = '';
-          String city = '';
-          String postcode = '';
-          String county = 'Dublin';
-
-          if (address is Map) {
-            houseNumber = address['house_number']?.toString() ?? '';
-            road = address['road']?.toString() ?? '';
-            suburb = address['suburb']?.toString() ?? '';
-            neighbourhood = address['neighbourhood']?.toString() ?? '';
-            quarter = address['quarter']?.toString() ?? '';
-            cityDistrict = address['city_district']?.toString() ?? '';
-            city = address['city']?.toString() ?? '';
-            postcode = address['postcode']?.toString() ?? '';
-            final countyRaw = address['county']?.toString() ?? '';
-            if (countyRaw.isNotEmpty) county = countyRaw;
+          if (!_isWithinDublinMetro(lat, lon)) {
+            continue;
           }
 
-          final streetLine = houseNumber.isNotEmpty && road.isNotEmpty
-              ? '$houseNumber $road'
-              : road;
-
-          final localArea = suburb.isNotEmpty
-              ? suburb
-              : neighbourhood.isNotEmpty
-                  ? neighbourhood
-                  : quarter;
-
-          final district = cityDistrict.isNotEmpty ? cityDistrict : city;
-
-          final label = _buildAddressLabel(
-            streetLine: streetLine,
-            localArea: localArea,
-            district: district,
-            postcode: postcode,
+          final address = item['address'];
+          final fields = <String, String?>{};
+          if (address is Map) {
+            for (final entry in address.entries) {
+              fields[entry.key.toString()] = entry.value?.toString();
+            }
+          }
+          fields.putIfAbsent(
+            'display_name',
+            () => item['display_name']?.toString(),
           );
 
+          final structured = NominatimLabelSanitizer.structuredFromAddress(
+            fields,
+            nameFallback: item['name']?.toString(),
+          );
+          if (structured.displayLabel.isEmpty && structured.area.isEmpty) {
+            continue;
+          }
+
           results.add(NominatimAddressResult(
-            displayLabel: label.isNotEmpty ? label : streetLine,
+            displayLabel: structured.displayLabel.isNotEmpty
+                ? structured.displayLabel
+                : structured.area,
             lat: lat,
             lon: lon,
-            streetLine: streetLine.isNotEmpty ? streetLine : label,
-            area: localArea.isNotEmpty ? localArea : district,
-            county: county,
+            streetLine: structured.streetLine.isNotEmpty
+                ? structured.streetLine
+                : structured.area,
+            area: structured.area,
+            county: structured.county,
           ));
           if (results.length >= 5) break;
         }
         completer.complete(results);
-      } catch (_) {
+      } catch (e) {
         completer.complete(const []);
       }
     }).toJS;
-    xhr.onerror = ((web.Event _) => completer.complete(const [])).toJS;
+    xhr.onerror = ((web.Event _) {
+      completer.complete(const []);
+    }).toJS;
     xhr.send();
     return completer.future.timeout(
       const Duration(seconds: 10),
@@ -352,27 +337,18 @@ Future<String?> reverseGeocode(double lat, double lon) async {
           return;
         }
 
-        final houseNumber = address['house_number']?.toString() ?? '';
-        final road = address['road']?.toString() ?? '';
-        final suburb = address['suburb']?.toString() ?? '';
-        final neighbourhood = address['neighbourhood']?.toString() ?? '';
-        final cityDistrict = address['city_district']?.toString() ?? '';
-        final city = address['city']?.toString() ?? '';
-        final postcode = address['postcode']?.toString() ?? '';
-
-        final streetLine = houseNumber.isNotEmpty && road.isNotEmpty
-            ? '$houseNumber $road'
-            : road;
-        final localArea = suburb.isNotEmpty ? suburb : neighbourhood;
-        final district = cityDistrict.isNotEmpty ? cityDistrict : city;
-
-        final label = _buildAddressLabel(
-          streetLine: streetLine,
-          localArea: localArea,
-          district: district,
-          postcode: postcode,
+        final fields = <String, String?>{
+          for (final entry in address.entries)
+            entry.key.toString(): entry.value?.toString(),
+          'display_name': decoded['display_name']?.toString(),
+        };
+        final structured = NominatimLabelSanitizer.structuredFromAddress(
+          fields,
+          nameFallback: decoded['name']?.toString(),
         );
-        completer.complete(label.isNotEmpty ? label : null);
+        completer.complete(
+          structured.displayLabel.isNotEmpty ? structured.displayLabel : null,
+        );
       } catch (_) {
         completer.complete(null);
       }
@@ -386,43 +362,4 @@ Future<String?> reverseGeocode(double lat, double lon) async {
   } catch (_) {
     return null;
   }
-}
-
-/// Builds a clean human-readable address label from structured Nominatim fields.
-/// e.g. "9 Hollywoodrath Park, Hollywoodrath, Dublin 15, D15 FT9N"
-String _buildAddressLabel({
-  required String streetLine,
-  required String localArea,
-  required String district,
-  required String postcode,
-}) {
-  final parts = <String>[];
-  if (streetLine.isNotEmpty && !_isNoisyPart(streetLine)) {
-    parts.add(streetLine);
-  }
-  if (localArea.isNotEmpty && !_isNoisyPart(localArea)) {
-    parts.add(localArea);
-  }
-  if (district.isNotEmpty &&
-      !_isNoisyPart(district) &&
-      !parts.any((p) => p.toLowerCase().contains(district.toLowerCase()))) {
-    parts.add(district);
-  }
-  if (postcode.isNotEmpty) parts.add(postcode);
-  return parts.join(', ');
-}
-
-/// Filters out noisy Nominatim administrative labels like "The Ward DED 1986",
-/// "Clonsilla ED", "Dublin City" duplicates, and similar electoral division cruft.
-bool _isNoisyPart(String part) {
-  final lower = part.toLowerCase().trim();
-  if (RegExp(r'\bded\b', caseSensitive: false).hasMatch(lower)) return true;
-  if (RegExp(r'\bed\b', caseSensitive: false).hasMatch(lower) &&
-      RegExp(r'\d').hasMatch(lower)) {
-    return true;
-  }
-  if (lower.contains('the ward')) return true;
-  if (lower.contains('civil parish')) return true;
-  if (lower.contains('electoral division')) return true;
-  return false;
 }

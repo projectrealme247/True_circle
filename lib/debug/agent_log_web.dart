@@ -1,34 +1,37 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:js_interop';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
-import 'package:flutter/foundation.dart';
-import 'package:web/web.dart' as web;
-
-void agentLog({
-  required String location,
-  required String message,
-  required Map<String, Object?> data,
-  required String hypothesisId,
-  String runId = 'pre-fix',
-}) {
+void agentLog(
+  String hypothesisId,
+  String location,
+  String message,
+  Map<String, dynamic> data,
+) {
   final payload = jsonEncode({
-    'sessionId': '0e3626',
-    'runId': runId,
+    'sessionId': '41df06',
     'hypothesisId': hypothesisId,
     'location': location,
     'message': message,
     'data': data,
     'timestamp': DateTime.now().millisecondsSinceEpoch,
+    'runId': 'pre-fix',
   });
-  debugPrint('TC_DEBUG $payload');
-  try {
-    final xhr = web.XMLHttpRequest();
-    xhr.open(
-      'POST',
+  // #region agent log
+  unawaited(
+    html.HttpRequest.request(
       'http://127.0.0.1:7937/ingest/3104528a-dafa-4274-b754-34f2ed630895',
-    );
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('X-Debug-Session-Id', '0e3626');
-    xhr.send(payload.toJS);
-  } catch (_) {}
+      method: 'POST',
+      sendData: payload,
+      requestHeaders: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '41df06',
+      },
+    ).catchError((Object _, StackTrace __) {
+      // Debug ingest unavailable (offline server / browser network) — never crash UI.
+      return html.HttpRequest();
+    }),
+  );
+  // #endregion
 }
