@@ -33,6 +33,12 @@ class ContextualPassportSnapshot {
     this.idVerificationLabel = '',
     this.licensingLabel = '',
     this.responsivenessLabel = '',
+    this.listingTypeLabel = '',
+    this.languagesLabel = '',
+    this.transportPreference = '',
+    this.verificationProgressLabel = '',
+    this.profileCompletionPercent = 0,
+    this.profileCompletenessLevel = 'Just started',
   });
 
   final ProfileOnboardingTrack track;
@@ -65,6 +71,14 @@ class ContextualPassportSnapshot {
   final String licensingLabel;
   final String responsivenessLabel;
 
+  // Public passport (onboarding preview)
+  final String listingTypeLabel;
+  final String languagesLabel;
+  final String transportPreference;
+  final String verificationProgressLabel;
+  final int profileCompletionPercent;
+  final String profileCompletenessLevel;
+
   String get trustBadgeEmoji => TrustTierDesign.emojiPrefixFor(trustTier);
 
   String get trustBadgeLabel => TrustTierDesign.labelFor(trustTier);
@@ -77,6 +91,10 @@ class ContextualPassportSnapshot {
     final trustTier = ApplicantTrustTier.fromSession(session);
     final persona = _resolvePersona(session, track);
     final displayName = ProfileData.text(session['full_name']).trim();
+
+    final verificationRows = _verificationRows(session);
+    final completionPercent =
+        ProfileData.calculateProfileCompletionPercentage(session);
 
     return ContextualPassportSnapshot(
       track: track,
@@ -92,7 +110,7 @@ class ContextualPassportSnapshot {
       compatibilityChips: _compatibilityChips(session),
       budgetTierLabel: _budgetTierLabel(session),
       householdBreakdown: _householdBreakdown(session),
-      verificationRows: _verificationRows(session),
+      verificationRows: verificationRows,
       hostTrustMultiplier: _hostTrustMultiplier(session),
       houseRules: _houseRules(session),
       homeLanguages: _homeLanguages(session),
@@ -100,7 +118,78 @@ class ContextualPassportSnapshot {
       idVerificationLabel: _idVerificationLabel(session),
       licensingLabel: _licensingLabel(session),
       responsivenessLabel: _responsivenessLabel(session),
+      listingTypeLabel: _listingTypeLabel(track),
+      languagesLabel: _languagesLabel(session),
+      transportPreference: _transportPreference(session),
+      verificationProgressLabel:
+          _verificationProgressLabel(verificationRows),
+      profileCompletionPercent: completionPercent,
+      profileCompletenessLevel: _profileCompletenessLevel(completionPercent),
     );
+  }
+
+  static String _listingTypeLabel(ProfileOnboardingTrack track) {
+    if (track.isLandlord) {
+      return track.isSharedSpace ? 'Shared Host' : 'Entire Place Host';
+    }
+    return track.isSharedSpace ? 'Shared Living' : 'Independent Place';
+  }
+
+  static String _languagesLabel(Map<String, dynamic> session) {
+    final langs = <String>[];
+    void add(String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      final exists = langs.any(
+        (item) => item.toLowerCase() == trimmed.toLowerCase(),
+      );
+      if (!exists) langs.add(trimmed);
+    }
+
+    add('English');
+    add(ProfileData.text(session['mother_tongue']));
+    for (final language in ProfileData.languageList(session['spoken_languages'])) {
+      add(language);
+    }
+    for (final language in ProfileData.languageList(
+      session['preferred_spoken_languages'],
+    )) {
+      add(language);
+    }
+    return langs.join(', ');
+  }
+
+  static String _transportPreference(Map<String, dynamic> session) {
+    final profiles = session['commute_profiles'];
+    if (profiles is List && profiles.isNotEmpty) {
+      final first = profiles.first;
+      if (first is Map) {
+        final method = ProfileData.text(first['commute_method']);
+        if (method.isNotEmpty) {
+          return ProfileData.commuteMethod({'commute_method': method})
+              .toDisplayLabel();
+        }
+      }
+    }
+    final raw = ProfileData.text(session['commute_method']);
+    if (raw.isEmpty) return '';
+    return ProfileData.commuteMethod(session).toDisplayLabel();
+  }
+
+  static String _verificationProgressLabel(
+    List<ContextualPassportVerificationRow> rows,
+  ) {
+    if (rows.isEmpty) return 'Verification pending';
+    final verified = rows.where((row) => row.verified).length;
+    if (verified == 0) return 'Verification pending';
+    return '$verified of ${rows.length} checks verified';
+  }
+
+  static String _profileCompletenessLevel(int percent) {
+    if (percent >= 100) return 'Profile Complete';
+    if (percent >= 80) return 'Almost Complete';
+    if (percent >= 60) return 'Profile In Progress';
+    return 'Just started';
   }
 
   static ProfileOnboardingTrack _resolveTrack(Map<String, dynamic> session) {
@@ -245,6 +334,7 @@ class ContextualPassportSnapshot {
       final label = switch (locationContext) {
         DublinLocationContext.alreadyInDublin => 'In Dublin',
         DublinLocationContext.arrivingSoon => 'Arriving soon',
+        DublinLocationContext.relocating => 'Relocating',
       };
       chips.add(ContextualPassportChip(emoji: '📍', label: label));
     }

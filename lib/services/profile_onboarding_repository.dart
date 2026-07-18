@@ -66,7 +66,6 @@ abstract final class ProfileOnboardingRepository {
       contactPhoneE164: ProfileData.text(raw['contact_phone_e164']),
       prefersWhatsapp: raw['prefers_whatsapp'] == true,
       motherTongue: ProfileData.text(raw['mother_tongue']),
-      nativePlace: ProfileData.text(raw['native_place']),
       languages: ProfileData.languageList(raw['spoken_languages']),
     );
 
@@ -162,7 +161,6 @@ abstract final class ProfileOnboardingRepository {
         'contactPhoneE164': snapshot.identityProfile.contactPhoneE164,
         'prefersWhatsapp': snapshot.identityProfile.prefersWhatsapp,
         'motherTongue': snapshot.identityProfile.motherTongue,
-        'nativePlace': snapshot.identityProfile.nativePlace,
         'languages': snapshot.identityProfile.languages,
       },
       'seekerProfile': {
@@ -194,7 +192,6 @@ abstract final class ProfileOnboardingRepository {
       'email': snapshot.identityProfile.email,
       'full_name': snapshot.identityProfile.fullName,
       'mother_tongue': snapshot.identityProfile.motherTongue,
-      'native_place': snapshot.identityProfile.nativePlace,
       'spoken_languages': snapshot.identityProfile.languages,
       'agency_name': snapshot.identityProfile.companyName,
       'contact_phone': snapshot.identityProfile.contactPhone,

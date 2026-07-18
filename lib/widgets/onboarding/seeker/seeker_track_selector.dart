@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../onboarding_choice_chip.dart';
+import '../onboarding_design_tokens.dart';
 
 /// Side-by-side track cards for independent place vs shared living.
 class SeekerTrackSelector extends StatelessWidget {
@@ -21,19 +22,22 @@ class SeekerTrackSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingEqualChoiceRow(
-      options: const [
-        entirePlaceDisplayLabel,
-        sharedLivingDisplayLabel,
-      ],
-      selectedIndex: isSharedTrack ? 1 : 0,
-      onSelected: (index) {
-        if (index == 0) {
-          onSelectEntirePlace();
-        } else {
-          onSelectSharedSpace();
-        }
-      },
+    return SeekerOnboardingLayout.constrainOptionCluster(
+      child: OnboardingEqualChoiceRow(
+        options: const [
+          entirePlaceDisplayLabel,
+          sharedLivingDisplayLabel,
+        ],
+        selectedIndex: isSharedTrack ? 1 : 0,
+        seekerOptionStyle: true,
+        onSelected: (index) {
+          if (index == 0) {
+            onSelectEntirePlace();
+          } else {
+            onSelectSharedSpace();
+          }
+        },
+      ),
     );
   }
 }

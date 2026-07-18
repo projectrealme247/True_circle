@@ -145,6 +145,14 @@ abstract final class DublinCommuterHubs {
     anchorStationId: 'luas_green_parnell',
   );
 
+  static const maynooth = DublinCommuterHub(
+    id: 'maynooth',
+    label: 'Maynooth University',
+    latitude: 53.3835,
+    longitude: -6.5996,
+    anchorStationId: 'bus_hf_lucan',
+  );
+
   static const otherLocationLabel = 'Other location…';
 
   static const all = <DublinCommuterHub>[
@@ -162,6 +170,7 @@ abstract final class DublinCommuterHubs {
     beaumontHospital,
     rcsi,
     tuDublin,
+    maynooth,
   ];
 
   /// Quick-tap macro presets for seeker onboarding screen 3 (default order).
@@ -174,67 +183,58 @@ abstract final class DublinCommuterHubs {
     SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
   ];
 
-  /// Full onboarding destination grid (10 hubs).
+  /// Full onboarding destination grid.
   static const seekerOnboardingPresets = <SeekerMacroPreset>[
     SeekerMacroPreset(chipLabel: '🎓 Trinity College', hub: tcd),
     SeekerMacroPreset(chipLabel: '🎓 UCD', hub: ucd),
     SeekerMacroPreset(chipLabel: '🎓 DCU', hub: dcu),
+    SeekerMacroPreset(chipLabel: '🎓 TU Dublin', hub: tuDublin),
+    SeekerMacroPreset(chipLabel: '🩺 RCSI', hub: rcsi),
+    SeekerMacroPreset(chipLabel: '🎓 Maynooth', hub: maynooth),
     SeekerMacroPreset(chipLabel: '🧑‍💻 Silicon Docks', hub: siliconDocks),
     SeekerMacroPreset(chipLabel: '💼 IFSC', hub: ifscDocklands),
     SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
+    SeekerMacroPreset(chipLabel: '🏙️ City Centre', hub: stStephensGreen),
+    SeekerMacroPreset(chipLabel: '🏢 Cherrywood', hub: cherrywoodBusinessPark),
     SeekerMacroPreset(chipLabel: '🏥 St James\'s', hub: stJamesHospital),
     SeekerMacroPreset(chipLabel: '🏥 Beaumont', hub: beaumontHospital),
-    SeekerMacroPreset(chipLabel: '🩺 RCSI', hub: rcsi),
-    SeekerMacroPreset(chipLabel: '🎓 TU Dublin', hub: tuDublin),
   ];
 
-  /// Persona-aware ordering for the onboarding destination grid.
+  /// Student weekday destination presets (Destination IA).
+  static const studentDestinationPresets = <SeekerMacroPreset>[
+    SeekerMacroPreset(chipLabel: '🎓 Trinity College', hub: tcd),
+    SeekerMacroPreset(chipLabel: '🎓 UCD', hub: ucd),
+    SeekerMacroPreset(chipLabel: '🎓 DCU', hub: dcu),
+    SeekerMacroPreset(chipLabel: '🎓 TU Dublin', hub: tuDublin),
+    SeekerMacroPreset(chipLabel: '🩺 RCSI', hub: rcsi),
+    SeekerMacroPreset(chipLabel: '🎓 Maynooth', hub: maynooth),
+  ];
+
+  /// Working professional weekday destination presets (Destination IA).
+  static const professionalDestinationPresets = <SeekerMacroPreset>[
+    SeekerMacroPreset(chipLabel: '🏙️ City Centre', hub: stStephensGreen),
+    SeekerMacroPreset(chipLabel: '💼 IFSC', hub: ifscDocklands),
+    SeekerMacroPreset(chipLabel: '🧑‍💻 Silicon Docks', hub: siliconDocks),
+    SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
+    SeekerMacroPreset(chipLabel: '🏢 Cherrywood', hub: cherrywoodBusinessPark),
+  ];
+
+  /// Persona-filtered hub list for onboarding popular destinations.
+  ///
+  /// Student → colleges; Professional → business hubs;
+  /// Family / Relocating → full onboarding set (family UI may override).
   static List<SeekerMacroPreset> seekerOnboardingPresetsForPersona(
     SeekerPersona? persona,
   ) {
-    const presets = seekerOnboardingPresets;
-    final byId = {for (final p in presets) p.hub.id: p};
-
-    List<SeekerMacroPreset> orderedIds(List<String> ids) {
-      final seen = <String>{};
-      final result = <SeekerMacroPreset>[];
-      for (final id in ids) {
-        if (seen.add(id) && byId.containsKey(id)) {
-          result.add(byId[id]!);
-        }
-      }
-      for (final preset in presets) {
-        if (seen.add(preset.hub.id)) result.add(preset);
-      }
-      return result;
-    }
-
     return switch (persona) {
-      SeekerPersona.student => orderedIds([
-          'tcd',
-          'ucd',
-          'dcu',
-          'tu_dublin',
-          'rcsi',
-          'silicon_docks',
-          'ifsc_docklands',
-          'sandyford',
-          'st_james_hospital',
-          'beaumont_hospital',
-        ]),
-      SeekerPersona.professional || SeekerPersona.relocating => orderedIds([
-          'ifsc_docklands',
-          'silicon_docks',
-          'sandyford',
-          'tcd',
-          'ucd',
-          'dcu',
-          'tu_dublin',
-          'rcsi',
-          'st_james_hospital',
-          'beaumont_hospital',
-        ]),
-      _ => List<SeekerMacroPreset>.from(presets),
+      SeekerPersona.student =>
+        List<SeekerMacroPreset>.from(studentDestinationPresets),
+      SeekerPersona.professional =>
+        List<SeekerMacroPreset>.from(professionalDestinationPresets),
+      SeekerPersona.family ||
+      SeekerPersona.relocating ||
+      null =>
+        List<SeekerMacroPreset>.from(seekerOnboardingPresets),
     };
   }
 

@@ -15,6 +15,7 @@ class EmojiLeadingRow extends StatelessWidget {
     this.crossAxisAlignment = CrossAxisAlignment.center,
     this.maxLines,
     this.overflow,
+    this.expandText = true,
   });
 
   final String emoji;
@@ -27,9 +28,20 @@ class EmojiLeadingRow extends StatelessWidget {
   final int? maxLines;
   final TextOverflow? overflow;
 
+  /// When false, row hugs content (passport/wrap chips). Default expands text.
+  final bool expandText;
+
   @override
   Widget build(BuildContext context) {
+    final textWidget = Text(
+      text,
+      style: style,
+      maxLines: maxLines,
+      overflow: overflow,
+    );
+
     return Row(
+      mainAxisSize: expandText ? MainAxisSize.max : MainAxisSize.min,
       crossAxisAlignment: crossAxisAlignment,
       children: [
         SizedBox(
@@ -45,14 +57,7 @@ class EmojiLeadingRow extends StatelessWidget {
           ),
         ),
         SizedBox(width: gap),
-        Expanded(
-          child: Text(
-            text,
-            style: style,
-            maxLines: maxLines,
-            overflow: overflow,
-          ),
-        ),
+        if (expandText) Expanded(child: textWidget) else textWidget,
       ],
     );
   }

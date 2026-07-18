@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../listing_creation/listing_creation_primitives.dart';
-/// Outline selection control — 1.5px dark border when selected, no fill inversion.
+import 'onboarding_design_tokens.dart';
+
+/// Outline selection control — seeker cards use fill + border + weight.
 class OnboardingChoiceChip extends StatelessWidget {
   const OnboardingChoiceChip({
     super.key,
@@ -13,6 +15,9 @@ class OnboardingChoiceChip extends StatelessWidget {
     this.expand = true,
     this.centerLabel = false,
     this.compactLabel = false,
+    this.dense = false,
+    this.seekerOptionStyle = false,
+    this.fixedHeight,
   });
 
   final String label;
@@ -22,44 +27,73 @@ class OnboardingChoiceChip extends StatelessWidget {
   final bool expand;
   final bool centerLabel;
   final bool compactLabel;
+  /// Destination hub chips: denser padding.
+  final bool dense;
+  /// Pass-1 option cards: token height, selected fill + weight (no checkmarks).
+  final bool seekerOptionStyle;
+  /// Override seeker default option height.
+  final double? fixedHeight;
 
   @override
   Widget build(BuildContext context) {
-    final padding = expand
-        ? EdgeInsets.symmetric(
-            horizontal: compactLabel ? 8 : 16,
-            vertical: compactLabel ? 12 : 14,
+    final padding = dense
+        ? const EdgeInsets.symmetric(
+            horizontal: OnboardingTokens.space12,
+            vertical: OnboardingTokens.space8,
           )
-        : const EdgeInsets.symmetric(horizontal: 12, vertical: 10);
+        : seekerOptionStyle
+            ? EdgeInsets.symmetric(
+                horizontal: OnboardingTokens.space16,
+                vertical: 0,
+              )
+            : expand
+                ? EdgeInsets.symmetric(
+                    horizontal: compactLabel
+                        ? OnboardingTokens.space8
+                        : OnboardingTokens.space16,
+                    vertical: compactLabel
+                        ? OnboardingTokens.space12
+                        : OnboardingTokens.space12,
+                  )
+                : const EdgeInsets.symmetric(
+                    horizontal: OnboardingTokens.space12,
+                    vertical: OnboardingTokens.space8,
+                  );
 
-    final child = Material(
+    final decoration = seekerOptionStyle
+        ? SeekerOnboardingLayout.optionDecoration(selected: selected)
+        : listingChoiceBoxDecoration(selected: selected, borderRadius: 12);
+
+    final alignCenter = centerLabel;
+
+    Widget chip = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(seekerOptionStyle ? 10 : 10),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
           width: expand ? double.infinity : null,
-          height: centerLabel ? double.infinity : null,
+          height: centerLabel && !seekerOptionStyle ? double.infinity : null,
           padding: padding,
-          decoration: listingChoiceBoxDecoration(selected: selected, borderRadius: 12),
-          alignment: centerLabel ? Alignment.center : null,
+          decoration: decoration,
+          alignment: Alignment.centerLeft,
           child: Row(
             mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment:
-                centerLabel ? MainAxisAlignment.center : MainAxisAlignment.start,
+                alignCenter ? MainAxisAlignment.center : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (leading != null) ...[
                 leading!,
-                const SizedBox(width: 10),
+                const SizedBox(width: OnboardingTokens.space8),
               ],
               if (expand)
                 Expanded(
                   child: Text(
                     label,
-                    textAlign: centerLabel ? TextAlign.center : TextAlign.start,
+                    textAlign: alignCenter ? TextAlign.center : TextAlign.start,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: _labelStyle(selected),
@@ -68,7 +102,7 @@ class OnboardingChoiceChip extends StatelessWidget {
               else
                 Text(
                   label,
-                  textAlign: centerLabel ? TextAlign.center : TextAlign.start,
+                  textAlign: TextAlign.start,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _labelStyle(selected),
@@ -79,17 +113,24 @@ class OnboardingChoiceChip extends StatelessWidget {
       ),
     );
 
-    return child;
+    if (seekerOptionStyle && expand) {
+      chip = SizedBox(
+        height: fixedHeight ?? SeekerOnboardingLayout.optionRowHeight,
+        child: chip,
+      );
+    }
+
+    return chip;
   }
 
-  TextStyle _labelStyle(bool selected) => TextStyle(
-        fontSize: compactLabel ? 12 : 14,
-        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-        color: const Color(0xFF111827),
-        height: 1.25,
-        fontFamily: 'PlusJakartaSans',
-        fontFamilyFallback: AppTypography.emojiFontFallback,
-      );
+  TextStyle _labelStyle(bool selected) {
+    if (seekerOptionStyle) {
+      return SeekerOnboardingLayout.optionRow(selected: selected);
+    }
+    return OnboardingTokens.chipLabelStyle(selected: selected).copyWith(
+      color: const Color(0xFF111827),
+    );
+  }
 }
 
 /// Label left, compact chips right — same full width as [OnboardingPremiumField] input.
@@ -112,9 +153,8 @@ class OnboardingInlineChoiceField extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final chips = Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: WrapAlignment.end,
+          spacing: OnboardingTokens.space8,
+          runSpacing: OnboardingTokens.space8,
           children: [
             for (var i = 0; i < options.length; i++)
               OnboardingChoiceChip(
@@ -131,34 +171,31 @@ class OnboardingInlineChoiceField extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(label, style: listingFieldLabelStyle),
-              const SizedBox(height: listingLabelSpacing),
+              const SizedBox(height: OnboardingTokens.space8),
               chips,
             ],
           );
         }
 
-        return ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: listingFieldHeight),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                flex: 5,
-                child: Text(
-                  label,
-                  style: listingFieldLabelStyle,
-                ),
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              flex: 5,
+              child: Text(
+                label,
+                style: listingFieldLabelStyle,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 6,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: chips,
-                ),
+            ),
+            const SizedBox(width: OnboardingTokens.space12),
+            Expanded(
+              flex: 6,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: chips,
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
@@ -172,11 +209,13 @@ class OnboardingEqualChoiceRow extends StatelessWidget {
     required this.options,
     required this.selectedIndex,
     required this.onSelected,
+    this.seekerOptionStyle = true,
   });
 
   final List<String> options;
   final int? selectedIndex;
   final ValueChanged<int> onSelected;
+  final bool seekerOptionStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +224,7 @@ class OnboardingEqualChoiceRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < options.length; i++) ...[
-            if (i > 0) const SizedBox(width: 8),
+            if (i > 0) const SizedBox(width: OnboardingTokens.space8),
             Expanded(
               child: OnboardingChoiceChip(
                 label: options[i],
@@ -193,6 +232,7 @@ class OnboardingEqualChoiceRow extends StatelessWidget {
                 onTap: () => onSelected(i),
                 centerLabel: true,
                 compactLabel: options.length >= 3,
+                seekerOptionStyle: seekerOptionStyle,
               ),
             ),
           ],
@@ -218,14 +258,15 @@ class OnboardingChoiceChipRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: OnboardingTokens.space8,
+      runSpacing: OnboardingTokens.space8,
       children: [
         for (var i = 0; i < options.length; i++)
           OnboardingChoiceChip(
             label: options[i],
             selected: selectedIndex == i,
             expand: false,
+            seekerOptionStyle: true,
             onTap: () => onSelected(i),
           ),
       ],
@@ -255,11 +296,12 @@ class OnboardingLanguageToggleChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+            horizontal: OnboardingTokens.space12,
+            vertical: OnboardingTokens.space4,
+          ),
           decoration: BoxDecoration(
-            color: selected
-                ? AppColors.accentLight
-                : Colors.transparent,
+            color: selected ? AppColors.accentLight : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: selected ? AppColors.accent : listingChoiceBorderUnselected,
@@ -271,14 +313,13 @@ class OnboardingLanguageToggleChip extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                style: OnboardingTokens.chipLabelStyle(selected: selected)
+                    .copyWith(
                   color: selected ? AppColors.accent : AppColors.secondaryText,
                 ),
               ),
               if (selected) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: OnboardingTokens.space4),
                 const Icon(
                   Icons.check_rounded,
                   size: 16,

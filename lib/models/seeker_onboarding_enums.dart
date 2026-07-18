@@ -45,7 +45,8 @@ enum SeekerPersona {
 /// Dublin presence context collected on seeker onboarding screen 2.
 enum DublinLocationContext {
   alreadyInDublin('already_in_dublin'),
-  arrivingSoon('arriving_soon');
+  arrivingSoon('arriving_soon'),
+  relocating('relocating');
 
   const DublinLocationContext(this.storageToken);
   final String storageToken;
@@ -53,10 +54,11 @@ enum DublinLocationContext {
   static DublinLocationContext? fromSession(Map<String, dynamic>? session) {
     if (session == null) return null;
     final raw = session['dublin_location_context']?.toString() ?? '';
-    if (raw == arrivingSoon.storageToken || session['pre_arrival_seeker'] == true) {
-      return arrivingSoon;
-    }
+    if (raw == relocating.storageToken) return relocating;
+    if (raw == arrivingSoon.storageToken) return arrivingSoon;
     if (raw == alreadyInDublin.storageToken) return alreadyInDublin;
+    // Legacy: pre-arrival flag without an explicit relocating token.
+    if (session['pre_arrival_seeker'] == true) return arrivingSoon;
     final city = session['detected_city']?.toString().toLowerCase() ?? '';
     if (city.contains('dublin')) return alreadyInDublin;
     return null;
@@ -84,6 +86,16 @@ enum GuarantorStatus {
   }
 }
 
+/// Family Destination IA — what primarily drives weekday location.
+///
+/// UI structure only; no recommendation logic yet.
+enum FamilyLocationDriver {
+  workplace,
+  schoolArea,
+  both,
+  customLocation,
+}
+
 /// Discrete commute-time options for seeker destination screen.
 abstract final class SeekerCommuteTimeOptions {
   static const values = [30, 60, 90, 120];
@@ -92,11 +104,11 @@ abstract final class SeekerCommuteTimeOptions {
   static const defaultMinutes = 60;
 
   static int snap(num raw) {
-    var nearest = values.first;
+    var nearest = defaultMinutes;
     var delta = (raw - nearest).abs();
     for (final option in values) {
       final d = (raw - option).abs();
-      if (d < delta) {
+      if (d < delta || (d == delta && option == defaultMinutes)) {
         nearest = option;
         delta = d;
       }

@@ -89,24 +89,73 @@ void main() {
   });
 
   group('suggestedLanguagesFor', () {
-    test('Tamil suggests Irish South Asian companion cluster', () {
+    test('Telugu suggests Tamil and Hindi only', () {
+      expect(
+        OnboardingLanguageInference.suggestedLanguagesFor('Telugu'),
+        ['Tamil', 'Hindi'],
+      );
+    });
+
+    test('Tamil suggests Telugu and Malayalam only', () {
       expect(
         OnboardingLanguageInference.suggestedLanguagesFor('Tamil'),
-        ['English', 'Malayalam', 'Telugu', 'Kannada', 'Hindi'],
+        ['Telugu', 'Malayalam'],
       );
     });
 
-    test('Polish suggests Eastern European companions', () {
+    test('Malayalam suggests Tamil and Telugu only', () {
       expect(
-        OnboardingLanguageInference.suggestedLanguagesFor('Polish'),
-        ['English', 'Ukrainian', 'Russian'],
+        OnboardingLanguageInference.suggestedLanguagesFor('Malayalam'),
+        ['Tamil', 'Telugu'],
       );
     });
 
-    test('unknown primary falls back to English only', () {
+    test('Kannada suggests Telugu and Tamil only', () {
+      expect(
+        OnboardingLanguageInference.suggestedLanguagesFor('Kannada'),
+        ['Telugu', 'Tamil'],
+      );
+    });
+
+    test('Hindi suggests Punjabi and Urdu only', () {
+      expect(
+        OnboardingLanguageInference.suggestedLanguagesFor('Hindi'),
+        ['Punjabi', 'Urdu'],
+      );
+    });
+
+    test('Portuguese suggests Spanish and French only', () {
+      expect(
+        OnboardingLanguageInference.suggestedLanguagesFor('Portuguese'),
+        ['Spanish', 'French'],
+      );
+    });
+
+    test('Spanish suggests Portuguese and French only', () {
+      expect(
+        OnboardingLanguageInference.suggestedLanguagesFor('Spanish'),
+        ['Portuguese', 'French'],
+      );
+    });
+
+    test('Bengali suggests Hindi and Assamese only', () {
+      expect(
+        OnboardingLanguageInference.suggestedLanguagesFor('Bengali'),
+        ['Hindi', 'Assamese'],
+      );
+    });
+
+    test('English primary returns no chip wall', () {
+      expect(
+        OnboardingLanguageInference.suggestedLanguagesFor('English'),
+        isEmpty,
+      );
+    });
+
+    test('unknown primary returns no chip wall', () {
       expect(
         OnboardingLanguageInference.suggestedLanguagesFor('Swahili'),
-        ['English'],
+        isEmpty,
       );
     });
   });

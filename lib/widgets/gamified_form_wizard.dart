@@ -186,6 +186,7 @@ class GamifiedFormNavBar extends StatelessWidget {
     this.isSubmitting = false,
     this.enabled = true,
     this.floating = false,
+    this.compact = false,
   });
 
   final VoidCallback? onBack;
@@ -203,6 +204,7 @@ class GamifiedFormNavBar extends StatelessWidget {
   final bool isSubmitting;
   final bool enabled;
   final bool floating;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -229,10 +231,11 @@ class GamifiedFormNavBar extends StatelessWidget {
               OutlinedButton(
                 onPressed: enabled && !isSubmitting ? onBack : null,
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 16 : 20,
+                    vertical: compact ? 10 : 14,
                   ),
+                  minimumSize: Size(0, compact ? 40 : 48),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -245,6 +248,7 @@ class GamifiedFormNavBar extends StatelessWidget {
                 label: nextLabel,
                 onPressed: enabled && !isSubmitting ? onNext : null,
                 floating: floating,
+                compact: compact,
               ),
             if (showSubmit)
               _PrimaryActionButton(
@@ -252,6 +256,7 @@ class GamifiedFormNavBar extends StatelessWidget {
                 onPressed: enabled && !isSubmitting ? onSubmit : null,
                 floating: floating,
                 isSubmitting: isSubmitting,
+                compact: compact,
               ),
           ],
         ),
@@ -295,12 +300,14 @@ class _PrimaryActionButton extends StatelessWidget {
     required this.onPressed,
     required this.floating,
     this.isSubmitting = false,
+    this.compact = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool floating;
   final bool isSubmitting;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -308,8 +315,11 @@ class _PrimaryActionButton extends StatelessWidget {
       onPressed: onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.accent,
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-        minimumSize: Size(floating ? 220 : 0, 48),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 22 : 28,
+          vertical: compact ? 10 : 14,
+        ),
+        minimumSize: Size(floating ? 220 : 0, compact ? 40 : 48),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -325,10 +335,11 @@ class _PrimaryActionButton extends StatelessWidget {
             )
           : Text(
               label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: compact ? 14 : 15,
                 letterSpacing: -0.2,
+                fontFamily: AppTypography.fontFamily,
               ),
             ),
     );

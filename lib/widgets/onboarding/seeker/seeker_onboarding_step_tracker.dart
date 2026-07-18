@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../onboarding_design_tokens.dart';
 
-/// Interactive seeker wizard step indicator — 600px row with tappable steps.
+/// Interactive seeker wizard step indicator — width follows the shell content band.
 class SeekerOnboardingStepTracker extends StatelessWidget {
   const SeekerOnboardingStepTracker({
     super.key,
@@ -18,38 +17,31 @@ class SeekerOnboardingStepTracker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: OnboardingTokens.contentMaxWidth,
+    // Width is owned by [SeekerOnboardingShell] content band — fill parent.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _SeekerStepLabel(
+          index: 0,
+          label: _steps[0],
+          state: _stepState(0),
+          onTap: _tapFor(0),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _SeekerStepLabel(
-              index: 0,
-              label: _steps[0],
-              state: _stepState(0),
-              onTap: _tapFor(0),
-            ),
-            const Expanded(child: _SeekerStepConnector()),
-            _SeekerStepLabel(
-              index: 1,
-              label: _steps[1],
-              state: _stepState(1),
-              onTap: _tapFor(1),
-            ),
-            const Expanded(child: _SeekerStepConnector()),
-            _SeekerStepLabel(
-              index: 2,
-              label: _steps[2],
-              state: _stepState(2),
-              onTap: _tapFor(2),
-            ),
-          ],
+        const Expanded(child: _SeekerStepConnector()),
+        _SeekerStepLabel(
+          index: 1,
+          label: _steps[1],
+          state: _stepState(1),
+          onTap: _tapFor(1),
         ),
-      ),
+        const Expanded(child: _SeekerStepConnector()),
+        _SeekerStepLabel(
+          index: 2,
+          label: _steps[2],
+          state: _stepState(2),
+          onTap: _tapFor(2),
+        ),
+      ],
     );
   }
 

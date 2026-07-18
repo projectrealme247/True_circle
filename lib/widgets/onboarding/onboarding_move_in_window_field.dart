@@ -9,21 +9,23 @@ class OnboardingMoveInWindowField extends StatelessWidget {
     super.key,
     required this.selected,
     required this.onChanged,
+    this.seekerOptionStyle = true,
   });
 
   final SeekerMoveInWindow? selected;
   final ValueChanged<SeekerMoveInWindow> onChanged;
+  final bool seekerOptionStyle;
 
   @override
   Widget build(BuildContext context) {
-    final options = SeekerMoveInWindow.values;
-    final selectedIndex = selected == null
-        ? null
-        : options.indexOf(selected!);
+    const options = SeekerMoveInWindow.values;
+    final selectedIndex =
+        selected == null ? null : options.indexOf(selected!);
 
     return OnboardingEqualChoiceRow(
       options: [for (final w in options) w.label],
       selectedIndex: selectedIndex,
+      seekerOptionStyle: seekerOptionStyle,
       onSelected: (index) => onChanged(options[index]),
     );
   }

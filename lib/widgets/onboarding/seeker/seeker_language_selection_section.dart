@@ -4,11 +4,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../theme/app_scroll_behavior.dart';
 import '../../../utils/ireland_language_catalog.dart';
 import '../../shadcn_select.dart';
+import '../onboarding_choice_chip.dart';
 import '../onboarding_design_tokens.dart';
 import '../onboarding_field_block.dart';
-import '../onboarding_choice_chip.dart';
 
-/// Two-tier language selection — primary dropdown + fluent secondary chips.
+/// English baseline + primary language + suggested related chips + custom add.
 class SeekerLanguageSelectionSection extends StatelessWidget {
   const SeekerLanguageSelectionSection({
     super.key,
@@ -31,84 +31,122 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
       primaryLanguage.isNotEmpty &&
       primaryLanguage.toLowerCase() == language.toLowerCase();
 
+  bool _isEnglish(String language) => language.toLowerCase() == 'english';
+
   bool _isSelected(String language) => selectedSecondaryLanguages.any(
         (selected) => selected.toLowerCase() == language.toLowerCase(),
       );
 
   @override
   Widget build(BuildContext context) {
-    final chipLanguages = [
+    final suggestionChips = [
       for (final language in suggestedLanguages)
-        if (!_matchesPrimary(language)) language,
+        if (!_matchesPrimary(language) &&
+            !_isEnglish(language) &&
+            !_isSelected(language))
+          language,
+    ];
+    final selectedChips = [
+      for (final language in selectedSecondaryLanguages)
+        if (!_isEnglish(language) && !_matchesPrimary(language)) language,
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ShadcnSelect(
-          label: 'Primary language',
-          value: primaryLanguage,
-          hint: 'Select your primary language',
-          options: IrelandLanguageCatalog.all,
-          onChanged: onPrimaryLanguageChanged,
-        ),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
-        OnboardingFieldBlock(
-          label: '💬 Other languages you speak fluently',
-          child: Wrap(
-            key: ValueKey(
-              'fluent-wrap-$primaryLanguage-${suggestedLanguages.join('|')}-'
-              '${selectedSecondaryLanguages.join('|')}',
+    return SeekerOnboardingLayout.constrainOptionCluster(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: OnboardingTokens.space12,
+              vertical: OnboardingTokens.space8,
             ),
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final language in chipLanguages)
-                OnboardingLanguageToggleChip(
-                  key: ValueKey('fluent-chip-$primaryLanguage-$language'),
-                  label: language,
-                  selected: _isSelected(language),
-                  onTap: () => onToggleSecondaryLanguage(language),
-                ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _showAddLanguageSheet(context),
-                  borderRadius: BorderRadius.circular(999),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: AppColors.accent.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    child: const Text(
-                      '+ Add Other',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.accent,
-                      ),
-                    ),
-                  ),
-                ),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: OnboardingTokens.inputBorder),
+            ),
+            child: Text(
+              'English — default communication language',
+              style: SeekerOnboardingLayout.fieldLabel.copyWith(
+                color: const Color(0xFF334155),
               ),
-            ],
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: OnboardingTokens.space8),
+          ShadcnSelect(
+            label: 'Additional primary language',
+            value: primaryLanguage.isEmpty || _isEnglish(primaryLanguage)
+                ? ''
+                : primaryLanguage,
+            hint: 'e.g. Telugu, Polish, Spanish',
+            options: [
+              for (final language in IrelandLanguageCatalog.all)
+                if (!_isEnglish(language)) language,
+            ],
+            onChanged: onPrimaryLanguageChanged,
+            seekerTypography: true,
+          ),
+          if (suggestionChips.isNotEmpty) ...[
+            const SizedBox(height: OnboardingTokens.space8),
+            OnboardingFieldBlock(
+              label: '💬 Suggested related languages',
+              child: Wrap(
+                key: ValueKey(
+                  'fluent-wrap-$primaryLanguage-${suggestionChips.join('|')}-'
+                  '${selectedSecondaryLanguages.join('|')}',
+                ),
+                spacing: OnboardingTokens.chipSpacing,
+                runSpacing: OnboardingTokens.chipSpacing,
+                children: [
+                  for (final language in suggestionChips)
+                    OnboardingLanguageToggleChip(
+                      key: ValueKey('fluent-chip-$primaryLanguage-$language'),
+                      label: language,
+                      selected: false,
+                      onTap: () => onAddSecondaryLanguage(language),
+                    ),
+                  _AddCustomLanguageButton(
+                    onTap: () => _showAddLanguageSheet(context),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: OnboardingTokens.space8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _AddCustomLanguageButton(
+                onTap: () => _showAddLanguageSheet(context),
+              ),
+            ),
+          ],
+          if (selectedChips.isNotEmpty) ...[
+            const SizedBox(height: OnboardingTokens.space8),
+            Wrap(
+              spacing: OnboardingTokens.chipSpacing,
+              runSpacing: OnboardingTokens.chipSpacing,
+              children: [
+                for (final language in selectedChips)
+                  _DismissibleLanguageChip(
+                    label: language,
+                    onDismiss: () => onToggleSecondaryLanguage(language),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
   Future<void> _showAddLanguageSheet(BuildContext context) async {
     final controller = TextEditingController();
     final excluded = {
+      'english',
       if (primaryLanguage.isNotEmpty) primaryLanguage.toLowerCase(),
       for (final language in suggestedLanguages) language.toLowerCase(),
+      for (final language in selectedSecondaryLanguages)
+        language.toLowerCase(),
     };
 
     final selected = await showModalBottomSheet<String>(
@@ -116,7 +154,9 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(OnboardingTokens.space16),
+        ),
       ),
       builder: (ctx) {
         var options = IrelandLanguageCatalog.all;
@@ -131,34 +171,31 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
 
             return Padding(
               padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 16,
-                bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+                left: OnboardingTokens.space16,
+                right: OnboardingTokens.space16,
+                top: OnboardingTokens.space16,
+                bottom: MediaQuery.viewInsetsOf(context).bottom +
+                    OnboardingTokens.space16,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     'Add another language',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0F172A),
-                    ),
+                    style: SeekerOnboardingLayout.sectionLabel,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: OnboardingTokens.space12),
                   TextField(
                     controller: controller,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Search languages…',
-                      border: OutlineInputBorder(),
+                    style: SeekerOnboardingLayout.inputValue,
+                    decoration: OnboardingTokens.inputDecoration(
+                      hint: 'Search languages…',
                     ),
                     onChanged: applyFilter,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: OnboardingTokens.space12),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 320),
                     child: ScrollConfiguration(
@@ -172,7 +209,10 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
                                 color: Colors.white,
                                 child: ListTile(
                                   dense: true,
-                                  title: Text(language),
+                                  title: Text(
+                                    language,
+                                    style: SeekerOnboardingLayout.inputValue,
+                                  ),
                                   onTap: () => Navigator.pop(ctx, language),
                                 ),
                               ),
@@ -189,7 +229,98 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
     );
     controller.dispose();
     if (selected != null && selected.trim().isNotEmpty) {
-      onAddSecondaryLanguage(selected.trim());
+      final token = selected.trim();
+      if (_isEnglish(token)) return;
+      if (primaryLanguage.isEmpty || _isEnglish(primaryLanguage)) {
+        onPrimaryLanguageChanged(token);
+      } else if (!_matchesPrimary(token)) {
+        onAddSecondaryLanguage(token);
+      }
     }
+  }
+}
+
+class _AddCustomLanguageButton extends StatelessWidget {
+  const _AddCustomLanguageButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: OnboardingTokens.space12,
+            vertical: OnboardingTokens.space4,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: AppColors.accent.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Text(
+            '+ Add Custom Language',
+            style: SeekerOnboardingLayout.chipText.copyWith(
+              color: AppColors.accent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DismissibleLanguageChip extends StatelessWidget {
+  const _DismissibleLanguageChip({
+    required this.label,
+    required this.onDismiss,
+  });
+
+  final String label;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.only(left: 12, right: 4),
+        decoration: BoxDecoration(
+          color: AppColors.accentLight,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.accent, width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: SeekerOnboardingLayout.chipText.copyWith(
+                color: AppColors.accent,
+              ),
+            ),
+            const SizedBox(width: OnboardingTokens.space4),
+            InkWell(
+              onTap: onDismiss,
+              borderRadius: BorderRadius.circular(999),
+              child: const Padding(
+                padding: EdgeInsets.all(OnboardingTokens.space4),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: AppColors.accent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

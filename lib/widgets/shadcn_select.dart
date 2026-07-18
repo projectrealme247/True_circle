@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import 'onboarding/onboarding_design_tokens.dart';
 
 /// shadcn/ui-inspired select trigger + popover menu (Flutter-native).
 class ShadcnSelect extends StatefulWidget {
@@ -11,6 +12,7 @@ class ShadcnSelect extends StatefulWidget {
     required this.options,
     required this.onChanged,
     this.hint = 'Select',
+    this.seekerTypography = false,
   });
 
   final String label;
@@ -18,6 +20,8 @@ class ShadcnSelect extends StatefulWidget {
   final List<String> options;
   final ValueChanged<String> onChanged;
   final String hint;
+  /// Seeker onboarding: 14px medium label, 16px regular value, 40px control.
+  final bool seekerTypography;
 
   @override
   State<ShadcnSelect> createState() => _ShadcnSelectState();
@@ -39,6 +43,19 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
 
   @override
   Widget build(BuildContext context) {
+    final labelStyle = widget.seekerTypography
+        ? SeekerOnboardingLayout.fieldLabel
+        : ShadcnSelectTheme.fieldLabel;
+    final inputStyle = widget.seekerTypography
+        ? SeekerOnboardingLayout.inputValue
+        : ShadcnSelectTheme.inputText;
+    final controlHeight = widget.seekerTypography
+        ? 40.0
+        : ShadcnSelectTheme.controlHeight;
+    final labelGap = widget.seekerTypography
+        ? OnboardingTokens.space4
+        : ShadcnSelectTheme.labelGap;
+
     final borderColor = _focused
         ? ShadcnSelectTheme.primary
         : _hovering
@@ -49,13 +66,15 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: ShadcnSelectTheme.labelHeight,
+          height: widget.seekerTypography
+              ? 18
+              : ShadcnSelectTheme.labelHeight,
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text(widget.label, style: ShadcnSelectTheme.fieldLabel),
+            child: Text(widget.label, style: labelStyle),
           ),
         ),
-        const SizedBox(height: ShadcnSelectTheme.labelGap),
+        SizedBox(height: labelGap),
         MenuAnchor(
           controller: _menuController,
           onOpen: () => setState(() => _focused = true),
@@ -99,9 +118,9 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
                   Expanded(
                     child: Text(
                       option,
-                      style: ShadcnSelectTheme.inputText.copyWith(
+                      style: inputStyle.copyWith(
                         fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
+                            selected ? FontWeight.w500 : FontWeight.w400,
                         color: selected
                             ? ShadcnSelectTheme.primary
                             : ShadcnSelectTheme.textPrimary,
@@ -133,10 +152,10 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     curve: Curves.easeOutCubic,
-                    height: ShadcnSelectTheme.controlHeight,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
+                    height: controlHeight,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: widget.seekerTypography ? 12 : 16,
+                      vertical: widget.seekerTypography ? 8 : 14,
                     ),
                     decoration: BoxDecoration(
                       color: ShadcnSelectTheme.surface,
@@ -153,7 +172,7 @@ class _ShadcnSelectState extends State<ShadcnSelect> {
                         Expanded(
                           child: Text(
                             widget.value.isEmpty ? widget.hint : widget.value,
-                            style: ShadcnSelectTheme.inputText.copyWith(
+                            style: inputStyle.copyWith(
                               color: widget.value.isEmpty
                                   ? ShadcnSelectTheme.gray400
                                   : ShadcnSelectTheme.textPrimary,

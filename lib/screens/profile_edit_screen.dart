@@ -4,21 +4,23 @@ import 'package:go_router/go_router.dart';
 
 import '../config/market/dublin_commuter_hubs.dart';
 import '../config/market/dublin_districts.dart';
+import '../config/market/dublin_macro_areas.dart';
 import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
 import '../debug/agent_log.dart';
-import '../navigation/navigate_after_identity.dart';
 import '../services/auth_service.dart';
 import '../services/profile_state_notifier.dart';
 import '../services/commute_scoring_service.dart';
 import '../utils/applicant_session_sync.dart';
 import '../utils/commute_profile.dart';
+import '../utils/target_search_areas.dart';
 import '../utils/dublin_hap_contribution_validator.dart';
 import '../services/profile_storage_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/view_preference_service.dart';
 import '../models/move_in_timing.dart';
 import '../models/onboarding_user_intent.dart';
+import '../models/onboarding_user_role.dart';
 import '../models/profile_onboarding_models.dart';
 import '../models/seeker_onboarding_enums.dart';
 import '../models/spoken_language_entry.dart';
@@ -44,6 +46,7 @@ import '../widgets/onboarding/seeker/seeker_onboarding_basics_screen.dart';
 import '../widgets/onboarding/seeker/seeker_onboarding_preferences_screen.dart';
 import '../widgets/onboarding/seeker/seeker_onboarding_destination_screen.dart';
 import '../widgets/onboarding/seeker/seeker_onboarding_step_tracker.dart';
+import '../widgets/onboarding/seeker/seeker_onboarding_shell.dart';
 import '../widgets/onboarding/onboarding_premium_field.dart';
 import '../widgets/onboarding/onboarding_field_block.dart';
 import '../widgets/onboarding/onboarding_move_in_window_field.dart';
@@ -259,6 +262,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   GuarantorStatus? _guarantorStatus;
   SeekerMoveInWindow? _moveInWindow;
   SeekerPersona? _seekerPersona;
+  final List<String> _selectedTargetSearchAreas = [];
+  bool _partnerCommuteEnabled = false;
+  DualCommutePriority _dualCommutePriority = DualCommutePriority.balanced;
+  bool _commuteMethodUserOverridden = false;
   int _pageTransitionDirection = 1;
 
   final _emailController = TextEditingController();
@@ -267,7 +274,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   String _phoneCountryCode = PhoneE164.defaultCountryCode;
   bool _prefersWhatsapp = false;
   final _propertyLocationIdentifierController = TextEditingController();
-  final _nativePlaceController = TextEditingController();
   final _locationController = TextEditingController();
   final _propertyLocationController = TextEditingController();
   final _propertyEircodeController = TextEditingController();
@@ -334,8 +340,57 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   int get _selectedBudgetTime => _maxCommuteBudgetMinutes.round();
 
   int get _commuterSlotCount {
+    if (_partnerCommuteEnabled) return 2;
     if (_householdCommutersCount <= 1) return 1;
     return 2;
+  }
+
+  CommuteMethod _defaultCommuteMethodForPersona(SeekerPersona? persona) {
+    return switch (persona) {
+      SeekerPersona.student || SeekerPersona.relocating =>
+        CommuteMethod.publicTransportWalking,
+      SeekerPersona.professional || SeekerPersona.family =>
+        CommuteMethod.driving,
+      null => CommuteMethod.publicTransportWalking,
+    };
+  }
+
+  void _ensurePrimaryCommuterDraft() {
+    if (_commuterDrafts.isEmpty) {
+      _commuterDrafts.add(_CommuterDraftEntry());
+    }
+  }
+
+  void _applyDefaultCommuteMethodIfNeeded() {
+    if (_commuteMethodUserOverridden) return;
+    _ensurePrimaryCommuterDraft();
+    _commuterDrafts.first.methodLabel =
+        _defaultCommuteMethodForPersona(_seekerPersona).toDisplayLabel();
+  }
+
+  void _setPartnerCommuteEnabled(bool enabled) {
+    _partnerCommuteEnabled = enabled;
+    _householdCommutersCount = enabled ? 2 : 1;
+    _syncCommuterDraftSlots();
+    if (enabled && _commuterDrafts.length > 1) {
+      final partner = _commuterDrafts[1];
+      if (partner.methodLabel.isEmpty) {
+        partner.methodLabel = _commuterDrafts.first.methodLabel;
+      }
+    }
+  }
+
+  /// Toggle for preferred-area macros. Used by [SeekerPreferredAreasSelector]
+  /// (Destination recommendation flow); not wired on Preferences.
+  // ignore: unused_element
+  void _toggleTargetSearchArea(String token) {
+    setState(() {
+      if (_selectedTargetSearchAreas.contains(token)) {
+        _selectedTargetSearchAreas.remove(token);
+      } else if (DublinMacroAreas.isMacroToken(token)) {
+        _selectedTargetSearchAreas.add(token);
+      }
+    });
   }
 
   List<String> get _languageOptions => MarketConfig.current.profileLanguageOptions;
@@ -398,7 +453,28 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _propertyLocationController.addListener(_onPassportFieldChanged);
     _propertyEircodeController.addListener(_onPassportFieldChanged);
     _budgetMaxController.addListener(_onPassportFieldChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _enforceSeekerRoleGate();
+    });
     _bootstrap();
+  }
+
+  void _enforceSeekerRoleGate() {
+    final session =
+        widget.initialProfile ?? AuthScreen.currentUserSession;
+    if (!AuthService.isSignedIn(session)) {
+      context.go('/');
+      return;
+    }
+    final role = UserRole.fromSession(session);
+    if (role == UserRole.landlord) {
+      context.go('/landlord-dashboard');
+      return;
+    }
+    if (role == UserRole.unassigned) {
+      context.go('/');
+    }
   }
 
   void _onPassportFieldChanged() {
@@ -493,7 +569,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _locationController.text = city;
     }
 
-    _nativePlaceController.text = ProfileData.text(profile['native_place']);
     _agencyController.text = ProfileData.text(profile['agency_name']);
 
     final mother = ProfileData.text(profile['mother_tongue']);
@@ -511,7 +586,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     } else {
       _householdCommutersCount = _commuterDrafts.length.clamp(1, 2);
     }
+    _partnerCommuteEnabled = _householdCommutersCount >= 2 ||
+        _commuterDrafts.length >= 2 ||
+        ProfileData.text(profile['partner_commute_method']).isNotEmpty;
+    if (_partnerCommuteEnabled && _householdCommutersCount < 2) {
+      _householdCommutersCount = 2;
+    }
     _syncCommuterDraftSlots();
+    _commuteMethodUserOverridden =
+        ProfileData.text(profile['commute_method']).isNotEmpty;
+    _applyDefaultCommuteMethodIfNeeded();
 
     final maxCommute = profile['maximum_commute_budget_minutes'];
     if (maxCommute is num && maxCommute > 0) {
@@ -549,7 +633,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           (entry) => MapEntry(entry.language, entry.isNative),
         ),
       );
-    _languageNativeFlags[_selectedMotherTongue] = true;
+    if (_selectedMotherTongue.trim().isNotEmpty) {
+      _languageNativeFlags[_selectedMotherTongue] = true;
+    }
 
     final occupant = ProfileData.text(profile['occupant_type']);
     if (occupant.isNotEmpty && _occupantOptions.contains(occupant)) {
@@ -701,6 +787,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     if (_seekerPersona != null) {
       _selectedOccupantType = _seekerPersona!.occupantType;
     }
+
+    _selectedTargetSearchAreas
+      ..clear()
+      ..addAll(
+        TargetSearchAreas.normalizeMacroTokens(
+          TargetSearchAreas.tokenList(profile['target_search_areas']),
+        ).where((token) => token != TargetSearchAreas.allDublinToken),
+      );
+
+    final priorityRaw =
+        ProfileData.text(profile['dual_commute_priority']).toLowerCase();
+    _dualCommutePriority = switch (priorityRaw) {
+      'person_b' || 'personb' => DualCommutePriority.personB,
+      'balanced' => DualCommutePriority.balanced,
+      'person_a' || 'persona' => DualCommutePriority.personA,
+      _ => DualCommutePriority.balanced,
+    };
   }
 
   void _seedSeekerPrimaryLanguageFromLocale() {
@@ -722,7 +825,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _selectedSecondaryLanguages.clear();
 
     if (_selectedMotherTongue.isEmpty && _selectedLanguages.isNotEmpty) {
-      _selectedMotherTongue = _selectedLanguages.first;
+      // Prefer first non-English spoken language as primary when restoring.
+      final fallback = _selectedLanguages.firstWhere(
+        (lang) => lang.toLowerCase() != 'english',
+        orElse: () => _selectedLanguages.first,
+      );
+      _selectedMotherTongue = fallback;
     }
 
     if (_selectedMotherTongue.isNotEmpty) {
@@ -730,6 +838,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         OnboardingLanguageInference.suggestedLanguagesFor(_selectedMotherTongue),
       );
       for (final lang in _selectedLanguages) {
+        if (lang.toLowerCase() == 'english') continue;
         if (lang.toLowerCase() == _selectedMotherTongue.toLowerCase()) {
           continue;
         }
@@ -747,6 +856,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final seen = <String>{};
     final display = <String>[];
     void addLanguage(String language) {
+      if (language.toLowerCase() == 'english') return;
       if (_selectedMotherTongue.isNotEmpty &&
           language.toLowerCase() == _selectedMotherTongue.toLowerCase()) {
         return;
@@ -767,7 +877,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   void _refreshSuggestedSecondaryLanguages(String primaryLanguage) {
     _suggestedSecondaryLanguages
       ..clear()
-      ..addAll(OnboardingLanguageInference.suggestedLanguagesFor(primaryLanguage));
+      ..addAll(
+        OnboardingLanguageInference.suggestedLanguagesFor(primaryLanguage),
+      );
 
     _extraSecondaryLanguages.removeWhere(
       (language) => _suggestedSecondaryLanguages.any(
@@ -825,7 +937,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _nameController.dispose();
     _contactPhoneController.dispose();
     _propertyLocationIdentifierController.dispose();
-    _nativePlaceController.dispose();
     _locationController.dispose();
     _propertyLocationController.dispose();
     _propertyEircodeController.dispose();
@@ -850,14 +961,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final baseline = Map<String, dynamic>.from(
       _baselineProfile ?? AuthScreen.currentUserSession ?? {},
     );
+    baseline.remove('native_place');
     return {
       ...baseline,
       'email': _emailController.text.trim(),
       'full_name': _nameController.text.trim(),
       'detected_city': _resolvedCity(),
       ..._spokenLanguageSessionFields(),
-      if (_nativePlaceController.text.trim().isNotEmpty)
-        'native_place': _nativePlaceController.text.trim(),
       ..._commutePayloadFields(),
       if (_budgetMinController.text.trim().isNotEmpty)
         'budget_min': int.tryParse(_budgetMinController.text.trim()),
@@ -890,6 +1000,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       ),
       ..._seekerPersonaPayloadFields(),
       ..._seekerLocationPayloadFields(),
+      ..._targetSearchAreasPayloadFields(),
       ..._guarantorPayloadFields(),
       ..._moveInPayloadFields(),
       if (_scheduleType != null) 'schedule_type': _scheduleType,
@@ -934,6 +1045,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       ProfileData.text(session['commute_destination_hub_id']),
       session['commute_destination_unknown']?.toString() ?? '',
       session['maximum_commute_budget_minutes']?.toString() ?? '',
+      ProfileData.text(session['commute_method']),
+      ProfileData.text(session['mother_tongue']),
       languages.join(','),
       preferred.join(','),
     ].join('|');
@@ -951,13 +1064,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
     final session = _passportPreviewSession();
     final snapshot = ContextualPassportSnapshot.fromSession(session);
-    return OnboardingPanelFrame(
-      maxWidth: OnboardingTokens.passportWidth,
-      child: ContextualPassportCard(
-        key: ValueKey(_passportPreviewFingerprint()),
-        snapshot: snapshot,
-        omitOuterFrame: true,
-        useOnboardingSeekerPreview: true,
+    // Fill the right Row cell completely — border height == left column height.
+    return DecoratedBox(
+      decoration: SeekerOnboardingLayout.passportPanelDecoration(),
+      child: SizedBox.expand(
+        child: Padding(
+          padding: const EdgeInsets.all(OnboardingTokens.space16),
+          child: ContextualPassportCard(
+            key: ValueKey(_passportPreviewFingerprint()),
+            snapshot: snapshot,
+            omitOuterFrame: true,
+            useOnboardingSeekerPreview: true,
+            flatOnboardingStyle: true,
+            showHeaderCaption: true,
+            headerCaption: 'YOUR PUBLIC PASSPORT',
+          ),
+        ),
       ),
     );
   }
@@ -1223,7 +1345,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     return {
       'commute_destination_unknown': false,
       'maximum_commute_budget_minutes': worstCaseMax,
-      'dual_commute_priority': 'balanced',
+      'dual_commute_priority': switch (_dualCommutePriority) {
+        DualCommutePriority.personA => 'person_a',
+        DualCommutePriority.personB => 'person_b',
+        DualCommutePriority.balanced => 'balanced',
+      },
       'household_commuters_count': _householdCommutersCount,
       if (perProfileMax.isNotEmpty) 'commute_profile_max_minutes': perProfileMax,
       if (primary != null) ...{
@@ -1398,14 +1524,19 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       for (final language in languages)
         SpokenLanguageEntry(
           language: language,
-          isNative: language == _selectedMotherTongue ||
-              (_languageNativeFlags[language] ?? false),
+          isNative: _onboardingIntent == OnboardingUserIntent.seeker
+              ? false
+              : language == _selectedMotherTongue ||
+                  (_languageNativeFlags[language] ?? false),
         ),
     ];
 
     return SpokenLanguageProfileCodec.toSessionFields(
       entries: entries,
-      motherTongue: _selectedMotherTongue,
+      // Seekers: English is assumed communication baseline — not stored.
+      motherTongue: _onboardingIntent == OnboardingUserIntent.seeker
+          ? ''
+          : _selectedMotherTongue,
     );
   }
 
@@ -1442,7 +1573,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         companyName: _agencyController.text.trim(),
         contactPhone: _contactPhoneController.text.trim(),
         motherTongue: _selectedMotherTongue,
-        nativePlace: _nativePlaceController.text.trim(),
         languages: hostLanguages,
       ),
       seekerProfile: SeekerProfile(
@@ -1583,8 +1713,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _showMessage('Select what best describes you.');
       return false;
     }
-    if (_selectedMotherTongue.trim().isEmpty) {
-      _showMessage('Select your native/primary language.');
+    if (_selectedMotherTongue.trim().isEmpty ||
+        _selectedMotherTongue.trim().toLowerCase() == 'english') {
+      // English is the fixed communication baseline; require a home/primary
+      // language so related suggestions and passport chips stay in sync.
+      _showMessage('Select your additional primary language.');
       return false;
     }
     return true;
@@ -1597,7 +1730,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       return false;
     }
     if (_dublinLocationContext == null) {
-      _showMessage('Tell us whether you are already in Dublin or arriving soon.');
+      _showMessage(
+        'Tell us whether you are already in Dublin or moving to Dublin.',
+      );
       return false;
     }
     return true;
@@ -1660,6 +1795,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     setState(() {
       _pageTransitionDirection = page > _currentPage ? 1 : -1;
       _currentPage = page;
+      if (page == 2) {
+        _ensurePrimaryCommuterDraft();
+        _applyDefaultCommuteMethodIfNeeded();
+      }
     });
   }
 
@@ -1682,6 +1821,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       } else if (persona != SeekerPersona.family) {
         _familySharedLivingTip = null;
       }
+      if (persona != SeekerPersona.professional &&
+          persona != SeekerPersona.family) {
+        _setPartnerCommuteEnabled(false);
+      }
+      _applyDefaultCommuteMethodIfNeeded();
     });
   }
 
@@ -1705,7 +1849,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       context.pop();
       return;
     }
-    context.go('/welcome');
+    context.go('/');
   }
 
   String get _onboardingBackTooltip => switch (_currentPage) {
@@ -1774,7 +1918,25 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         'pre_arrival_seeker': true,
       };
     }
+    if (context == DublinLocationContext.relocating) {
+      return {
+        'dublin_location_context':
+            DublinLocationContext.relocating.storageToken,
+        'pre_arrival_seeker': true,
+      };
+    }
     return {};
+  }
+
+  Map<String, dynamic> _targetSearchAreasPayloadFields() {
+    final macros = TargetSearchAreas.normalizeMacroTokens(
+      List<String>.from(_selectedTargetSearchAreas),
+    );
+    return {
+      'target_search_areas': macros.isEmpty
+          ? [TargetSearchAreas.allDublinToken]
+          : macros,
+    };
   }
 
   Map<String, dynamic> _guarantorPayloadFields() {
@@ -1818,6 +1980,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       if (_selectedMotherTongue.toLowerCase() == language.toLowerCase()) {
         return;
       }
+      if (language.toLowerCase() == 'english') return;
       final existing = _selectedSecondaryLanguages.where(
         (selected) => selected.toLowerCase() == language.toLowerCase(),
       );
@@ -1835,6 +1998,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       if (_selectedMotherTongue.toLowerCase() == language.toLowerCase()) {
         return;
       }
+      if (language.toLowerCase() == 'english') return;
       final inSuggested = _suggestedSecondaryLanguages.any(
         (suggested) => suggested.toLowerCase() == language.toLowerCase(),
       );
@@ -1897,7 +2061,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ..._seekerLocationPayloadFields()
       else
         'detected_city': _resolvedCity(),
-      'native_place': _nativePlaceController.text.trim(),
+      if (_onboardingIntent == OnboardingUserIntent.seeker)
+        ..._targetSearchAreasPayloadFields(),
       ..._spokenLanguageSessionFields(),
       ..._commutePayloadFields(),
       if (_onboardingIntent == OnboardingUserIntent.seeker) ...{
@@ -1954,6 +2119,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       'household_has_pets': _householdHasPets,
       'household_smoker': _householdSmoker,
       'onboarding_intent': _onboardingIntent.storageToken,
+      UserRole.sessionKey: _onboardingIntent == OnboardingUserIntent.seeker
+          ? UserRole.seeker.storageToken
+          : UserRole.landlord.storageToken,
       'profile_onboarding_track': _selectedTrack.storageToken,
       if (_onboardingIntent == OnboardingUserIntent.provider)
         'listingSeed_listingMode':
@@ -1974,7 +2142,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       payload
         ..remove('pending_listing_location')
         ..remove('pending_listing_eircode');
+      if (!_partnerCommuteEnabled) {
+        payload
+          ..remove('partner_commute_method')
+          ..remove('partner_commute_destination')
+          ..remove('partner_commute_destination_hub_id')
+          ..remove('partner_destination_latitude')
+          ..remove('partner_destination_longitude');
+      }
     }
+    payload.remove('native_place');
     payload = ProfileOnboardingRepository.applySnapshotToSession(
       payload,
       _buildTrackSnapshot(),
@@ -1995,7 +2172,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       );
       if (!mounted) return;
       _showMessage('Profile saved — welcome to your feed.');
-      await navigateAfterIdentity(context, force: true);
+      // Seeker "Save & find matches" always lands on browse — never /add-listing.
+      context.go('/');
       return;
     }
     _showMessage('Profile updated.');
@@ -2052,79 +2230,54 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF2B4C7E)),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: OnboardingTokens.gridMaxWidth,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          OnboardingTokens.gridPadding,
-                          32,
-                          OnboardingTokens.gridPadding,
-                          16,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Align(
-                              alignment: Alignment.topCenter,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: OnboardingTokens.contentMaxWidth,
-                                ),
-                                child: SeekerOnboardingStepTracker(
-                                  current: _currentPage,
-                                  onStepTap: _onSeekerStepTap,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Expanded(
-                              child: OnboardingGridShell(
-                                leftPane: OnboardingPanelFrame(
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 220),
-                                    switchInCurve: Curves.easeOutCubic,
-                                    switchOutCurve: Curves.easeInCubic,
-                                    transitionBuilder: (child, animation) {
-                                      final begin = _pageTransitionDirection >= 0
-                                          ? const Offset(0.06, 0)
-                                          : const Offset(-0.06, 0);
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: SlideTransition(
-                                          position: Tween<Offset>(
-                                            begin: begin,
-                                            end: Offset.zero,
-                                          ).animate(animation),
-                                          child: child,
-                                        ),
-                                      );
-                                    },
-                                    child: KeyedSubtree(
-                                      key: ValueKey('seeker-step-$_currentPage'),
-                                      child: _buildSeekerPage(_currentPage),
-                                    ),
-                                  ),
-                                ),
-                                rightPane: _buildPassportPreviewPane(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+          : SeekerOnboardingShell(
+              progress: SeekerOnboardingStepTracker(
+                current: _currentPage,
+                onStepTap: _onSeekerStepTap,
+              ),
+              leftBody: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final begin = _pageTransitionDirection >= 0
+                      ? const Offset(0.06, 0)
+                      : const Offset(-0.06, 0);
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: begin,
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
                     ),
-                  ),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey('seeker-step-$_currentPage'),
+                  child: _buildSeekerPage(_currentPage),
                 ),
-                _buildSeekerNavBar(),
-              ],
+              ),
+              leftFooter: _buildSeekerNavBar(),
+              rightPane: _buildPassportPreviewPane(),
             ),
       ),
+    );
+  }
+
+  Widget _buildSeekerNavBar() {
+    return GamifiedFormNavBar(
+      floating: false,
+      compact: true,
+      showBack: _currentPage > 0,
+      showNext: _currentPage < _pageCount - 1,
+      showSubmit: _currentPage == _pageCount - 1,
+      nextLabel: 'Continue →',
+      submitLabel: 'Save & find matches',
+      onBack: () => _goToPage(_currentPage - 1),
+      onNext: _handleSeekerNext,
+      onSubmit: _save,
     );
   }
 
@@ -2138,20 +2291,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       default:
         break;
     }
-  }
-
-  Widget _buildSeekerNavBar() {
-    return GamifiedFormNavBar(
-      floating: true,
-      showBack: _currentPage > 0,
-      showNext: _currentPage < _pageCount - 1,
-      showSubmit: _currentPage == _pageCount - 1,
-      nextLabel: 'Continue →',
-      submitLabel: 'Save & find matches',
-      onBack: () => _goToPage(_currentPage - 1),
-      onNext: _handleSeekerNext,
-      onSubmit: _save,
-    );
   }
 
   Widget _buildSeekerPage(int page) {
@@ -2197,22 +2336,40 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       case 2:
         final draft = _commuterDrafts.isNotEmpty
             ? _commuterDrafts.first
-            : _CommuterDraftEntry();
+            : _CommuterDraftEntry(
+                methodLabel:
+                    _defaultCommuteMethodForPersona(_seekerPersona)
+                        .toDisplayLabel(),
+              );
         final commuteMinutes = SeekerCommuteTimeOptions.snap(
           draft.maxCommuteMinutes,
         );
+        final partnerDraft =
+            _partnerCommuteEnabled && _commuterDrafts.length > 1
+                ? _commuterDrafts[1]
+                : null;
+        final partnerMinutes = SeekerCommuteTimeOptions.snap(
+          partnerDraft?.maxCommuteMinutes ??
+              SeekerCommuteTimeOptions.defaultMinutes,
+        );
         return SeekerOnboardingDestinationScreen(
           persona: _seekerPersona,
+          commuteMethod: CommuteMethod.fromDisplayLabel(draft.methodLabel),
+          onCommuteMethodChanged: (method) => setState(() {
+            _commuteMethodUserOverridden = true;
+            _ensurePrimaryCommuterDraft();
+            _commuterDrafts.first.methodLabel = method.toDisplayLabel();
+            if (_partnerCommuteEnabled && _commuterDrafts.length > 1) {
+              _commuterDrafts[1].methodLabel = method.toDisplayLabel();
+            }
+          }),
           selectedHub: draft.hub,
           commuteDestinationUnknown: _commuteDestinationUnknown,
           maxCommuteMinutes: commuteMinutes,
           onHubSelected: (hub) => setState(() {
             _commuteDestinationUnknown = false;
-            if (_commuterDrafts.isEmpty) {
-              _commuterDrafts.add(_CommuterDraftEntry(hub: hub));
-            } else {
-              _commuterDrafts.first.hub = hub;
-            }
+            _ensurePrimaryCommuterDraft();
+            _commuterDrafts.first.hub = hub;
           }),
           onHubCleared: () => setState(() {
             _commuteDestinationUnknown = false;
@@ -2227,14 +2384,32 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             }
           }),
           onCommuteMinutesChanged: (v) => setState(() {
-            if (_commuterDrafts.isEmpty) {
-              _commuterDrafts.add(
-                _CommuterDraftEntry(maxCommuteMinutes: v.toDouble()),
-              );
-            } else {
-              _commuterDrafts.first.maxCommuteMinutes = v.toDouble();
-            }
+            _ensurePrimaryCommuterDraft();
+            _commuterDrafts.first.maxCommuteMinutes = v.toDouble();
             _maxCommuteBudgetMinutes = v.toDouble();
+          }),
+          partnerCommuteEnabled: _partnerCommuteEnabled,
+          onPartnerCommuteEnabledChanged: (enabled) => setState(() {
+            _setPartnerCommuteEnabled(enabled);
+          }),
+          partnerHub: partnerDraft?.hub,
+          partnerMaxCommuteMinutes: partnerMinutes,
+          onPartnerHubSelected: (hub) => setState(() {
+            _setPartnerCommuteEnabled(true);
+            _commuterDrafts[1].hub = hub;
+          }),
+          onPartnerHubCleared: () => setState(() {
+            if (_commuterDrafts.length > 1) {
+              _commuterDrafts[1].hub = null;
+            }
+          }),
+          onPartnerCommuteMinutesChanged: (v) => setState(() {
+            _setPartnerCommuteEnabled(true);
+            _commuterDrafts[1].maxCommuteMinutes = v.toDouble();
+          }),
+          dualCommutePriority: _dualCommutePriority,
+          onDualCommutePriorityChanged: (priority) => setState(() {
+            _dualCommutePriority = priority;
           }),
           moveInWindow: _hasSetMoveInWindow ? _moveInWindow : null,
           onMoveInWindowChanged: _setMoveInWindow,
@@ -2665,7 +2840,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ],
       ),
       const SizedBox(height: 12),
-      _buildRootsAndTrustSection(showNativePlaceField: false),
+      _buildRootsAndTrustSection(),
     ];
   }
 
@@ -2677,18 +2852,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     ];
   }
 
-  Widget _buildRootsAndTrustSection({bool showNativePlaceField = true}) {
+  Widget _buildRootsAndTrustSection() {
     return _groupCard(
       title: 'Roots & trust',
       subtitle: 'Optional extras that boost credibility and matching quality.',
       children: [
-        if (showNativePlaceField)
-          _textField(
-            _nativePlaceController,
-            label: 'Native place',
-            hint: MarketConfig.current.profileNativePlaceHint,
-            onChanged: () => setState(() {}),
-          ),
         _GrandVerificationGatewayEntry(
           linkedInVerified: _baselineProfile?['linkedin_verified'] == true,
           company: ProfileData.text(_baselineProfile?['company']),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../debug/agent_log.dart';
 import '../../theme/app_scroll_behavior.dart';
 import 'onboarding_design_tokens.dart';
 
@@ -25,20 +24,6 @@ class OnboardingPanelFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // #region agent log
-        agentLog(
-          'H1',
-          'onboarding_content_shell.dart:OnboardingPanelFrame',
-          'panel frame constraints',
-          {
-            'maxH': constraints.maxHeight,
-            'minH': constraints.minHeight,
-            'hasBoundedHeight': constraints.hasBoundedHeight,
-            'stretchVertically': stretchVertically,
-          },
-        );
-        // #endregion
-
         final scrollChild = ScrollConfiguration(
           behavior: const OnboardingFormScrollBehavior(),
           child: SingleChildScrollView(

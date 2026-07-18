@@ -26,6 +26,11 @@ class CommuteDestinationField extends StatefulWidget {
     this.label = 'Popular daily destinations',
     this.occupantType,
     this.enabled = true,
+    this.compactPresets = false,
+    this.maxPresetRows = 0,
+    this.showPresets = true,
+    this.presetOverride,
+    this.seekerPolishStyle = false,
   });
 
   final DublinCommuterHub? selectedHub;
@@ -39,6 +44,21 @@ class CommuteDestinationField extends StatefulWidget {
   /// Retained for profile-edit compatibility.
   final String? occupantType;
   final bool enabled;
+
+  /// Smaller chips + denser grid for scroll-constrained onboarding.
+  final bool compactPresets;
+
+  /// When > 0, caps popular hubs to [maxPresetRows] × 3 columns.
+  final int maxPresetRows;
+
+  /// When false, only the custom destination search field is shown.
+  final bool showPresets;
+
+  /// When set, replaces persona-filtered presets (family driver overrides).
+  final List<SeekerMacroPreset>? presetOverride;
+
+  /// Seeker polish: 44px search field, quieter chrome.
+  final bool seekerPolishStyle;
 
   @override
   State<CommuteDestinationField> createState() =>
@@ -507,34 +527,48 @@ class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
   }
 
   Widget _buildPresetGrid() {
-    final presets =
+    var presets = widget.presetOverride ??
         DublinCommuterHubs.seekerOnboardingPresetsForPersona(widget.persona);
     const columns = 3;
+    if (widget.maxPresetRows > 0) {
+      final cap = widget.maxPresetRows * columns;
+      if (presets.length > cap) {
+        presets = presets.take(cap).toList(growable: false);
+      }
+    }
     final rows = <List<SeekerMacroPreset>>[];
     for (var i = 0; i < presets.length; i += columns) {
       rows.add(presets.sublist(i, (i + columns).clamp(0, presets.length)));
     }
 
+    final rowGap = widget.compactPresets ? 6.0 : 8.0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var r = 0; r < rows.length; r++) ...[
-          if (r > 0) const SizedBox(height: 8),
+          if (r > 0) SizedBox(height: rowGap),
           OnboardingEqualGridRow(
             labels: [for (final preset in rows[r]) preset.chipLabel],
             selectedIndices: _selectedIndicesForRow(rows[r]),
             onSelected: widget.enabled
                 ? (index) => _selectPreset(rows[r][index])
                 : (_) {},
+            compactLabel: true,
+            dense: widget.compactPresets,
+            seekerOptionStyle: true,
           ),
         ],
-        const SizedBox(height: 8),
+        SizedBox(height: rowGap),
         OnboardingEqualGridRow(
           labels: const ['Not sure yet'],
           selectedIndices: widget.commuteDestinationUnknown ? {0} : const {},
           onSelected: widget.enabled
               ? (_) => widget.onCommuteDestinationUnknown?.call()
               : (_) {},
+          compactLabel: true,
+          dense: widget.compactPresets,
+          seekerOptionStyle: true,
         ),
       ],
     );
@@ -542,19 +576,77 @@ class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
 
   @override
   Widget build(BuildContext context) {
+    final fieldHeight =
+        widget.seekerPolishStyle ? 44.0 : listingFieldHeight;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.label.isNotEmpty) ...[
-          Text(widget.label, style: listingFieldLabelStyle),
-          const SizedBox(height: listingLabelSpacing),
+        if (widget.showPresets) ...[
+          if (widget.label.isNotEmpty) ...[
+            Text(widget.label, style: listingFieldLabelStyle),
+            const SizedBox(height: listingLabelSpacing),
+          ],
+          _buildPresetGrid(),
+          const SizedBox(height: listingFieldSpacing),
         ],
-        _buildPresetGrid(),
-        const SizedBox(height: listingFieldSpacing),
-        OnboardingFieldBlock(
-          labelEmoji: '🎯',
-          label: 'Custom destination',
-          child: TapRegion(
+        if (!widget.seekerPolishStyle)
+          OnboardingFieldBlock(
+            labelEmoji: '🎯',
+            label: 'Custom destination',
+            child: TapRegion(
+              groupId: _tapGroup,
+              onTapOutside: (_) {
+                _focusNode.unfocus();
+                _dismissOverlay();
+              },
+              child: CompositedTransformTarget(
+                link: _layerLink,
+                child: SizedBox(
+                  key: _fieldAnchorKey,
+                  height: fieldHeight,
+                  child: TextFormField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    enabled: widget.enabled,
+                    textInputAction: TextInputAction.done,
+                    onChanged: _onQueryChanged,
+                    onTap: () {
+                      if (_suggestions.isNotEmpty || _searching) {
+                        _renderOverlay();
+                      }
+                    },
+                    style: listingFieldValueStyle.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: listingInlineInputDecoration(
+                      hint: 'Neighbourhood, campus, or workplace…',
+                    ).copyWith(
+                      prefixIcon: _searchPrefix(),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 40,
+                      ),
+                      suffixIcon: _locationSuffix(),
+                      suffixIconConstraints: const BoxConstraints(
+                        minHeight: 40,
+                        minWidth: 0,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: AppColors.accent,
+                          width: listingDaftBorderWidth,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          TapRegion(
             groupId: _tapGroup,
             onTapOutside: (_) {
               _focusNode.unfocus();
@@ -564,7 +656,7 @@ class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
               link: _layerLink,
               child: SizedBox(
                 key: _fieldAnchorKey,
-                height: listingFieldHeight,
+                height: fieldHeight,
                 child: TextFormField(
                   controller: _controller,
                   focusNode: _focusNode,
@@ -576,12 +668,20 @@ class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
                       _renderOverlay();
                     }
                   },
-                  style: listingFieldValueStyle.copyWith(
-                    fontWeight: FontWeight.w600,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF1A1A1A),
                   ),
-                  decoration: listingInlineInputDecoration(
-                    hint: 'Neighbourhood, campus, or workplace…',
-                  ).copyWith(
+                  decoration: InputDecoration(
+                    hintText: 'Neighbourhood, campus, or workplace…',
+                    hintStyle: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF888888),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                     prefixIcon: _searchPrefix(),
                     prefixIconConstraints: const BoxConstraints(
                       minWidth: 36,
@@ -592,11 +692,19 @@ class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
                       minHeight: 40,
                       minWidth: 0,
                     ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+                    ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                       borderSide: const BorderSide(
-                        color: AppColors.accent,
-                        width: listingDaftBorderWidth,
+                        color: Color(0xFF1A1A1A),
+                        width: 1.5,
                       ),
                     ),
                   ),
@@ -604,7 +712,6 @@ class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
               ),
             ),
           ),
-        ),
         if (_searchError != null) ...[
           const SizedBox(height: 6),
           Text(

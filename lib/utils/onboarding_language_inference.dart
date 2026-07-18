@@ -3,43 +3,56 @@ import 'language_proximity_db.dart';
 /// Predictive spoken-language companions when a mother tongue is chosen.
 abstract final class OnboardingLanguageInference {
   /// Suggested secondary-language chips for seeker onboarding (unselected by default).
+  /// English is never included — it is the fixed communication baseline.
   static const Map<String, List<String>> _companionLanguages = {
-    'Tamil': ['English', 'Malayalam', 'Telugu', 'Kannada', 'Hindi'],
-    'Hindi': ['English', 'Punjabi', 'Bengali', 'Marathi'],
-    'Malayalam': ['English', 'Tamil', 'Hindi'],
-    'Telugu': ['English', 'Tamil', 'Hindi', 'Kannada'],
-    'Kannada': ['English', 'Tamil', 'Telugu', 'Hindi'],
-    'Bengali': ['English', 'Hindi', 'Assamese'],
-    'Punjabi': ['English', 'Hindi', 'Urdu'],
-    'Gujarati': ['English', 'Hindi', 'Marathi'],
-    'Marathi': ['English', 'Hindi', 'Gujarati'],
-    'Urdu': ['English', 'Hindi', 'Punjabi'],
-    'Polish': ['English', 'Ukrainian', 'Russian'],
-    'Ukrainian': ['English', 'Russian', 'Polish'],
-    'Portuguese': ['English', 'Spanish'],
-    'Spanish': ['English', 'Portuguese'],
-    'French': ['English', 'Spanish', 'German'],
-    'German': ['English', 'French'],
-    'Italian': ['English', 'Spanish', 'French'],
-    'Arabic': ['English', 'Urdu'],
-    'Chinese (Mandarin)': ['English', 'Chinese (Cantonese)'],
-    'Chinese (Cantonese)': ['English', 'Chinese (Mandarin)'],
-    'Russian': ['English', 'Ukrainian', 'Polish'],
-    'Gaeilge': ['English'],
-    'English': ['English'],
+    'Tamil': ['Telugu', 'Malayalam', 'Kannada', 'Hindi'],
+    'Telugu': ['Hindi', 'Tamil', 'Kannada', 'Malayalam'],
+    'Malayalam': ['Tamil', 'Telugu', 'Kannada', 'Hindi'],
+    'Kannada': ['Telugu', 'Tamil', 'Malayalam', 'Hindi'],
+    'Hindi': ['Punjabi', 'Urdu', 'Tamil', 'Telugu'],
+    'Punjabi': ['Hindi', 'Urdu'],
+    'Bengali': ['Hindi', 'Assamese'],
+    'Gujarati': ['Hindi', 'Marathi'],
+    'Marathi': ['Hindi', 'Gujarati'],
+    'Urdu': ['Hindi', 'Punjabi'],
+    'Polish': ['Ukrainian', 'Russian'],
+    'Ukrainian': ['Russian', 'Polish'],
+    'Portuguese': ['Spanish', 'French'],
+    'Spanish': ['Portuguese', 'French'],
+    'French': ['Spanish', 'German'],
+    'German': ['French'],
+    'Italian': ['Spanish', 'French'],
+    'Arabic': ['Urdu'],
+    'Chinese (Mandarin)': ['Chinese (Cantonese)'],
+    'Chinese (Cantonese)': ['Chinese (Mandarin)'],
+    'Russian': ['Ukrainian', 'Polish'],
+    'Gaeilge': <String>[],
+    'English': <String>[],
   };
 
+  /// Default "Other languages" chips when no primary (or English) is chosen.
+  /// Empty by design — the chip wall must not appear until a primary is picked.
+  static List<String> get defaultOtherLanguageSuggestions => const <String>[];
+
   /// Chip-row suggestions for "Other languages you speak" — never auto-selected.
+  /// English is the assumed communication language and is never returned here.
   static List<String> suggestedLanguagesFor(String primary) {
     final trimmed = primary.trim();
-    if (trimmed.isEmpty) return const ['English'];
+    if (trimmed.isEmpty || trimmed.toLowerCase() == 'english') {
+      return defaultOtherLanguageSuggestions;
+    }
 
     for (final entry in _companionLanguages.entries) {
       if (entry.key.toLowerCase() == trimmed.toLowerCase()) {
-        return List<String>.from(entry.value);
+        return [
+          for (final language in entry.value)
+            if (language.toLowerCase() != 'english' &&
+                language.toLowerCase() != trimmed.toLowerCase())
+              language,
+        ];
       }
     }
-    return const ['English'];
+    return defaultOtherLanguageSuggestions;
   }
 
   /// Fluent secondary languages inferred from a seeker primary language pick.

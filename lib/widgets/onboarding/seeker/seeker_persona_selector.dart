@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/seeker_onboarding_enums.dart';
 import '../onboarding_choice_chip.dart';
+import '../onboarding_design_tokens.dart';
 
 /// Mandatory persona split beneath space track on seeker screen 1.
 class SeekerPersonaSelector extends StatelessWidget {
@@ -39,27 +40,31 @@ class SeekerPersonaSelector extends StatelessWidget {
     final resolved = _resolvedSelection(selected);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (showHeading) ...[
           Text(
             'What best describes you?',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[600],
-            ),
+            style: SeekerOnboardingLayout.sectionLabel,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: OnboardingTokens.space8),
         ],
-        for (var i = 0; i < _personas.length; i++) ...[
-          if (i > 0) const SizedBox(height: 10),
-          OnboardingChoiceChip(
-            label: _labels[i],
-            selected: resolved == _personas[i],
-            onTap: () => onChanged(_personas[i]),
+        SeekerOnboardingLayout.constrainOptionCluster(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < _personas.length; i++) ...[
+                if (i > 0) const SizedBox(height: OnboardingTokens.space8),
+                OnboardingChoiceChip(
+                  label: _labels[i],
+                  selected: resolved == _personas[i],
+                  onTap: () => onChanged(_personas[i]),
+                  seekerOptionStyle: true,
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ],
     );
   }

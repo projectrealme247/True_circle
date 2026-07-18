@@ -4,8 +4,11 @@ import '../config/app_env.dart';
 import '../config/market/dublin_commuter_hubs.dart';
 import '../data/dublin_mock_data.dart';
 import '../models/marketplace_space.dart';
+import '../models/move_in_timing.dart';
+import '../models/onboarding_user_role.dart';
 import '../models/profile_onboarding_models.dart';
 import '../screens/auth_screen.dart';
+import 'auth_service.dart';
 import 'commute_scoring_service.dart';
 import 'active_mode_service.dart';
 import 'marketplace_context_notifier.dart';
@@ -32,10 +35,11 @@ abstract final class DemoAuthService {
 
   static Future<void> enterAsDemoLandlord() async {
     final now = DateTime.now().toUtc().toIso8601String();
+    // Role first — routing must never see a landlord session without it.
     final session = <String, dynamic>{
+      UserRole.sessionKey: UserRole.landlord.storageToken,
       'email': 'demo.landlord@truecircle.dev',
       'full_name': 'Demo Landlord',
-      'role': 'host',
       'onboarding_intent': 'provider',
       'supabase_user_id': 'demo-landlord-uuid',
       'trust_tier': 'Sound',
@@ -62,7 +66,7 @@ abstract final class DemoAuthService {
     return {
       'email': demoSeekerEmail,
       'full_name': 'Demo Seeker',
-      'role': 'seeker',
+      UserRole.sessionKey: UserRole.seeker.storageToken,
       'onboarding_intent': 'seeker',
       ActiveModeService.lastActiveModeKey: ActiveMode.explore.storageToken,
       ActiveModeService.lastModeUpdatedAtKey: now,
@@ -77,10 +81,11 @@ abstract final class DemoAuthService {
       'trust_stage': 1,
       'identity_trust_tier': 'Casual_Browser',
       'commute_method': CommuteMethod.backendPublicTransportWalking,
-      'maximum_commute_budget_minutes': 45,
+      'maximum_commute_budget_minutes': 60,
       'preferred_arrangement': MarketplaceSpace.sharedSpace.arrangementBackend,
       'preferred_property_type': MarketplaceSpace.sharedSpace.towerPropertyType,
       'active_marketplace_space': MarketplaceSpace.sharedSpace.storageToken,
+      'move_in_window': SeekerMoveInWindow.flexible.storageToken,
       'demo_mode': true,
       ...DublinCommuterHubs.persistFields(tcdHub),
     };
@@ -98,6 +103,9 @@ abstract final class DemoAuthService {
     return {
       ...defaults,
       ...existing!,
+      // Role is authoritative for routing — never inherit landlord role.
+      UserRole.sessionKey: UserRole.seeker.storageToken,
+      'onboarding_intent': 'seeker',
     };
   }
 
@@ -116,5 +124,6 @@ abstract final class DemoAuthService {
     AuthScreen.currentUserSession = next;
     await ProfileStorageService.save(next);
     await marketplaceContextNotifier.refresh();
+    authSessionNotifier.refresh();
   }
 }

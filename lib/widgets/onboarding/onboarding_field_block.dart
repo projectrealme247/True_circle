@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../emoji_leading_row.dart';
-import '../listing_creation/listing_creation_primitives.dart';
 import 'onboarding_choice_chip.dart';
 import 'onboarding_design_tokens.dart';
 
@@ -13,20 +12,27 @@ class OnboardingStepCard extends StatelessWidget {
     required this.title,
     required this.child,
     this.verticalPadding = OnboardingTokens.stepCardPaddingV,
+    this.seekerTypography = false,
   });
 
   final String title;
   final Widget child;
   final double verticalPadding;
+  /// Pass-1 section headings (16 / semibold).
+  final bool seekerTypography;
 
   @override
   Widget build(BuildContext context) {
+    final titleStyle = seekerTypography
+        ? SeekerOnboardingLayout.sectionLabel
+        : OnboardingTokens.sectionLabelStyle;
+    final padding = EdgeInsets.symmetric(
+      horizontal: OnboardingTokens.stepCardPaddingH,
+      vertical: verticalPadding,
+    );
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: OnboardingTokens.stepCardPaddingH,
-        vertical: verticalPadding,
-      ),
+      padding: padding,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(OnboardingTokens.stepCardRadius),
@@ -35,8 +41,12 @@ class OnboardingStepCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: OnboardingTokens.sectionLabelStyle),
-          const SizedBox(height: 12),
+          Text(title, style: titleStyle),
+          SizedBox(
+            height: seekerTypography
+                ? OnboardingTokens.space8
+                : OnboardingTokens.space12,
+          ),
           child,
         ],
       ),
@@ -67,12 +77,12 @@ class OnboardingFieldBlock extends StatelessWidget {
             EmojiLeadingRow(
               emoji: labelEmoji!,
               text: label!,
-              style: listingFieldLabelStyle,
+              style: SeekerOnboardingLayout.fieldLabel,
               crossAxisAlignment: CrossAxisAlignment.start,
             )
           else
-            Text(label!, style: listingFieldLabelStyle),
-          const SizedBox(height: listingLabelSpacing),
+            Text(label!, style: SeekerOnboardingLayout.fieldLabel),
+          const SizedBox(height: OnboardingTokens.space4),
         ],
         child,
       ],
@@ -87,11 +97,13 @@ class OnboardingStackedChoiceList extends StatelessWidget {
     required this.options,
     required this.selectedIndex,
     required this.onSelected,
+    this.seekerOptionStyle = true,
   });
 
   final List<String> options;
   final int? selectedIndex;
   final ValueChanged<int> onSelected;
+  final bool seekerOptionStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -99,11 +111,12 @@ class OnboardingStackedChoiceList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < options.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
+          if (i > 0) SizedBox(height: seekerOptionStyle ? OnboardingTokens.space8 : OnboardingTokens.space8),
           OnboardingChoiceChip(
             label: options[i],
             selected: selectedIndex == i,
             onTap: () => onSelected(i),
+            seekerOptionStyle: seekerOptionStyle,
           ),
         ],
       ],
@@ -119,12 +132,18 @@ class OnboardingEqualGridRow extends StatelessWidget {
     required this.selectedIndices,
     required this.onSelected,
     this.compactLabel = true,
+    this.dense = false,
+    this.seekerOptionStyle = true,
+    this.fixedHeight,
   });
 
   final List<String> labels;
   final Set<int> selectedIndices;
   final ValueChanged<int> onSelected;
   final bool compactLabel;
+  final bool dense;
+  final bool seekerOptionStyle;
+  final double? fixedHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +152,7 @@ class OnboardingEqualGridRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < labels.length; i++) ...[
-            if (i > 0) const SizedBox(width: 8),
+            if (i > 0) SizedBox(width: dense ? OnboardingTokens.space8 : OnboardingTokens.space8),
             Expanded(
               child: OnboardingChoiceChip(
                 label: labels[i],
@@ -141,6 +160,9 @@ class OnboardingEqualGridRow extends StatelessWidget {
                 onTap: () => onSelected(i),
                 centerLabel: true,
                 compactLabel: compactLabel,
+                dense: dense,
+                seekerOptionStyle: seekerOptionStyle,
+                fixedHeight: fixedHeight,
               ),
             ),
           ],

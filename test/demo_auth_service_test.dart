@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:true_circle/models/onboarding_user_role.dart';
 import 'package:true_circle/services/demo_auth_service.dart';
 
 void main() {
@@ -12,6 +13,7 @@ void main() {
       expect(merged['budget_max'], 2500);
       expect(merged['commute_destination_hub_id'], 'tcd');
       expect(merged['demo_mode'], isTrue);
+      expect(merged['move_in_window'], 'flexible');
       expect(merged.containsKey('food_preference'), isFalse);
     });
 
@@ -38,6 +40,14 @@ void main() {
       expect(merged['spoken_languages'], ['English']);
       expect(merged['budget_max'], 2500);
       expect(merged['role'], 'seeker');
+      expect(merged['role'], UserRole.seeker.storageToken);
+    });
+
+    test('demo landlord defaults use landlord role token', () {
+      // Role is set in enterAsDemoLandlord; defaults mirror seeker pattern.
+      expect(UserRole.landlord.storageToken, 'landlord');
+      expect(UserRole.fromSession({'role': 'landlord'}), UserRole.landlord);
+      expect(UserRole.fromSession({'role': 'seeker'}), UserRole.seeker);
     });
 
     test('demoSeekerDefaults omits food_preference', () {
