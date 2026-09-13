@@ -6,7 +6,6 @@ import 'package:true_circle/services/open_banking_provider.dart';
 import 'package:true_circle/services/trust_service.dart';
 import 'package:true_circle/utils/open_banking_liquidity_validator.dart';
 import 'package:true_circle/utils/profile_data.dart';
-import 'package:true_circle/utils/viewer_profile.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -90,7 +89,7 @@ void main() {
   });
 
   group('TrustService.upgradeOpenBanking', () {
-    test('sets Grand tier and financial metadata', () async {
+    test('sets financial metadata without trust_tier', () async {
       await TrustService.upgradeOpenBanking(
         verificationSeal: 'sealed-ob',
         verifiedAt: '2026-06-11',
@@ -98,11 +97,12 @@ void main() {
       );
 
       final session = AuthScreen.currentUserSession!;
-      expect(session['trust_tier'], 'Grand');
+      expect(session.containsKey('trust_tier'), isFalse);
+      expect(session.containsKey('trust_stage'), isFalse);
+      expect(session.containsKey('identity_trust_tier'), isFalse);
       expect(session['financial_verified'], isTrue);
       expect(session['verification_track'], 'Open Banking Track');
       expect(session['open_banking_institution'], 'AIB');
-      expect(TrustService.currentStage(), TrustStage.socialVerified);
     });
   });
 }

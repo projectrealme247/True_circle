@@ -8,7 +8,6 @@ import '../services/profile_storage_service.dart';
 import '../services/profile_sync_boundary_service.dart';
 import '../services/trust_service.dart';
 import '../utils/listing_data.dart';
-import '../utils/viewer_profile.dart';
 import '../widgets/listing_creation/listing_creation_form.dart';
 import 'auth_screen.dart';
 
@@ -36,13 +35,29 @@ class _AddListingScreenState extends State<AddListingScreen> {
   String? _editingListingId;
 
   Map<String, dynamic>? get _effectiveDraftListing {
-    if (widget.draftListing != null) return widget.draftListing;
+    if (widget.draftListing != null) {
+      // Drop Independent Place profile-prefill maps; keep real drafts + Shared Living.
+      if (_isIndependentPlaceProfilePrefill(widget.draftListing!)) {
+        return null;
+      }
+      return widget.draftListing;
+    }
     if (widget.editingListing != null) return null;
     final profile = AuthScreen.currentUserSession;
     if (profile == null || profile.isEmpty) return null;
     final snapshot = ProfileOnboardingRepository.snapshotFromSession(profile);
     if (!snapshot.track.isLandlord) return null;
+    // Independent Place: blank Add Listing — no profile prefill inheritance.
+    // Shared Living keeps listingPrefill() behavior.
+    if (!snapshot.track.isSharedSpace) return null;
     return ProfilePortalInheritanceService.listingPrefill(snapshot).toDraftMap();
+  }
+
+  /// Profile onboarding seed for entire-place landlords (not a saved listing draft).
+  bool _isIndependentPlaceProfilePrefill(Map<String, dynamic> raw) {
+    if (!raw.containsKey('prefill_listing_mode')) return false;
+    final mode = ListingData.text(raw['prefill_listing_mode']).toLowerCase();
+    return mode.isNotEmpty && mode != 'shared_space';
   }
 
   @override
@@ -92,12 +107,6 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
       if (!mounted) return;
 
-      final stage = TrustService.currentStage();
-      if (stage.level < TrustStage.idVerified.level) {
-        await _showUpgradeNudge(stage);
-        if (!mounted) return;
-      }
-
       context.go(
         _editingListingId != null
             ? '/listing/${saved['id']}'
@@ -110,93 +119,6 @@ class _AddListingScreenState extends State<AddListingScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  Future<void> _showUpgradeNudge(TrustStage current) async {
-    final isCasual = current == TrustStage.casual;
-    final boostPct = isCasual ? '29%' : '11%';
-    final nextLabel = isCasual ? 'Verified Pro' : 'ID Verified';
-    final nextRoute = isCasual ? '/verify/social' : '/verify/id';
-    final nextIcon = isCasual
-        ? Icons.workspace_premium_rounded
-        : Icons.verified_user_rounded;
-    final nextColor = isCasual
-        ? const Color(0xFF7C3AED)
-        : const Color(0xFF16A34A);
-
-    await showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD1D5DB),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Icon(Icons.check_circle_rounded,
-                color: Color(0xFF16A34A), size: 40),
-            const SizedBox(height: 12),
-            const Text(
-              'Your listing is live!',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1C1E21),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Upgrade to $nextLabel to rank $boostPct higher',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF606770),
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  context.push(nextRoute);
-                },
-                icon: Icon(nextIcon, size: 20),
-                label: Text('Upgrade to $nextLabel'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: nextColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text(
-                'Maybe later',
-                style: TextStyle(
-                  color: Color(0xFF9CA3AF),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showMessage(String text) {

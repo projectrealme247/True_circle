@@ -17,6 +17,8 @@ abstract final class ListingCreationPayloadBuilder {
       'type': draft.category.towerPropertyType,
       'listing_type': draft.category.towerPropertyType,
       ListingCreationFieldKeys.marketplaceCategory: draft.category.storageToken,
+      ListingCreationFieldKeys.publishedAt:
+          DateTime.now().toUtc().toIso8601String(),
       if (draft.latitude != null) ListingCreationFieldKeys.latitude: draft.latitude,
       if (draft.longitude != null)
         ListingCreationFieldKeys.longitude: draft.longitude,
@@ -25,6 +27,8 @@ abstract final class ListingCreationPayloadBuilder {
       'hostLanguage': draft.hostLanguage.trim(),
       'hostMotherTongue': draft.hostMotherTongue.trim(),
       'hostFoodPreference': draft.hostFoodPreference.trim(),
+      if (draft.listingAuthorizationConfirmed)
+        ListingCreationFieldKeys.listingAuthorizationConfirmed: true,
     };
 
     if (draft.category.isIndependent) {
@@ -68,11 +72,10 @@ abstract final class ListingCreationPayloadBuilder {
           local['host_mother_tongue'] ?? local['hostMotherTongue'],
       'host_food_preference':
           local['host_food_preference'] ?? local['hostFoodPreference'],
+      if (local[ListingCreationFieldKeys.listingAuthorizationConfirmed] == true)
+        ListingCreationFieldKeys.listingAuthorizationConfirmed: true,
       if (local[ListingCreationFieldKeys.bedsCount] != null)
         ListingCreationFieldKeys.bedsCount: local[ListingCreationFieldKeys.bedsCount],
-      if (local[ListingCreationFieldKeys.rtbStatus] != null)
-        ListingCreationFieldKeys.rtbStatus: local[ListingCreationFieldKeys.rtbStatus],
-      if (local['rtb_registered'] != null) 'rtb_registered': local['rtb_registered'],
       if (local[ListingCreationFieldKeys.parkingAvailable] != null)
         ListingCreationFieldKeys.parkingAvailable:
             local[ListingCreationFieldKeys.parkingAvailable],
@@ -100,13 +103,10 @@ abstract final class ListingCreationPayloadBuilder {
 
   static Map<String, dynamic> _independentFields(ListingCreationDraft draft) {
     final parking = draft.parkingAvailable!;
-    final rtb = draft.rtbStatus!;
 
     return {
       ListingCreationFieldKeys.bedsCount: draft.bedsCount,
       'bedrooms': '${draft.bedsCount} bed',
-      ListingCreationFieldKeys.rtbStatus: rtb.storageValue,
-      'rtb_registered': rtb == ListingRtbStatus.registered,
       ListingCreationFieldKeys.parkingAvailable: parking,
       'parking_type': parking ? 'free_dedicated_parking' : 'no_parking',
     };
@@ -157,6 +157,11 @@ abstract final class ListingCreationPayloadBuilder {
       if (local['preferred_tenant_occupant'] != null)
         'preferred_tenant_occupant': local['preferred_tenant_occupant'],
       if (local['foodPreference'] != null) 'foodPreference': local['foodPreference'],
+      if (local[ListingCreationFieldKeys.publishedAt] != null)
+        ListingCreationFieldKeys.publishedAt:
+            local[ListingCreationFieldKeys.publishedAt],
+      if (local[ListingCreationFieldKeys.listingAuthorizationConfirmed] == true)
+        ListingCreationFieldKeys.listingAuthorizationConfirmed: true,
     });
   }
 }

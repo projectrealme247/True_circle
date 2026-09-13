@@ -9,7 +9,7 @@ TrueCircle is a trust-weighted property marketplace for renting, sharing, and bu
 - **Three marketplace towers** -- Rent, Share (roommates/PG), and Buy/Sell, each with tower-specific scoring
 - **Trust-as-multiplier ranking** -- `Final Score = TrustMultiplier x CompatibilityScore`. Verified listings always outrank unverified ones
 - **3-stage progressive trust funnel** -- Stage 1 (cultural profile), Stage 2 (LinkedIn/social verification), Stage 3 (Aadhaar ID + passkey)
-- **Cultural compatibility matching** -- Food preference, language, nativity, occupant type, gender, and lifestyle signals
+- **Cultural compatibility matching** -- Food preference, language, occupant type, gender, and lifestyle signals
 - **Circle communities** -- Passive trust groups based on shared cultural markers and verification level
 - **Schedule property viewings** -- Book an appointment to visit a listing directly from the app
 

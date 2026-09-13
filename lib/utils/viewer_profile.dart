@@ -1,28 +1,9 @@
 ﻿import '../models/move_in_timing.dart';
+import '../models/financial_support_type.dart';
+import 'accepted_district_recommendations.dart';
 import 'profile_data.dart';
+import 'shared_living_match_tokens.dart';
 import 'target_search_areas.dart';
-
-/// Trust verification stages for the progressive trust funnel.
-enum TrustStage {
-  anonymous(0, 0.4, 'Anonymous'),
-  casual(1, 0.7, 'Casual Browser'),
-  socialVerified(2, 0.9, 'Social Verified'),
-  idVerified(3, 1.0, 'ID Verified');
-
-  const TrustStage(this.level, this.multiplier, this.label);
-
-  final int level;
-  final double multiplier;
-  final String label;
-
-  static TrustStage fromLevel(int level) => switch (level) {
-        0 => TrustStage.anonymous,
-        1 => TrustStage.casual,
-        2 => TrustStage.socialVerified,
-        3 => TrustStage.idVerified,
-        _ => TrustStage.anonymous,
-      };
-}
 
 /// Primary seeker persona for trust gates and contact flows.
 enum SeekerCohort {
@@ -39,7 +20,6 @@ enum SeekerCohort {
 class ViewerProfile {
   const ViewerProfile({
     required this.city,
-    required this.nativePlace,
     required this.motherTongue,
     required this.spokenLanguages,
     required this.foodPreference,
@@ -53,8 +33,7 @@ class ViewerProfile {
     required this.preferredPropertyType,
     required this.completenessPercent,
     required this.hasCompany,
-    required this.trustStage,
-    required this.circleMarkers,
+    this.preferredLayout = '',
     this.linkedinVerified = false,
     this.linkedinCompany = '',
     this.linkedinTitle = '',
@@ -69,15 +48,18 @@ class ViewerProfile {
     this.childrenAges = const [],
     this.groupSize = 1,
     this.targetSearchAreas = const [],
+    this.acceptedDistrictRecommendations = const [],
     this.isPreArrivalSeeker = false,
     this.moveInWindow = '',
     this.earliestMoveInDate = '',
     this.hasVerifiedPreArrivalDocs = false,
     this.needsOnboarding = false,
+    this.shareOccupantGender = SharedLivingMatchTokens.noPreference,
+    this.shareBathroomPreference = SharedLivingMatchTokens.noPreference,
+    this.shareRoomLayout = '',
   });
 
   final String city;
-  final String nativePlace;
   final String motherTongue;
   final List<String> spokenLanguages;
   final String foodPreference;
@@ -89,11 +71,12 @@ class ViewerProfile {
   final int? budgetMin;
   final int? budgetMax;
   final String preferredPropertyType;
+
+  /// Seeker bed/room layout preference (`Studio`, `1 Bed`, `Ensuite Room`, …).
+  final String preferredLayout;
   final int completenessPercent;
   final bool hasCompany;
 
-  final TrustStage trustStage;
-  final List<String> circleMarkers;
   final bool linkedinVerified;
   final String linkedinCompany;
   final String linkedinTitle;
@@ -108,6 +91,10 @@ class ViewerProfile {
   final List<String> childrenAges;
   final int groupSize;
   final List<String> targetSearchAreas;
+
+  /// Accepted district recommendation signals (soft; unused by ranking until wired).
+  final List<AcceptedDistrictRecommendation> acceptedDistrictRecommendations;
+
   final bool isPreArrivalSeeker;
 
   /// Seeker move-in window token (`this_month`, `next_month`, etc.).
@@ -121,6 +108,15 @@ class ViewerProfile {
 
   /// Profile shell exists but lacks fields required for meaningful matching.
   final bool needsOnboarding;
+
+  /// Canonical Shared Living gender for matching (`male` / `female` / `no_preference`).
+  final String shareOccupantGender;
+
+  /// Canonical bathroom preference (`private_ensuite` / `shared_bathroom` / `no_preference`).
+  final String shareBathroomPreference;
+
+  /// Canonical Shared room layout (`private_room` / `shared_room` / empty for IP layouts).
+  final String shareRoomLayout;
 
   static bool sessionNeedsOnboarding(Map<String, dynamic> raw) {
     return ProfileData.text(raw['detected_city']).isEmpty ||
@@ -137,7 +133,6 @@ class ViewerProfile {
   static ViewerProfile incompleteShell(Map<String, dynamic> raw) {
     return ViewerProfile(
       city: '',
-      nativePlace: '',
       motherTongue: '',
       spokenLanguages: const [],
       foodPreference: '',
@@ -149,10 +144,9 @@ class ViewerProfile {
       budgetMin: null,
       budgetMax: null,
       preferredPropertyType: ProfileData.text(raw['preferred_property_type']),
+      preferredLayout: ProfileData.text(raw['preferred_layout']),
       completenessPercent: 0,
       hasCompany: false,
-      trustStage: _resolveTrustStage(raw),
-      circleMarkers: const [],
       needsOnboarding: true,
     );
   }
@@ -161,7 +155,6 @@ class ViewerProfile {
     if (raw == null || raw.isEmpty) return null;
 
     final city = ProfileData.text(raw['detected_city']);
-    final nativePlace = ProfileData.text(raw['native_place']);
     final motherTongue = ProfileData.text(raw['mother_tongue']);
     final spoken = ProfileData.languageList(raw['spoken_languages']);
     final food = ProfileData.text(raw['food_preference']);
@@ -171,10 +164,13 @@ class ViewerProfile {
     final gender = ProfileData.text(
       raw['gender_preference'] ?? raw['gender'],
     );
-    final student = ProfileData.text(raw['student_type']);
+    final student = FinancialSupportType.fromSession(raw) ??
+        ProfileData.text(raw['student_type']);
+    // studentType on ViewerProfile holds financial-support label when present.
     final company = ProfileData.text(raw['company']);
     final jobTitle = ProfileData.text(raw['job_title']);
     final preferredType = ProfileData.text(raw['preferred_property_type']);
+    final preferredLayout = ProfileData.text(raw['preferred_layout']);
 
     final budgetMin = _parseInt(raw['budget_min']);
     final budgetMax = _parseInt(raw['budget_max']);
@@ -192,17 +188,8 @@ class ViewerProfile {
       return null;
     }
 
-    final trustStage = _resolveTrustStage(raw);
-    final circleMarkers = _deriveCircleMarkers(
-      motherTongue: motherTongue,
-      food: food,
-      city: city,
-      nativePlace: nativePlace,
-    );
-
     return ViewerProfile(
       city: city,
-      nativePlace: nativePlace,
       motherTongue: motherTongue,
       spokenLanguages: spoken,
       foodPreference: food,
@@ -214,10 +201,9 @@ class ViewerProfile {
       budgetMin: budgetMin,
       budgetMax: budgetMax,
       preferredPropertyType: preferredType,
+      preferredLayout: preferredLayout,
       completenessPercent: completeness,
       hasCompany: company.isNotEmpty,
-      trustStage: trustStage,
-      circleMarkers: circleMarkers,
       linkedinVerified: raw['linkedin_verified'] == true,
       linkedinCompany: ProfileData.text(raw['linkedin_company']),
       linkedinTitle: ProfileData.text(raw['linkedin_title']),
@@ -232,21 +218,32 @@ class ViewerProfile {
       childrenAges: _parseChildrenAges(raw),
       groupSize: (raw['group_size'] is int) ? raw['group_size'] as int : 1,
       targetSearchAreas: TargetSearchAreas.hydrateFromSession(raw),
-      isPreArrivalSeeker: raw['pre_arrival_contact_ready'] == true &&
+      acceptedDistrictRecommendations:
+          AcceptedDistrictRecommendations.hydrateFromSession(raw),
+      isPreArrivalSeeker: _isPreArrivalSeeker(raw) &&
           ProfileData.text(raw['verified_university_email']).isEmpty,
       moveInWindow:
           SeekerMoveInWindow.fromSession(raw)?.storageToken ?? '',
       earliestMoveInDate: ProfileData.text(raw['earliest_move_in_date']),
       hasVerifiedPreArrivalDocs: _resolveVerifiedPreArrivalDocs(raw),
       needsOnboarding: needsOnboarding,
+      shareOccupantGender: SharedLivingMatchTokens.genderFromSeekerSession(raw),
+      shareBathroomPreference:
+          SharedLivingMatchTokens.bathroomFromSeeker(raw),
+      shareRoomLayout: SharedLivingMatchTokens.roomFromSeeker(raw),
     );
   }
 
-  static double trustMultiplierForStage(int stage) =>
-      TrustStage.fromLevel(stage).multiplier;
+  static bool _isPreArrivalSeeker(Map<String, dynamic> raw) {
+    if (raw['pre_arrival_student'] == true) return true;
+    if (raw['pre_arrival_contact_ready'] == true) return true;
+    return raw['invite_code_verified'] == true &&
+        raw['onboarding_letter_verified'] == true;
+  }
 
   static bool _resolveVerifiedPreArrivalDocs(Map<String, dynamic> raw) {
     if (raw['has_verified_pre_arrival_docs'] == true) return true;
+    if (raw['pre_arrival_student'] == true) return true;
     if (raw['onboarding_letter_verified'] == true) return true;
     if (raw['employment_contract_verified'] == true) return true;
     if (raw['relocation_letter_verified'] == true) return true;
@@ -278,90 +275,6 @@ class ViewerProfile {
     return List.generate(count, (_) => legacy);
   }
 
-  static TrustStage _resolveTrustStage(Map<String, dynamic> raw) {
-    final explicit = raw['trust_stage'];
-    if (explicit is int) return TrustStage.fromLevel(explicit);
-
-    final tier = ProfileData.text(raw['identity_trust_tier']).toLowerCase();
-    if (tier.contains('id_verified')) return TrustStage.idVerified;
-    if (tier.contains('social_verified')) return TrustStage.socialVerified;
-    if (tier.contains('casual')) return TrustStage.casual;
-
-    final hasProfile = ProfileData.text(raw['full_name']).isNotEmpty &&
-        ProfileData.text(raw['detected_city']).isNotEmpty;
-    return hasProfile ? TrustStage.casual : TrustStage.anonymous;
-  }
-
-  /// Derive cultural markers for circle membership checks.
-  static List<String> _deriveCircleMarkers({
-    required String motherTongue,
-    required String food,
-    required String city,
-    required String nativePlace,
-  }) {
-    final markers = <String>[];
-    final mt = motherTongue.trim().toLowerCase();
-    if (mt.isNotEmpty) markers.add(mt);
-
-    final f = food.trim().toLowerCase();
-    if (f.contains('veg') && !f.contains('non')) {
-      markers.add('veg');
-    } else if (f.contains('non')) {
-      markers.add('non-veg');
-    }
-
-    final c = city.trim().toLowerCase().split(',').first.trim();
-    if (c.isNotEmpty) markers.add(c);
-
-    final np = nativePlace.trim().toLowerCase();
-    if (np.isNotEmpty && np != c) markers.add(np);
-
-    return markers;
-  }
-
-  /// Compute circle markers for a listing host from listing data.
-  static List<String> circleMarkersForListing(Map<String, dynamic> listing) {
-    final raw = listing['host_circle_markers'];
-    if (raw is List) {
-      return raw.map((e) => e.toString().trim().toLowerCase()).where((s) => s.isNotEmpty).toList();
-    }
-
-    final motherTongue = ProfileData.text(
-      listing['hostMotherTongue'] ?? listing['owner_mother_tongue'],
-    );
-    final food = ProfileData.text(
-      listing['hostFoodPreference'] ?? listing['foodPreference'] ?? listing['owner_food_pref'],
-    );
-    final city = ProfileData.text(
-      listing['hostCity'] ?? listing['owner_city'] ?? listing['location'],
-    );
-
-    return _deriveCircleMarkers(
-      motherTongue: motherTongue,
-      food: food,
-      city: city,
-      nativePlace: '',
-    );
-  }
-
-  /// Check if a listing host is "in your circle":
-  /// same trust level or higher AND shares at least one cultural marker.
-  bool isInCircle(Map<String, dynamic> listing) {
-    final hostTrust = _hostTrustStage(listing);
-    if (hostTrust.level < trustStage.level) return false;
-
-    final hostMarkers = circleMarkersForListing(listing);
-    return circleMarkers.any((m) => hostMarkers.contains(m));
-  }
-
-  static TrustStage _hostTrustStage(Map<String, dynamic> listing) {
-    final explicit = listing['host_trust_stage'];
-    if (explicit is int) return TrustStage.fromLevel(explicit);
-    if (listing['host_verified_badge'] == true) return TrustStage.idVerified;
-    if (listing['host_linkedin_badge'] != null) return TrustStage.socialVerified;
-    return TrustStage.casual;
-  }
-
   static int? _parseInt(dynamic value) {
     if (value == null) return null;
     final digits = RegExp(r'\d+').stringMatch(value.toString().replaceAll(',', ''));
@@ -374,17 +287,20 @@ class ViewerProfile {
       'full_name',
       'email',
       'detected_city',
-      'native_place',
       'mother_tongue',
       'food_preference',
       'spoken_languages',
       'occupant_type',
       'gender_preference',
-      'student_type',
+      'financial_support_type',
       'company',
     ];
     var filled = 0;
     for (final key in keys) {
+      if (key == 'financial_support_type') {
+        if (FinancialSupportType.fromSession(raw) != null) filled++;
+        continue;
+      }
       final value = raw[key];
       if (value is List && value.isNotEmpty) {
         filled++;

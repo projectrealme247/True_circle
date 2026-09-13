@@ -1,22 +1,23 @@
----
-description: Keep demo landlord/seeker as primary auth entry until user asks to remove
-alwaysApply: true
----
+# QA test accounts (debug-only)
 
-# Demo auth entry (persistent)
-
-Do **not** remove or demote the demo-first auth flow unless the user explicitly asks to remove it.
+QA one-click identities are for **debug/dev testing only**. Production builds must show real email/password sign-in and must not treat `demo_mode` / `qa_mode` as authenticated except in `kDebugMode`.
 
 ## Required behavior
 
-- `AuthScreen` login mode defaults to **demo entry first** (`_showEmailLogin == false`).
-- Primary CTAs: **Demo Landlord** and **Demo Seeker** (one-click, no Supabase email/password).
-- Email/password sign-in stays behind **"Sign in with email instead"** — do not make it the default again.
-- `DemoAuthService` must remain usable in debug/dev without requiring `DEMO_AUTH_BYPASS` env alone.
-- Demo navigation: landlord → `/?promptFirstListing=1`, seeker → `/?welcomeFeed=1`.
+- `AuthScreen` login mode defaults to **email/password first**.
+- Primary CTA: real **Sign in**.
+- QA accounts appear below the form when `kDebugMode` is true (labeled DEV ONLY):
+  - `landlord.independent`
+  - `landlord.shared`
+  - `seeker.independent`
+  - `seeker.shared`
+- `QaTestAuthService.isEnabled` is `kDebugMode` only.
+- Do **not** restore generic Demo Landlord / Demo Seeker as the primary debug entry.
+- Keep New Landlord / New Seeker for incomplete onboarding tests.
+- Landlords land on `/landlord-dashboard`. Seekers `router.go('/?welcomeFeed=1')` after dismissing any pushed Auth overlay — do not use `navigateAfterIdentity` for QA seekers.
+- Each account has a stable `supabase_user_id` and a per-account profile slot that survives sign-out / restart.
 
 ## When refactoring auth
 
-- Preserve `_buildDemoEntrySection` and demo handlers (`_enterAsDemoLandlord`, `_enterAsDemoSeeker`).
-- Do not gate demo buttons behind `DEMO_AUTH_BYPASS` only.
-- Do not replace demo entry with login-only UI without explicit user request.
+- Preserve `_buildDemoEntrySection` and `_enterAsQaAccount`.
+- Do not reintroduce `DEMO_AUTH_BYPASS` as a production gate.

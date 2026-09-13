@@ -26,10 +26,10 @@ void main() {
       );
     });
 
-    test('highlightLabel preserves RTB acronym and title-cases words', () {
+    test('highlightLabel preserves short acronyms and title-cases words', () {
       expect(
-        ListingDetailCopy.highlightLabel('RTB status not provided'),
-        'RTB Status Not Provided',
+        ListingDetailCopy.highlightLabel('BER status not provided'),
+        'BER Status Not Provided',
       );
       expect(
         ListingDetailCopy.highlightLabel('Ask host about parking'),
@@ -39,10 +39,9 @@ void main() {
   });
 
   group('ListingData matrix fallbacks', () {
-    test('unknown rtb and parking use title case copy', () {
+    test('unknown parking uses title case copy', () {
       final listing = <String, dynamic>{};
 
-      expect(ListingData.rtbMatrixLabel(listing), 'RTB Status Not Provided');
       expect(ListingData.parkingMatrixLabel(listing), 'Ask Host About Parking');
     });
   });

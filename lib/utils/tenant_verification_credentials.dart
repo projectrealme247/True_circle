@@ -1,21 +1,22 @@
+import '../models/applicant_trust_tier.dart';
+import '../services/trust_service.dart';
 import 'profile_data.dart';
-import 'viewer_profile.dart';
-
 /// GDPR-safe landlord-facing verification summary — no raw financial fields.
 class TenantVerificationCredentials {
   const TenantVerificationCredentials({
     required this.tierLabel,
     required this.tierTextColor,
     required this.tierBackgroundColor,
-    required this.trustStage,
+    required this.isVerifiedUser,
     this.track,
     this.showTrackChecklist = false,
   });
 
+  /// Display label: ✅ Verified User or empty — never Just Landed / Grand / Sound.
   final String tierLabel;
   final int tierTextColor; // stored as ARGB for testability — use Color in UI
   final int tierBackgroundColor;
-  final TrustStage trustStage;
+  final bool isVerifiedUser;
   final TenantVerificationTrack? track;
   final bool showTrackChecklist;
 
@@ -46,7 +47,6 @@ class TenantVerificationCredentials {
   }
 
   static TenantVerificationCredentials fromSession(Map<String, dynamic> session) {
-    final stage = _stageFromSession(session);
     final trackToken = ProfileData.text(session['verification_track']);
 
     TenantVerificationTrack? track;
@@ -62,46 +62,25 @@ class TenantVerificationCredentials {
       showTrackChecklist = true;
     }
 
-    final badge = _badgeForStage(stage);
+    final verified = TrustService.meetsContactVerification(session);
+    final badge = _badgeForContact(verified);
 
     return TenantVerificationCredentials(
       tierLabel: badge.label,
       tierTextColor: badge.textColor,
       tierBackgroundColor: badge.backgroundColor,
-      trustStage: stage,
+      isVerifiedUser: verified,
       track: track,
       showTrackChecklist: showTrackChecklist,
     );
   }
 
-  static TrustStage _stageFromSession(Map<String, dynamic> session) {
-    final rawStage = session['trust_stage'];
-    if (rawStage is int) {
-      return TrustStage.fromLevel(rawStage);
-    }
-
-    final tier = ProfileData.text(session['trust_tier']).toLowerCase();
-    if (tier == 'sound') return TrustStage.idVerified;
-    if (tier == 'grand') return TrustStage.socialVerified;
-
-    final identityTier = ProfileData.text(session['identity_trust_tier']).toLowerCase();
-    if (identityTier.contains('id_verified')) return TrustStage.idVerified;
-    if (identityTier.contains('social')) return TrustStage.socialVerified;
-
-    return TrustStage.casual;
-  }
-
   static const _neutralTextColor = 0xFF717171;
   static const _neutralBackgroundColor = 0xFFF0F0F0;
 
-  static _TierBadge _badgeForStage(TrustStage stage) {
-    final label = switch (stage) {
-      TrustStage.idVerified => 'Sound',
-      TrustStage.socialVerified => 'Grand',
-      _ => 'Just Landed',
-    };
+  static _TierBadge _badgeForContact(bool verified) {
     return _TierBadge(
-      label: label,
+      label: verified ? ApplicantTrustTier.verifiedUserLabel : '',
       textColor: _neutralTextColor,
       backgroundColor: _neutralBackgroundColor,
     );

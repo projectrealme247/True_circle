@@ -15,34 +15,6 @@ abstract final class ListingCardOverlayTokens {
   static const frostedBgAlpha = 0.92;
 }
 
-/// Premium indigo signature for closed-loop "In Your Circle" relational markers.
-abstract final class InYourCircleOverlayTokens {
-  InYourCircleOverlayTokens._();
-
-  static const background = Color(0xFFEEF2FF);
-  static const text = Color(0xFF4338CA);
-  static const border = Color(0xFFC7D2FE);
-  static const borderWidth = 1.2;
-  static const label = '⭕ In Your Circle';
-  static const capsuleRadius = 100.0;
-
-  static const labelStyle = TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.w700,
-    color: text,
-    height: 1.2,
-    letterSpacing: -0.1,
-  );
-
-  static const bannerLabelStyle = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w700,
-    color: text,
-    height: 1.2,
-    letterSpacing: -0.1,
-  );
-}
-
 /// Frosted image overlay shell for listing card badges.
 class ListingCardOverlayBadge extends StatelessWidget {
   const ListingCardOverlayBadge({
@@ -107,50 +79,22 @@ class ListingCardMatchOverlayBadge extends StatelessWidget {
   }
 }
 
-/// Trust Scale tier chip (🌱/☘️/💎) for listing image overlays.
+/// Trust Scale tier chip — never shows from trust_tier alone.
 class ListingCardTrustTierOverlayBadge extends StatelessWidget {
-  const ListingCardTrustTierOverlayBadge({super.key, required this.tier});
+  const ListingCardTrustTierOverlayBadge({
+    super.key,
+    required this.tier,
+    this.isVerified = false,
+  });
 
   final ApplicantTrustTier tier;
+  final bool isVerified;
 
   @override
   Widget build(BuildContext context) {
+    if (!isVerified) return const SizedBox.shrink();
     return ListingCardOverlayBadge(
-      child: TrustTierBadge(tier: tier, compact: true),
-    );
-  }
-}
-
-/// Indigo relational chip — secure closed-loop network marker on listing images.
-class ListingCardInCircleOverlayBadge extends StatelessWidget {
-  const ListingCardInCircleOverlayBadge({super.key, this.frosted = true});
-
-  final bool frosted;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListingCardOverlayBadge(
-      frosted: frosted,
-      child: Container(
-        padding: TrustTierDesign.trustScaleCapsulePadding,
-        decoration: BoxDecoration(
-          color: InYourCircleOverlayTokens.background.withValues(
-            alpha: frosted ? ListingCardOverlayTokens.frostedBgAlpha : 1,
-          ),
-          borderRadius:
-              BorderRadius.circular(InYourCircleOverlayTokens.capsuleRadius),
-          border: Border.all(
-            color: InYourCircleOverlayTokens.border,
-            width: InYourCircleOverlayTokens.borderWidth,
-          ),
-        ),
-        child: Text(
-          InYourCircleOverlayTokens.label,
-          style: InYourCircleOverlayTokens.labelStyle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
+      child: TrustTierBadge(tier: tier, isVerified: true, compact: true),
     );
   }
 }

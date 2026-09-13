@@ -8,7 +8,7 @@
 ### Step 1 — Basics
 - Listing Type (Independent Place / Shared Living)
 - Persona (Student / Working Professional / Family)
-- Student → Irish Guarantor (asked on Destination when required)
+- Student → Guarantor (asked on Destination when required)
 - Family → Adults + Children (persona-driven household fields on Basics where applicable)
 - Languages
 

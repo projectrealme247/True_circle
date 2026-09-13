@@ -1,3 +1,4 @@
+import '../models/profile_onboarding_models.dart';
 import '../screens/auth_screen.dart';
 import 'profile_onboarding_repository.dart';
 import 'profile_state_notifier.dart';
@@ -19,8 +20,11 @@ abstract final class ProfileSyncBoundaryService {
         'Smoking allowed'
       else
         'No smoking',
-      if (listingPayload['pets_allowed'] == true)
+      if (listingPayload['pets_allowed'] == true ||
+          listingPayload['pets_policy'] == 'allowed')
         'Pets welcome'
+      else if (listingPayload['pets_policy'] == 'case_by_case')
+        'Pets case-by-case'
       else
         'No pets',
       if (listingPayload['wfh_friendly'] == true) 'WFH friendly',
@@ -30,8 +34,21 @@ abstract final class ProfileSyncBoundaryService {
         'Veg kitchen',
     ];
 
+    final marketplace = listingPayload['marketplace_category']?.toString() ??
+        listingPayload['type']?.toString() ??
+        '';
+    final inferredHostTrack = marketplace.contains('shared') ||
+            marketplace.toLowerCase() == 'share'
+        ? ProfileOnboardingTrack.landlordSharedSpace
+        : ProfileOnboardingTrack.landlordEntirePlace;
+
     final nextSnapshot = ProfileOnboardingRepository.snapshotFromSession({
       ...currentProfile,
+      'full_name': listingPayload['hostName'] ?? currentProfile['full_name'],
+      'host_profile_complete': true,
+      'profile_onboarding_track': inferredHostTrack.storageToken,
+      'listingSeed_listingMode':
+          inferredHostTrack.isSharedSpace ? 'shared_space' : 'entire_place',
       'hostProfile_languages':
           listingPayload['languages_spoken'] ?? snapshot.hostProfile.languages,
       'is_owner_occupier':
@@ -45,6 +62,7 @@ abstract final class ProfileSyncBoundaryService {
               snapshot.listingSeed.isFurnished,
       'smoking_allowed': listingPayload['smoking_allowed'],
       'pets_allowed': listingPayload['pets_allowed'],
+      'pets_policy': listingPayload['pets_policy'],
       'wfh_status': listingPayload['wfh_friendly'],
       'food_preference': updatedHostRules.contains('Veg kitchen')
           ? 'Pure Veg'

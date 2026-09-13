@@ -10,6 +10,21 @@ class NearbyExtraTransit {
 
   final String line;
   final int walkMin;
+
+  Map<String, dynamic> toJson() => {
+        'line': line,
+        'walk_min': walkMin,
+      };
+
+  static NearbyExtraTransit? fromJson(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    final line = raw['line']?.toString().trim() ?? '';
+    if (line.isEmpty) return null;
+    return NearbyExtraTransit(
+      line: line,
+      walkMin: (raw['walk_min'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 /// A grocery option within walking distance of a listing pin.
@@ -18,6 +33,21 @@ class NearbyGroceryOption {
 
   final String brand;
   final int walkMin;
+
+  Map<String, dynamic> toJson() => {
+        'brand': brand,
+        'walk_min': walkMin,
+      };
+
+  static NearbyGroceryOption? fromJson(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    final brand = raw['brand']?.toString().trim() ?? '';
+    if (brand.isEmpty) return null;
+    return NearbyGroceryOption(
+      brand: brand,
+      walkMin: (raw['walk_min'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 /// Snapshot of nearby amenities resolved from OpenStreetMap Overpass API.
@@ -81,6 +111,13 @@ class NearbyAmenities {
       groceries.isEmpty &&
       collegeSchool == null &&
       gpClinic == null;
+
+  /// True when Overpass enrichment includes schools and/or lifestyle POIs.
+  /// Thin transport+grocery-only snapshots are not enrichment-complete.
+  bool get hasEnrichmentCoverage =>
+      lifestyleTags.isNotEmpty ||
+      primarySchool != null ||
+      secondarySchool != null;
 
   /// Combines two snapshots, preferring [primary] and filling gaps from [secondary].
   static NearbyAmenities? merge(NearbyAmenities? primary, NearbyAmenities? secondary) {
@@ -148,7 +185,8 @@ abstract final class OverpassAmenitiesService {
   }) async {
     final cellKey = ProximityResolutionCache.keyFor(latitude, longitude);
     final cached = ProximityResolutionCache.getAmenities(cellKey);
-    if (cached != null && !cached.isEmpty) return cached;
+    // Skip thin cached snapshots (transport/grocery only) so lifestyle can refill.
+    if (cached != null && cached.hasEnrichmentCoverage) return cached;
 
     NearbyAmenities? merged;
     final fromOverpass = await impl.fetchNearbyAmenities(latitude, longitude);
@@ -165,7 +203,7 @@ abstract final class OverpassAmenitiesService {
       longitude: longitude,
     );
     merged = NearbyAmenities.merge(merged, fallback);
-    if (merged != null && !merged.isEmpty) {
+    if (merged != null && merged.hasEnrichmentCoverage) {
       ProximityResolutionCache.putAmenities(cellKey, merged);
     }
     return merged?.isEmpty == false ? merged : null;

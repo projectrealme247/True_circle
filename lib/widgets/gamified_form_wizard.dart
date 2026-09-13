@@ -185,6 +185,7 @@ class GamifiedFormNavBar extends StatelessWidget {
     this.showSkipToBonus = false,
     this.isSubmitting = false,
     this.enabled = true,
+    this.submitEnabled = true,
     this.floating = false,
     this.compact = false,
   });
@@ -203,6 +204,9 @@ class GamifiedFormNavBar extends StatelessWidget {
   final bool showSkipToBonus;
   final bool isSubmitting;
   final bool enabled;
+
+  /// Independent of [enabled] so Back stays usable while Submit is gated.
+  final bool submitEnabled;
   final bool floating;
   final bool compact;
 
@@ -229,7 +233,7 @@ class GamifiedFormNavBar extends StatelessWidget {
           children: [
             if (showBack)
               OutlinedButton(
-                onPressed: enabled && !isSubmitting ? onBack : null,
+                onPressed: !isSubmitting ? onBack : null,
                 style: OutlinedButton.styleFrom(
                   padding: EdgeInsets.symmetric(
                     horizontal: compact ? 16 : 20,
@@ -253,7 +257,11 @@ class GamifiedFormNavBar extends StatelessWidget {
             if (showSubmit)
               _PrimaryActionButton(
                 label: submitLabel,
-                onPressed: enabled && !isSubmitting ? onSubmit : null,
+                onPressed: enabled &&
+                        submitEnabled &&
+                        !isSubmitting
+                    ? onSubmit
+                    : null,
                 floating: floating,
                 isSubmitting: isSubmitting,
                 compact: compact,

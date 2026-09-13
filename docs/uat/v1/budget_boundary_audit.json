@@ -1,0 +1,989 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:56:51.455547Z",
+  "overall_pass": false,
+  "overall": "FAIL",
+  "overall_vs_user_success_criteria": "FAIL",
+  "production_matches_strict_criteria": false,
+  "budget_rule": {
+    "formula": "INCLUDED iff ListingData.listingPriceAmount(listing) <= (budgetMax * WeightedListingMatcher.budgetHardCapRatio).round()",
+    "budget_hard_cap_ratio": 1.25,
+    "price_field": "ListingData.listingPriceAmount — digits parsed from listing `price` string (monthly rent / room rent as stored)",
+    "code_citations": [
+      "lib/utils/weighted_listing_matcher.dart (budgetHardCapRatio=1.25, passesHardExclusion)",
+      "lib/utils/listing_search_intent.dart (ListingSearchFilters._budgetHardCapRatio=1.25)",
+      "lib/utils/filter_inventory_stats.dart (_listingWithinBudgetMax)",
+      "lib/utils/marketplace_listing_pipeline.dart (runWithFilters → WeightedListingMatcher.fetchScoredListings)",
+      "lib/services/profile_portal_inheritance_service.dart (seekerFeedDefaults.budgetMax ← roomBudget for SL, maxBudget for IP; both hydrate from session budget_max)"
+    ],
+    "user_success_criteria_contract": "INCLUDED iff rent <= budget (exact equality included; rent - 1 excluded; no multiplier)",
+    "production_vs_contract": "MISMATCH — production uses 1.25× buffer"
+  },
+  "success_criteria": {
+    "exact_rent_equals_budget_included": true,
+    "lower_budget_excluded": false,
+    "higher_budget_included": true,
+    "sl_ip_behavior_consistent": true,
+    "all_cells_pass_strict": false
+  },
+  "summary": {
+    "total_tests": 30,
+    "pass": 20,
+    "fail": 10,
+    "shared_living": {
+      "listings": 5,
+      "tests": 15,
+      "pass": 10,
+      "fail": 5
+    },
+    "independent_places": {
+      "listings": 5,
+      "tests": 15,
+      "pass": 10,
+      "fail": 5
+    },
+    "rent_minus_1_included_under_production": 10,
+    "rent_equal_excluded_under_production": 0,
+    "rent_plus_1_excluded_under_production": 0,
+    "marketplaces_consistent_with_each_other": true,
+    "shared_living_outcome_pattern": "rent_minus_1:INC=5/EXC=0 | rent_equal:INC=5/EXC=0 | rent_plus_1:INC=5/EXC=0",
+    "independent_places_outcome_pattern": "rent_minus_1:INC=5/EXC=0 | rent_equal:INC=5/EXC=0 | rent_plus_1:INC=5/EXC=0",
+    "overall": "FAIL"
+  },
+  "selected_listings": {
+    "shared_living": [
+      {
+        "listing_id": "dub-share-04",
+        "rent": 350,
+        "marketplace": "shared_living"
+      },
+      {
+        "listing_id": "dub-share-05",
+        "rent": 650,
+        "marketplace": "shared_living"
+      },
+      {
+        "listing_id": "dub-share-06",
+        "rent": 800,
+        "marketplace": "shared_living"
+      },
+      {
+        "listing_id": "dub-share-10",
+        "rent": 920,
+        "marketplace": "shared_living"
+      },
+      {
+        "listing_id": "dub-share-03",
+        "rent": 1336,
+        "marketplace": "shared_living"
+      }
+    ],
+    "independent_places": [
+      {
+        "listing_id": "dub-rent-27",
+        "rent": 900,
+        "marketplace": "independent_places"
+      },
+      {
+        "listing_id": "dub-rent-42",
+        "rent": 1550,
+        "marketplace": "independent_places"
+      },
+      {
+        "listing_id": "dub-rent-29",
+        "rent": 1950,
+        "marketplace": "independent_places"
+      },
+      {
+        "listing_id": "dub-rent-09",
+        "rent": 2650,
+        "marketplace": "independent_places"
+      },
+      {
+        "listing_id": "dub-rent-31",
+        "rent": 4200,
+        "marketplace": "independent_places"
+      }
+    ]
+  },
+  "methodology": {
+    "active_mode": "explore",
+    "code_paths": [
+      "MarketplaceSpace.fromSession (marketplace tower)",
+      "ListingSearchFilters(budgetMax: budget_test) — budget-only hard gate isolation (no area / occupant / gender confounders)",
+      "MarketplaceListingPipeline.runWithFilters (tower equality → WeightedListingMatcher hard exclusion → rank)",
+      "Presence of listing_id in pipeline.ranked → INCLUDED"
+    ],
+    "listing_corpus": {
+      "name": "SampleListingsDublin (local Dublin marketplace seed)",
+      "paths": [
+        "lib/data/sample_listings_dublin.dart",
+        "lib/data/sample_listings_dublin_v2.dart",
+        "lib/data/sample_listings_dublin_legacy.dart",
+        "lib/data/sample_listings_dublin_expansion.dart",
+        "lib/data/dublin_listing_builder.dart"
+      ],
+      "shared_living_priced_count": 40,
+      "independent_places_priced_count": 50,
+      "total_corpus": 90
+    },
+    "selection": "At least 5 Share + 5 Rent with distinct rents; spread across low / mid / high percentiles of each marketplace pool.",
+    "notes": [
+      "Audit measures production hard-gate behavior AND grades each cell against the user strict contract (rent <= budget).",
+      "Budget-only filters isolate the hard cap; Explore seekerFeedDefaults also forwards SL soft profile fields but budget_max hydrates the same maxBudget/roomBudget value used here."
+    ]
+  },
+  "blockers": [
+    {
+      "id": "HARD_CAP_1_25X_VS_STRICT_CONTRACT",
+      "severity": true,
+      "detail": "Production hard gate is amount <= round(budgetMax * 1.25). User success criteria assume strict rent <= budget (no multiplier). At budget = rent - 1, rent is still typically INCLUDED because rent <= round((rent - 1) * 1.25) for all realistic Dublin rents.",
+      "rent_minus_1_included_count": 10,
+      "expected_under_strict": "EXCLUDED"
+    }
+  ],
+  "failing_rows_sample": [
+    {
+      "listing_id": "dub-share-04",
+      "marketplace": "shared_living",
+      "rent": 350,
+      "budget_test": 349,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 436,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=436, rent=350, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-share-05",
+      "marketplace": "shared_living",
+      "rent": 650,
+      "budget_test": 649,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 811,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=811, rent=650, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-share-06",
+      "marketplace": "shared_living",
+      "rent": 800,
+      "budget_test": 799,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 999,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=999, rent=800, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-share-10",
+      "marketplace": "shared_living",
+      "rent": 920,
+      "budget_test": 919,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1149,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1149, rent=920, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-share-03",
+      "marketplace": "shared_living",
+      "rent": 1336,
+      "budget_test": 1335,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1669,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1669, rent=1336, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-rent-27",
+      "marketplace": "independent_places",
+      "rent": 900,
+      "budget_test": 899,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1124,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1124, rent=900, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-rent-42",
+      "marketplace": "independent_places",
+      "rent": 1550,
+      "budget_test": 1549,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1936,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1936, rent=1550, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-rent-29",
+      "marketplace": "independent_places",
+      "rent": 1950,
+      "budget_test": 1949,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 2436,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=2436, rent=1950, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-rent-09",
+      "marketplace": "independent_places",
+      "rent": 2650,
+      "budget_test": 2649,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 3311,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=3311, rent=2650, ratio=1.25)"
+    },
+    {
+      "listing_id": "dub-rent-31",
+      "marketplace": "independent_places",
+      "rent": 4200,
+      "budget_test": 4199,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 5249,
+      "expected_result": "EXCLUDED",
+      "actual_result": "INCLUDED",
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=5249, rent=4200, ratio=1.25)"
+    }
+  ],
+  "tests": [
+    {
+      "listing_id": "dub-share-04",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 350,
+      "budget_test": 349,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 436,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=436, rent=350, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 2,
+        "ranked": 2
+      }
+    },
+    {
+      "listing_id": "dub-share-04",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 350,
+      "budget_test": 350,
+      "budget_kind": "rent_equal",
+      "hard_cap": 438,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 2,
+        "ranked": 2
+      }
+    },
+    {
+      "listing_id": "dub-share-04",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 350,
+      "budget_test": 351,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 439,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 2,
+        "ranked": 2
+      }
+    },
+    {
+      "listing_id": "dub-share-05",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 650,
+      "budget_test": 649,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 811,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=811, rent=650, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 19,
+        "ranked": 19
+      }
+    },
+    {
+      "listing_id": "dub-share-05",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 650,
+      "budget_test": 650,
+      "budget_kind": "rent_equal",
+      "hard_cap": 813,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 19,
+        "ranked": 19
+      }
+    },
+    {
+      "listing_id": "dub-share-05",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 650,
+      "budget_test": 651,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 814,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 19,
+        "ranked": 19
+      }
+    },
+    {
+      "listing_id": "dub-share-06",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 800,
+      "budget_test": 799,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 999,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=999, rent=800, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 32,
+        "ranked": 32
+      }
+    },
+    {
+      "listing_id": "dub-share-06",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 800,
+      "budget_test": 800,
+      "budget_kind": "rent_equal",
+      "hard_cap": 1000,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 32,
+        "ranked": 32
+      }
+    },
+    {
+      "listing_id": "dub-share-06",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 800,
+      "budget_test": 801,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 1001,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 32,
+        "ranked": 32
+      }
+    },
+    {
+      "listing_id": "dub-share-10",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 920,
+      "budget_test": 919,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1149,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1149, rent=920, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 36,
+        "ranked": 36
+      }
+    },
+    {
+      "listing_id": "dub-share-10",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 920,
+      "budget_test": 920,
+      "budget_kind": "rent_equal",
+      "hard_cap": 1150,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 38,
+        "ranked": 38
+      }
+    },
+    {
+      "listing_id": "dub-share-10",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 920,
+      "budget_test": 921,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 1151,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 38,
+        "ranked": 38
+      }
+    },
+    {
+      "listing_id": "dub-share-03",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 1336,
+      "budget_test": 1335,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1669,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1669, rent=1336, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "listing_id": "dub-share-03",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 1336,
+      "budget_test": 1336,
+      "budget_kind": "rent_equal",
+      "hard_cap": 1670,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "listing_id": "dub-share-03",
+      "marketplace": "shared_living",
+      "tower_property_type": "Share",
+      "rent": 1336,
+      "budget_test": 1337,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 1671,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "listing_id": "dub-rent-27",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 900,
+      "budget_test": 899,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1124,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1124, rent=900, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 3,
+        "ranked": 3
+      }
+    },
+    {
+      "listing_id": "dub-rent-27",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 900,
+      "budget_test": 900,
+      "budget_kind": "rent_equal",
+      "hard_cap": 1125,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 3,
+        "ranked": 3
+      }
+    },
+    {
+      "listing_id": "dub-rent-27",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 900,
+      "budget_test": 901,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 1126,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 3,
+        "ranked": 3
+      }
+    },
+    {
+      "listing_id": "dub-rent-42",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 1550,
+      "budget_test": 1549,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 1936,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=1936, rent=1550, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 26,
+        "ranked": 26
+      }
+    },
+    {
+      "listing_id": "dub-rent-42",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 1550,
+      "budget_test": 1550,
+      "budget_kind": "rent_equal",
+      "hard_cap": 1938,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 26,
+        "ranked": 26
+      }
+    },
+    {
+      "listing_id": "dub-rent-42",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 1550,
+      "budget_test": 1551,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 1939,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 26,
+        "ranked": 26
+      }
+    },
+    {
+      "listing_id": "dub-rent-29",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 1950,
+      "budget_test": 1949,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 2436,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=2436, rent=1950, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 38,
+        "ranked": 38
+      }
+    },
+    {
+      "listing_id": "dub-rent-29",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 1950,
+      "budget_test": 1950,
+      "budget_kind": "rent_equal",
+      "hard_cap": 2438,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 38,
+        "ranked": 38
+      }
+    },
+    {
+      "listing_id": "dub-rent-29",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 1950,
+      "budget_test": 1951,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 2439,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 38,
+        "ranked": 38
+      }
+    },
+    {
+      "listing_id": "dub-rent-09",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 2650,
+      "budget_test": 2649,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 3311,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=3311, rent=2650, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 46,
+        "ranked": 46
+      }
+    },
+    {
+      "listing_id": "dub-rent-09",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 2650,
+      "budget_test": 2650,
+      "budget_kind": "rent_equal",
+      "hard_cap": 3313,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 46,
+        "ranked": 46
+      }
+    },
+    {
+      "listing_id": "dub-rent-09",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 2650,
+      "budget_test": 2651,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 3314,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 46,
+        "ranked": 46
+      }
+    },
+    {
+      "listing_id": "dub-rent-31",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 4200,
+      "budget_test": 4199,
+      "budget_kind": "rent_minus_1",
+      "hard_cap": 5249,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "EXCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "FAIL",
+      "fail_reason": "strict_contract expected EXCLUDED but actual=INCLUDED (hardCap=5249, rent=4200, ratio=1.25)",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    },
+    {
+      "listing_id": "dub-rent-31",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 4200,
+      "budget_test": 4200,
+      "budget_kind": "rent_equal",
+      "hard_cap": 5250,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    },
+    {
+      "listing_id": "dub-rent-31",
+      "marketplace": "independent_places",
+      "tower_property_type": "Rent",
+      "rent": 4200,
+      "budget_test": 4201,
+      "budget_kind": "rent_plus_1",
+      "hard_cap": 5251,
+      "budget_hard_cap_ratio": 1.25,
+      "expected_result": "INCLUDED",
+      "expected_under_production_gate": "INCLUDED",
+      "actual_result": "INCLUDED",
+      "in_after_filters": true,
+      "in_ranked": true,
+      "direct_passes_hard_exclusion": true,
+      "result": "PASS",
+      "fail_reason": "",
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    }
+  ]
+}

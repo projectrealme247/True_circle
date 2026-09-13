@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truecircle.local/schemas/uat/v1/uat_execution_record.schema.json",
+  "title": "TrueCircle V1 UAT Execution Record",
+  "description": "One record per frozen UAT seeker after running match feed + card/detail review against ~50 Shared Living and ~50 Independent Places listings. Y/N fields use string enums \"Y\" | \"N\". Derived pass/fail flags are optional helpers for dashboards; authoritative formulas live in uat_execution_workbook.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seeker_id",
+    "uat_scenario",
+    "marketplace",
+    "matches_returned",
+    "marketplace_correct",
+    "top_5_listing_ids",
+    "card_review",
+    "detail_page_review",
+    "contact_intent",
+    "severity",
+    "finding",
+    "recommended_action"
+  ],
+  "properties": {
+    "seeker_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Frozen dataset seeker id (e.g. SL-STU-01, IP-COU-03, SL-MARKET-01, IP-MARKET-01)."
+    },
+    "uat_scenario": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable scenario label copied from the frozen seeker dataset."
+    },
+    "marketplace": {
+      "type": "string",
+      "enum": ["shared_living", "independent_places"],
+      "description": "Expected marketplace for this seeker. Strict separation: feed must only contain listings from this marketplace."
+    },
+    "uat_expected_result": {
+      "type": "string",
+      "enum": ["PASS", "LIMITED_MATCHES", "ZERO_MATCHES"],
+      "description": "Reference input from frozen seeker dataset. Used for scenario volume checks; not overwritten by execution."
+    },
+    "uat_validation_points": {
+      "type": "array",
+      "description": "Reference checklist from frozen seeker dataset (feed, marketplace, card, detail, empty-state checks).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "expected_match_volume": {
+      "type": "string",
+      "enum": ["many", "few", "none"],
+      "description": "Optional frozen-dataset hint aligning with uat_expected_result (many≈PASS, few≈LIMITED_MATCHES, none≈ZERO_MATCHES)."
+    },
+    "matches_returned": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of listings returned in the seeker's marketplace feed after matching."
+    },
+    "marketplace_correct": {
+      "$ref": "#/$defs/yn",
+      "description": "Y if every returned listing belongs to this seeker's marketplace (no cross-marketplace bleed). Y also when matches_returned is 0 and the empty state is marketplace-scoped."
+    },
+    "top_5_listing_ids": {
+      "type": "array",
+      "description": "Up to 5 listing ids from the top of the ranked feed (rank order preserved). Empty array when matches_returned is 0.",
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "card_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Review of the top match card (or first visible card). When matches_returned is 0, set all Y/N fields to null (N/A) and exclude from Card Pass Rate denominator.",
+      "required": [
+        "understood_in_5_seconds",
+        "key_facts_visible",
+        "trust_visible"
+      ],
+      "properties": {
+        "understood_in_5_seconds": {
+          "oneOf": [
+            { "$ref": "#/$defs/yn" },
+            { "type": "null" }
+          ],
+          "description": "Y if a reviewer understands the offer within ~5 seconds."
+        },
+        "key_facts_visible": {
+          "oneOf": [
+            { "$ref": "#/$defs/yn" },
+            { "type": "null" }
+          ],
+          "description": "Y if price, location/area, and core unit facts are visible without opening detail."
+        },
+        "trust_visible": {
+          "oneOf": [
+            { "$ref": "#/$defs/yn" },
+            { "type": "null" }
+          ],
+          "description": "Y if trust/verification signals (or clear absence messaging) are visible on the card."
+        }
+      }
+    },
+    "detail_page_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Review of listing detail for the top match (or chosen top listing). When matches_returned is 0, Y/N fields are null (N/A); missing_information may note empty-state copy quality.",
+      "required": [
+        "key_questions_answered",
+        "match_explanation_helpful",
+        "missing_information"
+      ],
+      "properties": {
+        "key_questions_answered": {
+          "oneOf": [
+            { "$ref": "#/$defs/yn" },
+            { "type": "null" }
+          ],
+          "description": "Y if detail answers the seeker's key questions for this marketplace (room/household vs unit/amenities, etc.)."
+        },
+        "match_explanation_helpful": {
+          "oneOf": [
+            { "$ref": "#/$defs/yn" },
+            { "type": "null" }
+          ],
+          "description": "Y if Why-this-match / explanation content is helpful and non-misleading."
+        },
+        "missing_information": {
+          "type": "string",
+          "description": "Free text of gaps; use empty string \"\" when none."
+        }
+      }
+    },
+    "contact_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["would_apply"],
+      "properties": {
+        "would_apply": {
+          "oneOf": [
+            { "$ref": "#/$defs/yn" },
+            { "type": "null" }
+          ],
+          "description": "Y if the reviewer would apply/contact based on card+detail. Null when matches_returned is 0 (N/A)."
+        }
+      }
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["none", "low", "medium", "critical"],
+      "description": "Highest severity finding for this seeker run. Use critical for marketplace bleed, crash, wrong empty state, or unsafe/misleading match explanation."
+    },
+    "finding": {
+      "type": "string",
+      "description": "Concise observation. Use empty string \"\" when severity is none and nothing notable."
+    },
+    "recommended_action": {
+      "type": "string",
+      "description": "Follow-up action for eng/product. Use empty string \"\" when none."
+    },
+    "executed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional ISO-8601 timestamp of this execution."
+    },
+    "executor": {
+      "type": "string",
+      "description": "Optional reviewer or automation run id."
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional computed flags mirroring workbook formulas (may be filled by tooling).",
+      "properties": {
+        "marketplace_separation_pass": { "type": "boolean" },
+        "card_pass": {
+          "oneOf": [{ "type": "boolean" }, { "type": "null" }]
+        },
+        "detail_pass": {
+          "oneOf": [{ "type": "boolean" }, { "type": "null" }]
+        },
+        "contact_intent_yes": {
+          "oneOf": [{ "type": "boolean" }, { "type": "null" }]
+        },
+        "is_critical": { "type": "boolean" },
+        "match_volume_ok": { "type": "boolean" },
+        "scenario_pass": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "yn": {
+      "type": "string",
+      "enum": ["Y", "N"]
+    }
+  }
+}

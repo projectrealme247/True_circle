@@ -22,4 +22,5 @@ abstract final class ApplicantFieldKeys {
   static const verificationTrack = 'verification_track';
   static const profileCompletenessPercent = 'profile_completeness_percent';
   static const affordabilityMultiplier = 'affordability_multiplier';
+  static const financialSupportType = 'financial_support_type';
 }

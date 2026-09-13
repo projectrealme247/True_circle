@@ -1,6 +1,7 @@
 import 'applicant_application_status.dart';
 import 'applicant_trust_tier.dart';
 import 'applicant_trust_tier_block.dart';
+import 'landlord_decision_summary.dart';
 
 /// Single row in the independent-places applicant stream table.
 class IndependentPlacesApplicantRow {
@@ -22,6 +23,7 @@ class IndependentPlacesApplicantRow {
     this.overallMatchScore,
     this.verifiedTransitDurationSeconds,
     this.affordabilityMultiplier,
+    this.decision,
     this.createdAt,
   });
 
@@ -42,6 +44,7 @@ class IndependentPlacesApplicantRow {
   final int? overallMatchScore;
   final int? verifiedTransitDurationSeconds;
   final double? affordabilityMultiplier;
+  final LandlordDecisionSummary? decision;
   final DateTime? createdAt;
 
   Map<String, dynamic> toMap() => {
@@ -65,7 +68,9 @@ class IndependentPlacesApplicantRow {
         if (overallMatchScore != null) 'overall_match_score': overallMatchScore,
         if (verifiedTransitDurationSeconds != null)
           'verified_transit_duration_seconds': verifiedTransitDurationSeconds,
-        if (affordabilityMultiplier != null)
+        if (affordabilityMultiplier != null &&
+            !affordabilityMultiplier!.isInfinite &&
+            !affordabilityMultiplier!.isNaN)
           'affordability_multiplier': affordabilityMultiplier,
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       };

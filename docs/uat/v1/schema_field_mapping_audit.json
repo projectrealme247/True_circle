@@ -1,0 +1,258 @@
+{
+  "meta": {
+    "title": "TrueCircle Schema Field Mapping Audit",
+    "inventory": "docs/uat/v1/implementation_file_inventory.md",
+    "budget_hard_cap_ratio": 1.25,
+    "budget_hard_cap_note": "Intentional implementation fact — price <= round(budget * 1.25) via WeightedListingMatcher.budgetHardCapRatio; not a bug.",
+    "inventory_paths_checked": 75,
+    "inventory_paths_missing": [],
+    "primary_cites": [
+      "lib/utils/listing_match_engine.dart",
+      "lib/utils/weighted_listing_matcher.dart",
+      "lib/utils/tower_filter_policy.dart",
+      "lib/utils/shared_living_match_tokens.dart",
+      "lib/utils/preferred_layout_match.dart",
+      "lib/models/move_in_timing.dart",
+      "lib/utils/viewer_profile.dart",
+      "lib/utils/profile_data.dart",
+      "lib/utils/listing_data.dart",
+      "lib/models/seeker_onboarding_enums.dart",
+      "lib/models/listing_creation_field_keys.dart",
+      "lib/models/applicant_field_keys.dart",
+      "lib/services/listing_creation_validation_service.dart",
+      "lib/services/listing_creation_payload_builder.dart",
+      "lib/data/dublin_listing_builder.dart"
+    ]
+  },
+  "counts": {
+    "sl_seeker_fields": 28,
+    "sl_listing_fields": 26,
+    "ip_seeker_fields": 24,
+    "ip_listing_fields": 24,
+    "mapping_pairs": 28,
+    "seeker_only_groups": 11,
+    "listing_only_groups": 11,
+    "explanation_inputs": 14,
+    "explanation_unsafe": 5
+  },
+  "fields": [
+    {"field_name": "preferred_property_type", "entity": "SL Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "listing_type", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/profile_data.dart", "lib/models/marketplace_space.dart"]},
+    {"field_name": "preferred_property_type", "entity": "IP Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "listing_type", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/profile_data.dart", "lib/models/marketplace_space.dart"]},
+    {"field_name": "occupant_type", "entity": "SL Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "occupantType", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/listing_data.dart"]},
+    {"field_name": "occupant_type", "entity": "IP Seeker", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "occupantType", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "budget_max", "entity": "SL Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "price", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/weighted_listing_matcher.dart"]},
+    {"field_name": "budget_max", "entity": "IP Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "price", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/weighted_listing_matcher.dart"]},
+    {"field_name": "budget_min", "entity": "SL Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "price", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/weighted_listing_matcher.dart"]},
+    {"field_name": "budget_min", "entity": "IP Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "price", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/weighted_listing_matcher.dart"]},
+    {"field_name": "move_in_window", "entity": "SL Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "available_from+availability_flexibility", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/models/move_in_timing.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "move_in_window", "entity": "IP Seeker", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "available_from+availability_flexibility", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/models/move_in_timing.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "commute_profiles", "entity": "SL Seeker", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "latitude/longitude", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/commute_profile.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "commute_profiles", "entity": "IP Seeker", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "latitude/longitude", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/commute_profile.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "maximum_commute_budget_minutes", "entity": "SL Seeker", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "latitude/longitude", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/profile_data.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "maximum_commute_budget_minutes", "entity": "IP Seeker", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "latitude/longitude", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/profile_data.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "detected_city", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "location", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/viewer_profile.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "detected_city", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "location", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/viewer_profile.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "target_search_areas", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "location", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/target_search_areas.dart", "lib/utils/weighted_listing_matcher.dart"]},
+    {"field_name": "target_search_areas", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "location", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/target_search_areas.dart", "lib/utils/weighted_listing_matcher.dart"]},
+    {"field_name": "bathroom_preference", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "bathroom_type", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/shared_living_match_tokens.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "bathroom_preference", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "NO", "counterpart_field": null, "counterpart_entity": null, "relationship_type": "none", "cites": ["lib/models/seeker_onboarding_enums.dart"]},
+    {"field_name": "preferred_layout", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "room_type_matching/share_room_kind/room_type", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/shared_living_match_tokens.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "preferred_layout", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "bedrooms/bhk/beds_count", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/preferred_layout_match.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "gender_preference", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "required_occupant/bachelorPreference", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/shared_living_match_tokens.dart", "lib/utils/tower_filter_policy.dart"]},
+    {"field_name": "gender_preference", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "NO", "counterpart_field": null, "counterpart_entity": null, "relationship_type": "none", "cites": ["lib/utils/tower_filter_policy.dart"]},
+    {"field_name": "food_preference", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "hostFoodPreference/kitchen_culture/lifestyle_flags", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "food_preference", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "hostFoodPreference", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "mother_tongue", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "hostMotherTongue/hostLanguage", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "mother_tongue", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "hostMotherTongue/hostLanguage", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "spoken_languages", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "languages_spoken", "counterpart_entity": "SL Listing", "relationship_type": "derived_match", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/shared_space_compatibility_scorer.dart"]},
+    {"field_name": "spoken_languages", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "languages_spoken", "counterpart_entity": "IP Listing", "relationship_type": "derived_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "smoking_ok", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "smoking_allowed/lifestyle_flags", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "smoking_ok", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "smoking_allowed/lifestyle_flags", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "household_has_pets", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "pets_allowed/lifestyle_flags", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "household_has_pets", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "pets_policy", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "schedule_type", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "schedule_type", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "schedule_type", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "schedule_type", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "student_type", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "studentType", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "student_type", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "studentType", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "property_type_preference", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "YES", "counterpart_field": "property_category/property_sub_type", "counterpart_entity": "IP Listing", "relationship_type": "display_only", "cites": ["lib/utils/listing_match_engine.dart", "lib/models/seeker_onboarding_enums.dart"]},
+    {"field_name": "furnishing_preference", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "NO", "counterpart_field": "furnishing", "counterpart_entity": "IP Listing", "relationship_type": "none", "cites": ["lib/models/seeker_onboarding_enums.dart"]},
+    {"field_name": "tenure_preference", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "agreement_type/preferred_lease_months", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/models/seeker_onboarding_enums.dart", "lib/utils/weighted_listing_matcher.dart"]},
+    {"field_name": "isPreArrivalSeeker", "entity": "SL Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "tenant_track_preference", "counterpart_entity": "SL Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/student_track_preference.dart"]},
+    {"field_name": "isPreArrivalSeeker", "entity": "IP Seeker", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "tenant_track_preference", "counterpart_entity": "IP Listing", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/student_track_preference.dart"]},
+    {"field_name": "price", "entity": "SL Listing", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "budget_max", "counterpart_entity": "SL Seeker", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart", "lib/services/listing_creation_validation_service.dart"]},
+    {"field_name": "price", "entity": "IP Listing", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "budget_max", "counterpart_entity": "IP Seeker", "relationship_type": "direct_match", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"field_name": "room_type", "entity": "SL Listing", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "preferred_layout", "counterpart_entity": "SL Seeker", "relationship_type": "derived_match", "cites": ["lib/services/listing_creation_validation_service.dart", "lib/utils/shared_living_match_tokens.dart"]},
+    {"field_name": "household_dynamic", "entity": "SL Listing", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "occupant_type", "counterpart_entity": "SL Seeker", "relationship_type": "derived_match", "cites": ["lib/services/listing_creation_validation_service.dart", "lib/services/listing_creation_payload_builder.dart"]},
+    {"field_name": "kitchen_culture", "entity": "SL Listing", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "food_preference", "counterpart_entity": "SL Seeker", "relationship_type": "derived_match", "cites": ["lib/services/listing_creation_validation_service.dart", "lib/services/listing_creation_payload_builder.dart"]},
+    {"field_name": "languages_spoken", "entity": "SL Listing", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "spoken_languages", "counterpart_entity": "SL Seeker", "relationship_type": "derived_match", "cites": ["lib/services/listing_creation_validation_service.dart"]},
+    {"field_name": "beds_count", "entity": "IP Listing", "required_or_optional": "required", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "preferred_layout", "counterpart_entity": "IP Seeker", "relationship_type": "derived_match", "cites": ["lib/services/listing_creation_validation_service.dart", "lib/utils/preferred_layout_match.dart"]},
+    {"field_name": "parking_available", "entity": "IP Listing", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "commute_method", "counterpart_entity": "IP Seeker", "relationship_type": "derived_match", "cites": ["lib/services/listing_creation_validation_service.dart", "lib/utils/listing_match_engine.dart"]},
+    {"field_name": "eircode", "entity": "SL Listing", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "NO", "counterpart_field": null, "counterpart_entity": null, "relationship_type": "none", "cites": ["lib/services/listing_creation_validation_service.dart"]},
+    {"field_name": "eircode", "entity": "IP Listing", "required_or_optional": "required", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "NO", "counterpart_field": null, "counterpart_entity": null, "relationship_type": "none", "cites": ["lib/services/listing_creation_validation_service.dart"]},
+    {"field_name": "available_from", "entity": "SL Listing", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "move_in_window", "counterpart_entity": "SL Seeker", "relationship_type": "derived_match", "cites": ["lib/models/move_in_timing.dart"]},
+    {"field_name": "available_from", "entity": "IP Listing", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "move_in_window", "counterpart_entity": "IP Seeker", "relationship_type": "derived_match", "cites": ["lib/models/move_in_timing.dart"]},
+    {"field_name": "availability_flexibility", "entity": "SL Listing", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "move_in_window", "counterpart_entity": "SL Seeker", "relationship_type": "derived_match", "cites": ["lib/models/move_in_timing.dart"]},
+    {"field_name": "availability_flexibility", "entity": "IP Listing", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "move_in_window", "counterpart_entity": "IP Seeker", "relationship_type": "derived_match", "cites": ["lib/models/move_in_timing.dart"]},
+    {"field_name": "bathroom_type", "entity": "SL Listing", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "counterpart_field": "bathroom_preference", "counterpart_entity": "SL Seeker", "relationship_type": "derived_match", "cites": ["lib/utils/shared_living_match_tokens.dart"]},
+    {"field_name": "tenant_track_preference", "entity": "SL Listing", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "isPreArrivalSeeker", "counterpart_entity": "SL Seeker", "relationship_type": "direct_match", "cites": ["lib/utils/student_track_preference.dart", "supabase/migrations/20260609120000_tenant_track_preference.sql"]},
+    {"field_name": "tenant_track_preference", "entity": "IP Listing", "required_or_optional": "optional", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "counterpart_field": "isPreArrivalSeeker", "counterpart_entity": "IP Seeker", "relationship_type": "direct_match", "cites": ["lib/utils/student_track_preference.dart"]},
+    {"field_name": "property_category", "entity": "IP Listing", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "YES", "counterpart_field": "property_type_preference", "counterpart_entity": "IP Seeker", "relationship_type": "display_only", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/listing_data.dart"]},
+    {"field_name": "furnishing", "entity": "IP Listing", "required_or_optional": "optional", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "NO", "counterpart_field": "furnishing_preference", "counterpart_entity": "IP Seeker", "relationship_type": "none", "cites": ["lib/utils/listing_data.dart", "lib/data/dublin_listing_builder.dart"]}
+  ],
+  "mapping_matrix": [
+    {"seeker_field": "budget_max+budget_min", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "price", "listing_entity": "SL Listing|IP Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/weighted_listing_matcher.dart"]},
+    {"seeker_field": "move_in_window", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "available_from+availability_flexibility", "listing_entity": "SL Listing|IP Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/models/move_in_timing.dart"]},
+    {"seeker_field": "schedule_type", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "schedule_type", "listing_entity": "SL Listing|IP Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "preferred_layout", "seeker_entity": "IP Seeker", "listing_field": "bedrooms/bhk/beds_count", "listing_entity": "IP Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/preferred_layout_match.dart"]},
+    {"seeker_field": "preferred_layout", "seeker_entity": "SL Seeker", "listing_field": "room_type_matching/share_room_kind/room_type", "listing_entity": "SL Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/shared_living_match_tokens.dart"]},
+    {"seeker_field": "bathroom_preference", "seeker_entity": "SL Seeker", "listing_field": "bathroom_type", "listing_entity": "SL Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/shared_living_match_tokens.dart"]},
+    {"seeker_field": "gender_preference", "seeker_entity": "SL Seeker", "listing_field": "required_occupant/bachelorPreference", "listing_entity": "SL Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/shared_living_match_tokens.dart", "lib/utils/tower_filter_policy.dart"]},
+    {"seeker_field": "food_preference", "seeker_entity": "SL Seeker", "listing_field": "hostFoodPreference/kitchen_culture/lifestyle_flags", "listing_entity": "SL Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "food_preference", "seeker_entity": "IP Seeker", "listing_field": "hostFoodPreference", "listing_entity": "IP Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "occupant_type", "seeker_entity": "SL Seeker", "listing_field": "occupantType/household_dynamic", "listing_entity": "SL Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_data.dart"]},
+    {"seeker_field": "occupant_type", "seeker_entity": "IP Seeker", "listing_field": "occupantType", "listing_entity": "IP Listing", "relationship_type": "direct_match", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "student_type", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "studentType", "listing_entity": "SL Listing|IP Listing", "relationship_type": "direct_match", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "mother_tongue/spoken_languages", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "hostLanguage/languages_spoken", "listing_entity": "SL Listing|IP Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "detected_city/target_search_areas", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "location/hostCity", "listing_entity": "SL Listing|IP Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/weighted_listing_matcher.dart"]},
+    {"seeker_field": "commute_*", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "latitude/longitude(+parking)", "listing_entity": "SL Listing|IP Listing", "relationship_type": "derived_match", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "smoking_ok", "seeker_entity": "SL Seeker", "listing_field": "smoking_allowed/lifestyle_flags", "listing_entity": "SL Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "smoking_ok", "seeker_entity": "IP Seeker", "listing_field": "smoking_allowed/lifestyle_flags", "listing_entity": "IP Listing", "relationship_type": "direct_match", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "household_has_pets", "seeker_entity": "SL Seeker", "listing_field": "pets_allowed/lifestyle_flags", "listing_entity": "SL Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "household_has_pets", "seeker_entity": "IP Seeker", "listing_field": "pets_policy", "listing_entity": "IP Listing", "relationship_type": "direct_match", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "property_type_preference", "seeker_entity": "IP Seeker", "listing_field": "property_category/property_sub_type", "listing_entity": "IP Listing", "relationship_type": "display_only", "used_in_matching": "NO", "used_in_ranking": "NO", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "isPreArrivalSeeker", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "tenant_track_preference", "listing_entity": "SL Listing|IP Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "tenure_preference/preferred_lease_months", "seeker_entity": "IP Seeker", "listing_field": "preferred_lease_months/agreement_type", "listing_entity": "IP Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/weighted_listing_matcher.dart"]},
+    {"seeker_field": "trust_stage+docs", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "host_trust_stage", "listing_entity": "SL Listing|IP Listing", "relationship_type": "derived_match", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/listing_match_engine.dart", "lib/utils/viewer_profile.dart"]},
+    {"seeker_field": "circle_markers", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "host_circle_markers/hostFood/hostMotherTongue/hostCity", "listing_entity": "SL Listing|IP Listing", "relationship_type": "derived_match", "used_in_matching": "NO", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/utils/viewer_profile.dart", "lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "drinking_ok", "seeker_entity": "SL Seeker", "listing_field": "drinking_allowed", "listing_entity": "SL Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "family_occupant", "seeker_entity": "SL Seeker", "listing_field": "listing_type=Share", "listing_entity": "SL Listing", "relationship_type": "direct_match", "used_in_matching": "YES", "used_in_ranking": "NO", "used_in_explanations": "NO", "cites": ["lib/utils/listing_match_engine.dart"]},
+    {"seeker_field": "group_composition", "seeker_entity": "SL Seeker", "listing_field": "required_occupant", "listing_entity": "SL Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "NO", "cites": ["lib/utils/shared_living_match_tokens.dart"]},
+    {"seeker_field": "earliest_move_in_date", "seeker_entity": "SL Seeker|IP Seeker", "listing_field": "available_from", "listing_entity": "SL Listing|IP Listing", "relationship_type": "derived_match", "used_in_matching": "YES", "used_in_ranking": "YES", "used_in_explanations": "YES", "cites": ["lib/models/move_in_timing.dart"]}
+  ],
+  "seeker_only": [
+    {"field": "company/job_title/linkedin_*", "entity": "SL Seeker|IP Seeker", "reason": "Profile/trust display; not compared in listing_match_engine"},
+    {"field": "full_name/email", "entity": "SL Seeker|IP Seeker", "reason": "Identity only"},
+    {"field": "completenessPercent/needsOnboarding", "entity": "SL Seeker|IP Seeker", "reason": "Gate meta-fields"},
+    {"field": "furnishing_preference", "entity": "IP Seeker", "reason": "Enum/passport only; no match-engine comparison"},
+    {"field": "bathroom_preference", "entity": "IP Seeker", "reason": "Stored but unused by IP preference explanations/scoring"},
+    {"field": "gender_preference", "entity": "IP Seeker", "reason": "Stripped from Rent hard filters"},
+    {"field": "accepted_district_recommendations", "entity": "SL Seeker|IP Seeker", "reason": "Documented unused by ranking until wired"},
+    {"field": "pitch_narrative/bio/about_me/personal_introduction", "entity": "SL Seeker|IP Seeker", "reason": "ApplicantFieldKeys application copy"},
+    {"field": "affordability_multiplier/verificationTrack", "entity": "SL Seeker|IP Seeker", "reason": "Applicant payload/trust UI"},
+    {"field": "dual_commute_priority", "entity": "SL Seeker|IP Seeker", "reason": "Seeker commute weighting knob"},
+    {"field": "guarantor_status/has_hap_voucher/co_applicants/net_monthly_income", "entity": "IP Seeker", "reason": "Landlord-side FullRentalApplicantScorer inputs"}
+  ],
+  "listing_only": [
+    {"field": "title/description/images/coverImageUrl/video", "entity": "SL Listing|IP Listing", "reason": "Display/keyword blob only"},
+    {"field": "eircode/location_geom", "entity": "SL Listing|IP Listing", "reason": "Geo create infrastructure; seekers use areas/hubs"},
+    {"field": "security_deposit", "entity": "IP Listing", "reason": "Display only"},
+    {"field": "bathrooms", "entity": "IP Listing", "reason": "Display/layout_token; IP seeker bath unused"},
+    {"field": "current_occupants", "entity": "SL Listing", "reason": "Display"},
+    {"field": "proximity_data", "entity": "SL Listing|IP Listing", "reason": "Derived enrichment"},
+    {"field": "hostName/host_verified_badge/host_linkedin_badge", "entity": "SL Listing|IP Listing", "reason": "Host display/trust without seeker twin"},
+    {"field": "room_configuration/layout_token", "entity": "SL Listing|IP Listing", "reason": "Derived search helpers"},
+    {"field": "rtb_status/rtb_registered", "entity": "IP Listing", "reason": "Deprecated; forbidden on write"},
+    {"field": "kitchen_usage_timing/kitchen_utility_*", "entity": "SL Listing", "reason": "Forbidden keys stripped on write"},
+    {"field": "metadata", "entity": "SL Listing|IP Listing", "reason": "Storage envelope"}
+  ],
+  "explanation_inputs": [
+    {"field": "budgetMax/price", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "Requires viewer.budgetMax != null and priceFit"},
+    {"field": "preferred_layout/bedrooms", "source_entity": "IP Seeker/IP Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "Empty layout => matches:false in PreferredLayoutMatch"},
+    {"field": "move_in_window/available_from/availability_flexibility", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "NO", "reason": "Null seeker window + listing available_from => flexible timing earns score => availability copy"},
+    {"field": "commute_profiles/max_minutes/coords", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "Requires explicit commute intent before commute label"},
+    {"field": "detected_city/location", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "locationMatch requires non-empty city"},
+    {"field": "property_type_preference/property_category", "source_entity": "IP Seeker/IP Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "Skips null/no_preference"},
+    {"field": "occupant_type/occupantType", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "PARTIAL", "reason": "IP requires both sides; SL can fire via roommateTypeMatch alone"},
+    {"field": "student_type/studentType", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "Both sides must be non-empty"},
+    {"field": "preferred_layout(room)/room tokens", "source_entity": "SL Seeker/SL Listing", "counterpart_exists": "YES", "safe_for_explanations": "NO", "reason": "roomCompatible empty seeker => true => preference claim"},
+    {"field": "bathroom_preference/bathroom_type", "source_entity": "SL Seeker/SL Listing", "counterpart_exists": "YES", "safe_for_explanations": "NO", "reason": "bathroomCompatible empty/no_preference => true => preference claim"},
+    {"field": "food_preference/lifestyle_flags", "source_entity": "SL Seeker/SL Listing", "counterpart_exists": "YES", "safe_for_explanations": "NO", "reason": "Empty seeker food can still yield lifestyleCompatible with listing flags"},
+    {"field": "shareRoomMatch listing room label", "source_entity": "SL Listing", "counterpart_exists": "YES", "safe_for_explanations": "NO", "reason": "Copy asserts seeker preference under vacuous compatibility"},
+    {"field": "language/food in _combinedReasons", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "Card reasons; preference generators intentionally omit"},
+    {"field": "trust/in-circle", "source_entity": "Seeker/Listing", "counterpart_exists": "YES", "safe_for_explanations": "YES", "reason": "Meta reasons with explicit signals"}
+  ],
+  "risks": [
+    {
+      "id": "blank_room_pref_claim",
+      "category": "explanations_without_counterparts",
+      "severity": "Phase 2 blank-field room preference claims",
+      "code_paths": [
+        "lib/utils/shared_living_match_tokens.dart:roomCompatible",
+        "lib/utils/listing_match_engine.dart:_MatchFlags.build shareRoomMatch",
+        "lib/utils/listing_match_engine.dart:sharedLivingPreferenceExplanations"
+      ]
+    },
+    {
+      "id": "blank_bath_pref_claim",
+      "category": "explanations_without_counterparts",
+      "severity": "Phase 2 blank-field bathroom preference claims",
+      "code_paths": [
+        "lib/utils/shared_living_match_tokens.dart:bathroomCompatible",
+        "lib/utils/listing_match_engine.dart:_MatchFlags.build shareBathroomMatch",
+        "lib/utils/listing_match_engine.dart:sharedLivingPreferenceExplanations"
+      ]
+    },
+    {
+      "id": "blank_availability_claim",
+      "category": "explanations_without_counterparts",
+      "severity": "Phase 2 blank-field availability claims when seeker move_in_window empty",
+      "code_paths": [
+        "lib/models/move_in_timing.dart:MoveInTimingEngine.evaluate",
+        "lib/utils/listing_match_engine.dart:_timingMatch",
+        "lib/utils/listing_match_engine.dart:sharedLivingPreferenceExplanations|independentPlacePreferenceExplanations"
+      ]
+    },
+    {
+      "id": "household_via_roommateTypeMatch",
+      "category": "explanations_without_counterparts",
+      "severity": "Household preference copy can fire without seeker occupant",
+      "code_paths": [
+        "lib/utils/listing_match_engine.dart:_MatchFlags.build roommateTypeMatch",
+        "lib/utils/listing_match_engine.dart:sharedLivingPreferenceExplanations"
+      ]
+    },
+    {
+      "id": "lifestyle_empty_food",
+      "category": "explanations_without_counterparts",
+      "severity": "Lifestyle compatible with empty seeker food + listing lifestyle_flags",
+      "code_paths": [
+        "lib/utils/listing_match_engine.dart:_MatchFlags._lifestyleOk",
+        "lib/utils/listing_match_engine.dart:sharedLivingPreferenceExplanations"
+      ]
+    },
+    {
+      "id": "matching_absent_from_explanations",
+      "category": "matching_but_absent_from_explanations",
+      "severity": "gender, language, smoking/pets, student-track used in matching but not preference generators",
+      "code_paths": ["lib/utils/listing_match_engine.dart", "lib/utils/tower_filter_policy.dart"]
+    },
+    {
+      "id": "mandatory_non_matching",
+      "category": "mandatory_fields_cannot_influence_matching",
+      "severity": "eircode required on create but matching uses lat/lng/areas; parking_available required but soft-only",
+      "code_paths": ["lib/services/listing_creation_validation_service.dart"]
+    },
+    {
+      "id": "orphaned_furnishing_preference",
+      "category": "orphaned_fields",
+      "severity": "IP furnishing_preference unused by match engine",
+      "code_paths": ["lib/models/seeker_onboarding_enums.dart"]
+    },
+    {
+      "id": "budget_125_intentional",
+      "category": "implementation_fact",
+      "severity": "budgetHardCapRatio 1.25 intentional — not a bug",
+      "code_paths": ["lib/utils/weighted_listing_matcher.dart"]
+    }
+  ],
+  "decisions": [
+    "Decide blank-compat policy for SL room/bath: empty seeker tokens must not emit preference claims in explanations (even if matching treats empty as compatible).",
+    "Decide timing explanation gate: require non-empty seeker move_in_window before availability preference copy.",
+    "Decide household explanation gate: require occupantMatch or studentMatch (not roommateTypeMatch alone).",
+    "Decide lifestyle explanation gate: require non-empty seeker food_preference (or explicit lifestyle intent).",
+    "Decide whether property_type_preference remains explanation-only or stays documented as asymmetric.",
+    "Decide seed completeness for Phase 2 fixtures: non-empty room/bath/move-in/occupant when asserting preference claims, or keep blanks only to assert absence after fixes.",
+    "Do not change budget 1.25x hard-cap as part of explanation/seed remediation.",
+    "Keep language/food out of preference generators unless product explicitly reopens that copy."
+  ]
+}

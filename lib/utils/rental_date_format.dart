@@ -8,6 +8,7 @@ import '../models/seeker_onboarding_enums.dart';
 /// Storage stays ISO (`yyyy-MM-dd`); use these helpers only at display time.
 abstract final class RentalDateFormat {
   static final DateFormat _dayMonth = DateFormat('d MMM');
+  static final DateFormat _dayMonthYear = DateFormat('dd MMM yyyy');
 
   /// Parses `yyyy-MM-dd` (and other [DateTime.tryParse] shapes) as a local date.
   static DateTime? parseIsoDate(String? raw) {
@@ -28,6 +29,15 @@ abstract final class RentalDateFormat {
     return DateTime(parsed.year, parsed.month, parsed.day);
   }
 
+  /// Full timestamp parse for [published_at] (keeps time when present).
+  static DateTime? parseDateTime(String? raw) {
+    final trimmed = raw?.trim() ?? '';
+    if (trimmed.isEmpty) return null;
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed == null) return null;
+    return parsed.toLocal();
+  }
+
   /// `4 Aug` — empty when input is missing or unparseable.
   static String formatRentalAvailabilityDate(String? raw) {
     return formatRentalAvailabilityDateTime(parseIsoDate(raw));
@@ -37,6 +47,12 @@ abstract final class RentalDateFormat {
   static String formatRentalAvailabilityDateTime(DateTime? date) {
     if (date == null) return '';
     return _dayMonth.format(date);
+  }
+
+  /// `25 Aug 2026` — empty when [date] is null.
+  static String formatListedOnDate(DateTime? date) {
+    if (date == null) return '';
+    return _dayMonthYear.format(date);
   }
 
   /// Seeker window chip label — empty when unset.

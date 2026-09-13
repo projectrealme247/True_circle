@@ -1,0 +1,51 @@
+---
+description: Trust simplification is complete; verification is access, not ranking. Next: host verification & publish controls.
+alwaysApply: true
+---
+
+# Trust Simplification Programme (complete)
+
+Do **not** restore trust tiers, trust-based ranking, or social-circle scoring.
+
+## Removed (do not reopen)
+
+- `TrustStage` as a ranking / recommendation input
+- Just Landed / Grand / Sound
+- In Your Circle
+- Trust-based ordering and recommendation logic
+
+## Retained
+
+- **Verified User** (`✅ Verified User`) — the only seeker/host trust badge
+
+## Current model
+
+| Layer | Role |
+|---|---|
+| Verification | Access (who may contact / act) |
+| Compatibility | Matching |
+| Profile | Familiarity |
+
+Do not mix these. Verification must not boost match score, sort order, or recommendations.
+
+## Contact permission
+
+- **Students:** Offer Letter Verified **OR** University Verified
+- **Professionals / Families:** LinkedIn Connected **OR** Employment Verified
+
+## Prefer next product work
+
+**Host Verification & Publish Controls:**
+
+1. Current Resident Verified
+2. Resident Owner Verified
+3. Draft vs Published listings
+4. Publish gating
+
+When the user asks “what’s next,” steer here unless they explicitly reopen seeker trust UX.
+
+## Not allowed without approval
+
+- Reintroducing trust stages, JL/G/S copy, or “In Your Circle”
+- Using verification or leftover `TrustStage` fields to order listings or recommendations
+- Changing contact-permission rules above

@@ -1,26 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../onboarding_design_tokens.dart';
-import '../onboarding_field_block.dart';
-import 'landlord_inventory_track_selector.dart';
 import 'landlord_onboarding_field.dart';
 import 'landlord_trust_ecosystem_overview.dart';
 
-/// Streamlined landlord form — hosting track, full name, trust ecosystem primer.
+/// Shared Living host profile — name + trust primer.
+/// Independent Place hosts skip this screen (name collected on Add Listing).
 class LandlordOnboardingForm extends StatelessWidget {
   const LandlordOnboardingForm({
     super.key,
     required this.nameController,
-    required this.isSharedSpace,
-    required this.onSelectEntirePlace,
-    required this.onSelectSharedSpace,
     required this.onNameChanged,
   });
 
   final TextEditingController nameController;
-  final bool isSharedSpace;
-  final VoidCallback onSelectEntirePlace;
-  final VoidCallback onSelectSharedSpace;
   final VoidCallback onNameChanged;
 
   @override
@@ -29,7 +22,7 @@ class LandlordOnboardingForm extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Set up your host profile',
+          'Set up your Shared Living host profile',
           style: OnboardingTokens.pageTitleStyle,
         ),
         const SizedBox(height: 8),
@@ -38,14 +31,6 @@ class LandlordOnboardingForm extends StatelessWidget {
           style: OnboardingTokens.pageSubtitleStyle,
         ),
         const SizedBox(height: 32),
-        OnboardingFieldBlock(
-          child: LandlordInventoryTrackSelector(
-            isSharedSpace: isSharedSpace,
-            onSelectEntirePlace: onSelectEntirePlace,
-            onSelectSharedSpace: onSelectSharedSpace,
-          ),
-        ),
-        const SizedBox(height: OnboardingTokens.fieldSpacing),
         LandlordOnboardingField(
           controller: nameController,
           label: 'Full name',
@@ -53,7 +38,7 @@ class LandlordOnboardingForm extends StatelessWidget {
           onChanged: onNameChanged,
         ),
         const SizedBox(height: OnboardingTokens.fieldSpacing),
-        LandlordTrustEcosystemOverview(isSharedSpace: isSharedSpace),
+        const LandlordTrustEcosystemOverview(isSharedSpace: true),
       ],
     );
   }

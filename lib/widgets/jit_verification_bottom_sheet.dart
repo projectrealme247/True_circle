@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
-import '../core/widgets/app_button.dart';
 import '../services/linkedin_oauth_service.dart';
 import '../services/corporate_document_verify_service.dart';
 import '../services/trust_service.dart';
@@ -12,7 +11,8 @@ import '../theme/home_marketplace_theme.dart';
 import '../utils/viewer_profile.dart';
 import '../screens/auth_screen.dart';
 
-/// Phase 3 JIT gate for Working Professionals and Arriving Families.
+/// JIT gate for Working Professionals and Arriving Families —
+/// LinkedIn or employment document unlocks contact (not budget proof).
 class JitVerificationBottomSheet extends StatefulWidget {
   const JitVerificationBottomSheet({
     super.key,
@@ -49,15 +49,10 @@ class JitVerificationBottomSheet extends StatefulWidget {
 
 class _JitVerificationBottomSheetState extends State<JitVerificationBottomSheet> {
   static const _indigo = Color(0xFF4338CA);
-  static const _teal = Color(0xFF008A7A);
-  static const _tealSurface = Color(0xFFE6F7F5);
 
   bool _busy = false;
   String? _error;
   String? _uploadedFileName;
-
-  bool get _isWorking =>
-      widget.cohort == SeekerCohort.workingProfessional;
 
   Future<void> _verifyWithLinkedIn() async {
     setState(() {
@@ -170,49 +165,6 @@ class _JitVerificationBottomSheetState extends State<JitVerificationBottomSheet>
     }
   }
 
-  Future<void> _pickFamilyBudgetProof() async {
-    await _pickAndSubmit(
-      label: 'bank statement summary',
-      submit: TrustService.submitJitFamilyBudgetProof,
-    );
-  }
-
-  Future<void> _pickAndSubmit({
-    required String label,
-    required Future<void> Function({required String localPath}) submit,
-  }) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-        withData: false,
-      );
-      if (result == null || result.files.isEmpty) {
-        setState(() => _busy = false);
-        return;
-      }
-
-      final file = result.files.first;
-      final path = file.path ?? file.name;
-      await submit(localPath: path);
-
-      if (!mounted) return;
-      setState(() => _uploadedFileName = file.name);
-      widget.onVerified();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not process $label. Try again.';
-        _busy = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -246,11 +198,7 @@ class _JitVerificationBottomSheetState extends State<JitVerificationBottomSheet>
                   width: 4,
                   height: 24,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [_indigo, _teal],
-                    ),
+                    color: _indigo,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -269,31 +217,24 @@ class _JitVerificationBottomSheetState extends State<JitVerificationBottomSheet>
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              _isWorking
-                  ? 'Hosts trust verified professionals. Confirm your employment '
-                      'before messaging.'
-                  : 'Confirm your rental budget capability so hosts know you '
-                      'are a serious match.',
-              style: const TextStyle(
+            const Text(
+              'Confirm employment with LinkedIn or an employment letter '
+              'before messaging hosts.',
+              style: TextStyle(
                 fontSize: 14,
                 color: Color(0xFF6B7280),
                 height: 1.45,
               ),
             ),
             const SizedBox(height: 20),
-            if (_isWorking) ...[
-              _linkedInCard(),
-              const SizedBox(height: 12),
-              _fallbackUploadCard(
-                title: 'Or upload corporate employment letter',
-                subtitle: 'Zero-retention Dublin processing · never stored',
-                icon: Icons.description_outlined,
-                onTap: _busy ? null : _pickEmploymentLetter,
-              ),
-            ] else ...[
-              _familyBudgetCard(),
-            ],
+            _linkedInCard(),
+            const SizedBox(height: 12),
+            _fallbackUploadCard(
+              title: 'Or upload corporate employment letter',
+              subtitle: 'Zero-retention Dublin processing · never stored',
+              icon: Icons.description_outlined,
+              onTap: _busy ? null : _pickEmploymentLetter,
+            ),
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -305,7 +246,10 @@ class _JitVerificationBottomSheetState extends State<JitVerificationBottomSheet>
               const SizedBox(height: 8),
               Text(
                 'Received: $_uploadedFileName',
-                style: const TextStyle(fontSize: 12, color: _teal),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF008A7A),
+                ),
               ),
             ],
             const SizedBox(height: 16),
@@ -393,59 +337,6 @@ class _JitVerificationBottomSheetState extends State<JitVerificationBottomSheet>
                 ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _familyBudgetCard() {
-    return Material(
-      color: _tealSurface,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: _teal, width: 1.2),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.account_balance_wallet_outlined, color: _teal),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Confirm Rental Budget Capability',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0F3D36),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '🔒 Scanned locally on your device. Raw files are never stored on our servers.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF2D6A62),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 14),
-            AppButton(
-              label: _busy ? 'Processing…' : 'Upload bank statement summary',
-              onPressed: _busy ? null : _pickFamilyBudgetProof,
-              isLoading: _busy,
-              isDisabled: _busy,
-              isFullWidth: true,
-              variant: AppButtonVariant.primary,
-            ),
-          ],
         ),
       ),
     );

@@ -5,7 +5,6 @@ abstract final class ListingCreationFieldKeys {
   static const marketplaceCategory = 'marketplace_category';
   static const eircode = 'eircode';
   static const bedsCount = 'beds_count';
-  static const rtbStatus = 'rtb_status';
   static const parkingAvailable = 'parking_available';
   static const secureBikeStorage = 'secure_bike_storage';
   static const roomType = 'room_type';
@@ -16,34 +15,25 @@ abstract final class ListingCreationFieldKeys {
   static const longitude = 'longitude';
   static const locationGeom = 'location_geom';
   static const availabilityFlexibility = 'availability_flexibility';
+  static const petsPolicy = 'pets_policy';
+  static const parkingType = 'parking_type';
+  static const parkingFeatures = 'parking_features';
+  static const hostName = 'hostName';
+  static const securityDeposit = 'security_deposit';
+  static const listingAuthorizationConfirmed =
+      'listing_authorization_confirmed';
+  static const publishedAt = 'published_at';
 
-  /// Permanently deprecated — never serialize on create.
+  /// Permanently deprecated — never serialize on create/update.
   static const forbiddenKeys = <String>{
     'kitchen_usage_timing',
     'kitchen_utility_preference',
     'kitchen_utility',
     'kitchenUtilityPreference',
+    // RTB removed from Independent Places — ignore on write; legacy reads OK.
+    'rtb_status',
+    'rtb_registered',
   };
-}
-
-/// RTB registration status for independent places.
-enum ListingRtbStatus {
-  registered('registered'),
-  notRegistered('not_registered'),
-  notProvided('not_provided');
-
-  const ListingRtbStatus(this.storageValue);
-  final String storageValue;
-
-  static ListingRtbStatus? parse(String? raw) {
-    final normalized = raw?.trim().toLowerCase() ?? '';
-    return switch (normalized) {
-      'registered' || 'rtb_registered' || 'true' => registered,
-      'not_registered' || 'unregistered' || 'false' => notRegistered,
-      'not_provided' || 'unknown' || '' => notProvided,
-      _ => null,
-    };
-  }
 }
 
 /// Share room configuration — Ensuite vs Shared bath.

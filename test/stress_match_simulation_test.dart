@@ -406,7 +406,6 @@ void _runScenario({
     print(
       '#${i + 1} [$id] ${s.listing['title']}\n'
       '     Score: ${m.score}/${m.maxScore} (${m.percentage.round()}%) — ${m.label}\n'
-      '     Host trust: ${m.trustStage.label} (${m.trustStage.multiplier}×)\n'
       '     Commute: ${commuteNote.isEmpty ? 'n/a' : commuteNote}\n'
       '     Reasons: ${m.reasons.join(' · ')}',
     );

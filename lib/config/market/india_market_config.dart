@@ -14,7 +14,7 @@ final class IndiaMarketConfig implements MarketConfig {
   String get tagline => 'Where trust meets home — India';
 
   @override
-  int get seedVersion => 4;
+  int get seedVersion => 5;
 
   @override
   List<String> get enabledTowers => const ['Rent', 'Buy', 'Share'];
@@ -226,11 +226,8 @@ final class IndiaMarketConfig implements MarketConfig {
   @override
   List<String> get profileStudentFundingOptions => const [
         'Family supported',
-        'Education loan (bank financed)',
+        'Education loan',
       ];
-
-  @override
-  String get profileNativePlaceHint => 'e.g. Vijayawada';
 
   @override
   String get profileBudgetSubtitle => 'Monthly rent or purchase budget (INR).';

@@ -1,0 +1,81 @@
+---
+description: Location workflow is production-frozen; no edits without explicit approval
+alwaysApply: true
+---
+
+# Location workflow frozen (production-stable)
+
+The location / area / proximity workflow is **complete and frozen**. Do not modify it without explicit user approval.
+
+## Completed (do not reopen)
+
+- Area hierarchy
+- Area filters
+- Search quality
+- DED/ED cleanup
+- Proximity enrichment
+- Hide / Pin / Custom proximity
+- Eircode UX
+- Area consistency
+
+## Prefer next product work (not location infrastructure)
+
+- Seeker cards
+- Listing details view
+- Matching
+- Recommendations
+
+When the user asks for “what’s next,” steer toward those surfaces unless they explicitly reopen location.
+
+## Protected scope
+
+- Location search, autocomplete, Nominatim integration, search result formatting
+- Current location, map pin workflow, reverse geocoding
+- Eircode handling
+- Area resolution, Dublin district taxonomy, macro areas
+- Homepage / refine area filters, property area selection
+- Proximity enrichment, editor, display
+- Transport enrichment, nearby amenities
+- Listing location UI
+
+## Protected files (non-exhaustive; includes related siblings)
+
+- `lib/widgets/listing_creation/listing_creation_form.dart`
+- `lib/widgets/listing_creation/location_pin_field.dart`
+- `lib/widgets/listing_creation/unified_proximity_display.dart`
+- `lib/utils/listing_area_resolution.dart`
+- `lib/utils/target_search_areas.dart`
+- `lib/utils/dublin_location_search_suggestions.dart`
+- `lib/utils/proximity_display_builder.dart`
+- `lib/utils/proximity_chip_keys.dart`
+- `lib/utils/proximity_phase1_policy.dart`
+- `lib/config/market/dublin_districts.dart`
+- `lib/config/market/dublin_macro_areas.dart`
+- `lib/**/eircode_*`
+- `lib/**/nominatim_*`
+- `lib/**/overpass_*`
+- `lib/**/transit_*`
+- Related proximity / area filter widgets and services that feed the above
+
+## Before ANY modification
+
+1. Explain why the change is required.
+2. List affected files.
+3. Explain user impact.
+4. Explain regression risk.
+5. **Wait for approval.**
+
+## Allowed without approval
+
+- Read-only investigation
+- Documentation
+- Test review (no test changes that alter protected behavior unless approved)
+
+## Not allowed without approval
+
+- Implementation, refactors, UI changes
+- Search / matching / area / proximity behavior changes
+
+## Exception
+
+Critical production bug fixes only — still state why, files, impact, and risk, and prefer minimal diffs.

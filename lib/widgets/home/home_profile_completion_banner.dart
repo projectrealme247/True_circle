@@ -34,18 +34,22 @@ class HomeProfileCompletionBanner extends StatelessWidget {
 
   String get _title => switch (audience) {
         ProfileCompletionAudience.seeker =>
-          percent > 0 ? 'Complete Profile ($percent%)' : 'Complete Profile',
+          'Complete your profile to see your best matches',
         ProfileCompletionAudience.host =>
           percent > 0
               ? 'Complete Host Profile ($percent%)'
               : 'Complete Host Profile',
       };
 
-  String get _subtitle => switch (audience) {
-        ProfileCompletionAudience.seeker =>
-          'Complete your profile for better matches.',
+  String? get _subtitle => switch (audience) {
+        ProfileCompletionAudience.seeker => null,
         ProfileCompletionAudience.host =>
           'Add contact details and listing basics to attract quality applicants.',
+      };
+
+  String get _ctaLabel => switch (audience) {
+        ProfileCompletionAudience.seeker => 'Complete profile',
+        ProfileCompletionAudience.host => 'Continue',
       };
 
   @override
@@ -74,16 +78,19 @@ class HomeProfileCompletionBanner extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(
-                child: Text(
-                  _subtitle,
-                  style: AppTypography.meta().copyWith(
-                    color: AppColors.secondaryText,
-                    height: 1.25,
+              if (_subtitle != null)
+                Expanded(
+                  child: Text(
+                    _subtitle!,
+                    style: AppTypography.meta().copyWith(
+                      color: AppColors.secondaryText,
+                      height: 1.25,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
+                )
+              else
+                const Spacer(),
+              if (_subtitle != null) const SizedBox(width: 8),
               FilledButton(
                 onPressed: onContinue,
                 style: FilledButton.styleFrom(
@@ -95,7 +102,7 @@ class HomeProfileCompletionBanner extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                child: const Text('Continue'),
+                child: Text(_ctaLabel),
               ),
               TextButton(
                 onPressed: onDismiss,

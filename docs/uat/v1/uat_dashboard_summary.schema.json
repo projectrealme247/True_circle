@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truecircle.local/schemas/uat/v1/uat_dashboard_summary.schema.json",
+  "title": "TrueCircle V1 UAT Dashboard Summary",
+  "description": "Aggregated metrics from a set of UAT execution records (docs/uat/v1/uat_execution_record.schema.json). Rates are 0–1 fractions; optional *_pct fields may mirror 0–100 for display.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "overall",
+    "by_marketplace"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uat_version", "seeker_count", "generated_at"],
+      "properties": {
+        "uat_version": {
+          "type": "string",
+          "const": "v1"
+        },
+        "seeker_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of execution records included."
+        },
+        "listing_inventory": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shared_living": { "type": "integer", "minimum": 0 },
+            "independent_places": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "overall": {
+      "$ref": "#/$defs/metricBlock"
+    },
+    "by_marketplace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shared_living", "independent_places"],
+      "properties": {
+        "shared_living": { "$ref": "#/$defs/metricBlock" },
+        "independent_places": { "$ref": "#/$defs/metricBlock" }
+      }
+    },
+    "by_uat_expected_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional breakdown of scenario_pass by frozen expected result.",
+      "properties": {
+        "PASS": { "$ref": "#/$defs/scenarioSlice" },
+        "LIMITED_MATCHES": { "$ref": "#/$defs/scenarioSlice" },
+        "ZERO_MATCHES": { "$ref": "#/$defs/scenarioSlice" }
+      }
+    }
+  },
+  "$defs": {
+    "rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numerator", "denominator", "rate"],
+      "properties": {
+        "numerator": { "type": "integer", "minimum": 0 },
+        "denominator": { "type": "integer", "minimum": 0 },
+        "rate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "numerator/denominator; null when denominator is 0."
+        },
+        "rate_pct": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "metricBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seeker_count",
+        "marketplace_separation_pass_rate",
+        "card_pass_rate",
+        "detail_page_pass_rate",
+        "contact_intent_rate",
+        "critical_findings_count",
+        "scenario_pass_rate"
+      ],
+      "properties": {
+        "seeker_count": { "type": "integer", "minimum": 0 },
+        "marketplace_separation_pass_rate": { "$ref": "#/$defs/rate" },
+        "card_pass_rate": { "$ref": "#/$defs/rate" },
+        "detail_page_pass_rate": { "$ref": "#/$defs/rate" },
+        "contact_intent_rate": { "$ref": "#/$defs/rate" },
+        "critical_findings_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of records with severity == critical."
+        },
+        "scenario_pass_rate": { "$ref": "#/$defs/rate" }
+      }
+    },
+    "scenarioSlice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seeker_count", "scenario_pass_rate", "match_volume_ok_rate"],
+      "properties": {
+        "seeker_count": { "type": "integer", "minimum": 0 },
+        "scenario_pass_rate": { "$ref": "#/$defs/rate" },
+        "match_volume_ok_rate": { "$ref": "#/$defs/rate" }
+      }
+    }
+  }
+}

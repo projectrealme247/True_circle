@@ -1,0 +1,257 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:57:19.733311Z",
+  "overall_pass": false,
+  "overall": "FAIL",
+  "success_criteria": {
+    "all_zero_match_seekers_return_0": false,
+    "empty_state_correct": true,
+    "cross_marketplace_listings": 0,
+    "marketplace_bleed": 0,
+    "cross_marketplace_fallback": "ABSENT",
+    "marketplace_isolation_preserved": true,
+    "seekers_tested": 3,
+    "seekers_pass": 0
+  },
+  "summary": {
+    "total_matches": 6,
+    "cross_marketplace_count": 0,
+    "seekers_pass": 0,
+    "seekers_tested": 3,
+    "zero_match_as_expected": 0,
+    "overall": "FAIL"
+  },
+  "methodology": {
+    "active_mode": "explore",
+    "code_paths": [
+      "MarketplaceSpace.fromSession (marketplace routing from seeker session)",
+      "ProfileOnboardingRepository.snapshotFromSession + ProfilePortalInheritanceService.seekerFeedDefaults (Active Mode Explore inherited hard filters)",
+      "MarketplaceListingPipeline.runWithFilters (tower equality → weighted hard exclusion → rank)",
+      "ListingData.listingType (classify returned listings Share vs Rent)"
+    ],
+    "listing_corpus": {
+      "name": "SampleListingsDublin (local Dublin marketplace seed)",
+      "paths": [
+        "lib/data/sample_listings_dublin.dart",
+        "lib/data/sample_listings_dublin_v2.dart",
+        "lib/data/sample_listings_dublin_legacy.dart",
+        "lib/data/sample_listings_dublin_expansion.dart",
+        "lib/data/dublin_listing_builder.dart"
+      ],
+      "shared_living_count": 40,
+      "independent_places_count": 50,
+      "total": 90
+    },
+    "empty_state_assessment": {
+      "method": "code_path_inferred",
+      "limitation": "Pipeline test asserts matches==0; empty_state_displayed=YES when matches_returned==0 AND HomeScreen empty-state widgets confirmed for ranked-empty / tower-empty paths. Not UI-instrumented (no widget pump of HomeScreen).",
+      "widgets": [
+        "HomeScreen._buildSearchNoResultsState (ranked empty + active search / commute divergence)",
+        "HomeScreen._buildTowerEmptyState (afterTower empty)"
+      ],
+      "empty_state_widget_confirmed": true
+    },
+    "recommended_fallback_assessment": {
+      "method": "codebase_search",
+      "cross_marketplace_listing_injection_found": false,
+      "notes": "Zero-match UI copy may mention \"switch tabs\" and the family shared-living unavailable state offers a Browse Independent Places CTA that changes the active tab — neither injects opposite-marketplace listing cards into the feed. Soft closest-match / filter relaxation stays within the same tower."
+    },
+    "marketplace_determination": "Canonical tower = ListingData.listingType. Share = shared_living; Rent = independent_places. Feed isolation is tower equality in MarketplaceListingPipeline.run (afterTower) before budget hard-cap.",
+    "seeker_dataset": {
+      "status": "reconstructed",
+      "note": "Frozen UAT seeker JSON is not checked into the repo. ZERO_MATCHES edge seekers reconstructed from prior UAT chat artifact and mapped into session keys + Explore inherited filters (budget / SL soft profile fields). preferred_locations, parking, pets, property_type, and transit are session metadata for ranking context where wired; they are NOT additional hard exclusions in seekerFeedDefaults.",
+      "source_seeker_ids": [
+        "SL-EDGE-01",
+        "IP-EDGE-04",
+        "IP-EDGE-06"
+      ]
+    },
+    "filter_inputs_used": "Active Mode Explore defaults via seekerFeedDefaults: budgetMax (+ SL occupant/gender/food/lease when present on session). Same hard budget cap ratio 1.25 as WeightedListingMatcher."
+  },
+  "blockers": [
+    {
+      "seeker_id": "SL-EDGE-01",
+      "reason": "expected ZERO_MATCHES but matches_returned=2 (ids=dub-share-04,dub-share-11)",
+      "bleed_listing_ids": [],
+      "matches_returned": 2
+    },
+    {
+      "seeker_id": "IP-EDGE-04",
+      "reason": "expected ZERO_MATCHES but matches_returned=3 (ids=dub-rent-27,dub-rent-45,dub-rent-14)",
+      "bleed_listing_ids": [],
+      "matches_returned": 3
+    },
+    {
+      "seeker_id": "IP-EDGE-06",
+      "reason": "expected ZERO_MATCHES but matches_returned=1 (ids=dub-rent-27)",
+      "bleed_listing_ids": [],
+      "matches_returned": 1
+    }
+  ],
+  "seekers": [
+    {
+      "seeker_id": "SL-EDGE-01",
+      "uat_scenario": "Edge · very low budget · D2/D4 private · zero/few matches",
+      "marketplace": "shared_living",
+      "marketplace_requested": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "tower_property_type": "Share",
+      "active_mode": "explore",
+      "expected_result": "ZERO_MATCHES",
+      "matches_returned": 2,
+      "empty_state_displayed": "NO",
+      "empty_state_assessment_method": "code_path_inferred",
+      "cross_marketplace_listings_shown": "NO",
+      "recommended_fallback_content": "NO",
+      "shared_living_results_count": 2,
+      "independent_places_results_count": 0,
+      "cross_marketplace_count": 0,
+      "marketplace_correct": "YES",
+      "result": "FAIL",
+      "fail_reason": "expected ZERO_MATCHES but matches_returned=2 (ids=dub-share-04,dub-share-11)",
+      "returned_listing_ids": [
+        "dub-share-04",
+        "dub-share-11"
+      ],
+      "bleed_listing_ids": [],
+      "inherited_filters": {
+        "budget_max": 350,
+        "occupant_type": "Working Professionals",
+        "gender_preference": null,
+        "food_preference": null,
+        "preferred_lease_months": null
+      },
+      "session_prefs_not_hard_filtered": {
+        "preferred_locations": [
+          "Dublin 2",
+          "Dublin 4"
+        ],
+        "room_preference": "private",
+        "property_type": null,
+        "parking_required": false,
+        "pets": false,
+        "transit": "luas",
+        "desired_move_date": "2026-09-01"
+      },
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 2,
+        "ranked": 2,
+        "used_closest_match_fallback": false,
+        "relaxed_constraints": [],
+        "is_commute_divergent": false,
+        "requires_onboarding": false
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-04",
+      "uat_scenario": "Edge · extremely low budget · D2/D4 · zero matches",
+      "marketplace": "independent_places",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "tower_property_type": "Rent",
+      "active_mode": "explore",
+      "expected_result": "ZERO_MATCHES",
+      "matches_returned": 3,
+      "empty_state_displayed": "NO",
+      "empty_state_assessment_method": "code_path_inferred",
+      "cross_marketplace_listings_shown": "NO",
+      "recommended_fallback_content": "NO",
+      "shared_living_results_count": 0,
+      "independent_places_results_count": 3,
+      "cross_marketplace_count": 0,
+      "marketplace_correct": "YES",
+      "result": "FAIL",
+      "fail_reason": "expected ZERO_MATCHES but matches_returned=3 (ids=dub-rent-27,dub-rent-45,dub-rent-14)",
+      "returned_listing_ids": [
+        "dub-rent-27",
+        "dub-rent-45",
+        "dub-rent-14"
+      ],
+      "bleed_listing_ids": [],
+      "inherited_filters": {
+        "budget_max": 900,
+        "occupant_type": null,
+        "gender_preference": null,
+        "food_preference": null,
+        "preferred_lease_months": null
+      },
+      "session_prefs_not_hard_filtered": {
+        "preferred_locations": [
+          "Dublin 2",
+          "Dublin 4"
+        ],
+        "room_preference": null,
+        "property_type": "apartment",
+        "parking_required": false,
+        "pets": false,
+        "transit": null,
+        "desired_move_date": null
+      },
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 3,
+        "ranked": 3,
+        "used_closest_match_fallback": false,
+        "relaxed_constraints": [],
+        "is_commute_divergent": false,
+        "requires_onboarding": false
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-06",
+      "uat_scenario": "Edge · zero match · studio + pets + parking + D4 + ultra low budget",
+      "marketplace": "independent_places",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "tower_property_type": "Rent",
+      "active_mode": "explore",
+      "expected_result": "ZERO_MATCHES",
+      "matches_returned": 1,
+      "empty_state_displayed": "NO",
+      "empty_state_assessment_method": "code_path_inferred",
+      "cross_marketplace_listings_shown": "NO",
+      "recommended_fallback_content": "NO",
+      "shared_living_results_count": 0,
+      "independent_places_results_count": 1,
+      "cross_marketplace_count": 0,
+      "marketplace_correct": "YES",
+      "result": "FAIL",
+      "fail_reason": "expected ZERO_MATCHES but matches_returned=1 (ids=dub-rent-27)",
+      "returned_listing_ids": [
+        "dub-rent-27"
+      ],
+      "bleed_listing_ids": [],
+      "inherited_filters": {
+        "budget_max": 800,
+        "occupant_type": null,
+        "gender_preference": null,
+        "food_preference": null,
+        "preferred_lease_months": null
+      },
+      "session_prefs_not_hard_filtered": {
+        "preferred_locations": [
+          "Dublin 4"
+        ],
+        "room_preference": null,
+        "property_type": "studio",
+        "parking_required": true,
+        "pets": true,
+        "transit": "dart",
+        "desired_move_date": "2026-08-05"
+      },
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 1,
+        "ranked": 1,
+        "used_closest_match_fallback": false,
+        "relaxed_constraints": [],
+        "is_commute_divergent": false,
+        "requires_onboarding": false
+      }
+    }
+  ]
+}

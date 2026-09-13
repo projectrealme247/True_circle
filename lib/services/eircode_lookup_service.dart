@@ -14,8 +14,11 @@ import 'overpass_eircode_lookup.dart';
 /// data. Building-level addresses are not auto-resolved — users confirm or
 /// edit their display address after Eircode pins the neighbourhood.
 abstract final class EircodeLookupService {
-  /// Reverse-geocodes GPS coordinates to area + optional Eircode, then
-  /// forward-resolves when a postcode is available.
+  /// Reverse-geocodes GPS coordinates to area + optional Eircode.
+  ///
+  /// Prefers the reverse-geocode field map (same coords the user just pinned)
+  /// and skips the expensive Eircode forward/Overpass pipeline unless the
+  /// reverse result is empty. Avoids duplicate Nominatim work on Current Location.
   static Future<IrishAddressSuggestion?> resolveFromCoordinates(
     double latitude,
     double longitude,
@@ -23,13 +26,6 @@ abstract final class EircodeLookupService {
     final nominatim = await NominatimReverse.lookup(latitude, longitude);
     if (nominatim != null && nominatim.isNotEmpty) {
       final postcode = _normalizePostalCode(nominatim['postcode']);
-      if (postcode != null) {
-        final forward = await resolve(postcode);
-        if (forward != null) {
-          return _withGpsCoordinates(forward, latitude, longitude);
-        }
-      }
-
       final fromNominatim = _fromFieldMap(
         nominatim,
         normalized: postcode ?? '',
@@ -39,16 +35,17 @@ abstract final class EircodeLookupService {
       if (fromNominatim.displayLabel.trim().isNotEmpty) {
         return _withGpsCoordinates(fromNominatim, latitude, longitude);
       }
-    }
 
-    final placemark = await DublinPlacemarkLabel.lookup(latitude, longitude);
-    if (placemark.eircode != null) {
-      final forward = await resolve(placemark.eircode!);
-      if (forward != null) {
-        return _withGpsCoordinates(forward, latitude, longitude);
+      // Reverse label empty — try Eircode forward only when we have a postcode.
+      if (postcode != null) {
+        final forward = await resolve(postcode);
+        if (forward != null) {
+          return _withGpsCoordinates(forward, latitude, longitude);
+        }
       }
     }
 
+    final placemark = await DublinPlacemarkLabel.lookup(latitude, longitude);
     if (placemark.label.trim().isNotEmpty) {
       final label = IrishAddressFormat.sanitizeCommaSeparatedLabel(
         placemark.eircode != null

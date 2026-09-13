@@ -54,19 +54,19 @@ class AppTypography {
 
   static const String fontFamily = 'PlusJakartaSans';
 
-  /// Bundled color emoji font — registered in pubspec.yaml.
-  static const String emojiFontFamily = 'Noto Color Emoji';
+  /// Preferred emoji family name (CSS/OS). Not bundled — CanvasKit cannot load
+  /// CBDT color-emoji TTFs; bundling them crashes Flutter web bootstrap.
+  static const String emojiFontFamily = 'Segoe UI Emoji';
 
-  /// CanvasKit/web-safe alias (no spaces) for the same bundled TTF.
-  static const String emojiFontFamilyAlias = 'NotoColorEmoji';
+  /// Alias kept for call sites that previously used the bundled no-space name.
+  static const String emojiFontFamilyAlias = 'Apple Color Emoji';
 
   /// Fallback chain for mixed Latin + emoji copy (onboarding chips, labels, trust badges).
   static const List<String> emojiFontFallback = <String>[
-    emojiFontFamilyAlias,
-    emojiFontFamily,
     'Segoe UI Emoji',
     'Apple Color Emoji',
     'Noto Color Emoji',
+    'NotoColorEmoji',
   ];
 
   /// Text style for strings that start with emoji + Latin label (e.g. lifestyle chips).

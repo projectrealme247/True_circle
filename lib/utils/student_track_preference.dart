@@ -27,7 +27,7 @@ enum StudentTrackPreference {
         StudentTrackPreference.onCampusOnly =>
           'Restricts matches to users with verified active university emails.',
         StudentTrackPreference.preArrivalAllowed =>
-          'Allows international students with verified official university offer letters.',
+          'Allows international students relocating to Dublin who do not yet have a university email.',
       };
 
   /// Preferred display order for landlord preference pickers.

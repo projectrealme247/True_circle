@@ -40,8 +40,13 @@ abstract final class ListingsStorageService {
   static Future<Map<String, dynamic>> addListing(Map<String, dynamic> listing) async {
     final listings = await load();
     final listingId = listing['id'] ?? DateTime.now().millisecondsSinceEpoch;
+    final withPublished = Map<String, dynamic>.from(listing);
+    if (ListingData.text(withPublished[ListingData.publishedAtKey]).isEmpty) {
+      withPublished[ListingData.publishedAtKey] =
+          DateTime.now().toUtc().toIso8601String();
+    }
     final payload = ListingData.normalizeItem({
-      ...listing,
+      ...withPublished,
       'id': listingId,
     });
 
@@ -130,13 +135,23 @@ abstract final class ListingsStorageService {
     Map<String, dynamic> listing,
   ) async {
     final listings = await load();
-    final payload = ListingData.normalizeItem({
-      ...listing,
-      'id': listingId,
-    });
+    final merged = Map<String, dynamic>.from(listing);
     final index = listings.indexWhere(
       (item) => item['id']?.toString() == listingId,
     );
+    // Preserve first-publish timestamp; never invent for legacy rows.
+    if (ListingData.text(merged[ListingData.publishedAtKey]).isEmpty &&
+        index >= 0) {
+      final existing =
+          ListingData.text(listings[index][ListingData.publishedAtKey]);
+      if (existing.isNotEmpty) {
+        merged[ListingData.publishedAtKey] = existing;
+      }
+    }
+    final payload = ListingData.normalizeItem({
+      ...merged,
+      'id': listingId,
+    });
     if (index < 0) {
       return addListing(payload);
     }
@@ -155,5 +170,17 @@ abstract final class ListingsStorageService {
       if (id == 'listing-$i') return item;
     }
     return null;
+  }
+
+  /// Removes a listing by id. Returns true if something was deleted.
+  static Future<bool> deleteListing(String listingId) async {
+    if (listingId.isEmpty) return false;
+    final listings = await load();
+    final next = listings
+        .where((item) => item['id']?.toString() != listingId)
+        .toList(growable: false);
+    if (next.length == listings.length) return false;
+    await platform.saveListings(storageKey, ListingData.normalizeList(next));
+    return true;
   }
 }

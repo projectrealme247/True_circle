@@ -1,0 +1,3300 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:57:05.370253Z",
+  "source": {
+    "name": "SampleListingsDublin (local Dublin marketplace seed)",
+    "paths": [
+      "lib/data/sample_listings_dublin.dart",
+      "lib/data/sample_listings_dublin_v2.dart",
+      "lib/data/sample_listings_dublin_legacy.dart",
+      "lib/data/sample_listings_dublin_expansion.dart",
+      "lib/data/dublin_listing_builder.dart"
+    ],
+    "notes": "Same corpus as prior UAT audits (~40 Share + ~50 Rent). App feed bootstraps via ListingsStorageService.",
+    "shared_living_count": 40,
+    "independent_places_count": 50,
+    "total": 90
+  },
+  "field_checklists": {
+    "shared_living": [
+      {
+        "id": "room_type",
+        "label": "Room type",
+        "surfaces": "Room Snapshot, card chips, ListingMatchEngine share room"
+      },
+      {
+        "id": "bathroom",
+        "label": "Bathroom",
+        "surfaces": "Room Snapshot, ListingMatchEngine share bathroom"
+      },
+      {
+        "id": "rent",
+        "label": "Rent / price",
+        "surfaces": "Room Snapshot, cards, ranking budget"
+      },
+      {
+        "id": "availability",
+        "label": "Availability / move-in",
+        "surfaces": "Room Snapshot, card chips, timing match"
+      },
+      {
+        "id": "household_type",
+        "label": "Household type",
+        "surfaces": "Household Snapshot, card chips, occupant match"
+      },
+      {
+        "id": "occupants",
+        "label": "Current occupants",
+        "surfaces": "Household Snapshot"
+      },
+      {
+        "id": "culture_languages",
+        "label": "Culture · languages",
+        "surfaces": "Household Culture (hide-if-empty)"
+      },
+      {
+        "id": "culture_kitchen",
+        "label": "Culture · kitchen / food",
+        "surfaces": "Household Culture (hide-if-empty)"
+      },
+      {
+        "id": "culture_pets_smoking",
+        "label": "Culture · pets / smoking",
+        "surfaces": "Household Culture lifestyle flags"
+      },
+      {
+        "id": "property_type",
+        "label": "Property type",
+        "surfaces": "Property Details"
+      },
+      {
+        "id": "furnishing",
+        "label": "Furnishing",
+        "surfaces": "Property Details"
+      },
+      {
+        "id": "parking",
+        "label": "Parking",
+        "surfaces": "Property Details (incl. explicit No Parking)"
+      },
+      {
+        "id": "bike",
+        "label": "Bike storage",
+        "surfaces": "Property Details / activeHighlights"
+      },
+      {
+        "id": "ber",
+        "label": "BER",
+        "surfaces": "Property Details"
+      },
+      {
+        "id": "transit",
+        "label": "Transit / proximity",
+        "surfaces": "Transit & Commute, card commute chip"
+      },
+      {
+        "id": "title",
+        "label": "Title",
+        "surfaces": "Detail hero, cards"
+      },
+      {
+        "id": "location",
+        "label": "Location / area",
+        "surfaces": "Detail subtitle, cards, location match"
+      },
+      {
+        "id": "photos",
+        "label": "Photos",
+        "surfaces": "ListingPhotoGallery / PropertyCard cover"
+      },
+      {
+        "id": "description",
+        "label": "Description",
+        "surfaces": "Detail DESCRIPTION (placeholder if empty)"
+      },
+      {
+        "id": "host",
+        "label": "Host",
+        "surfaces": "HOSTED BY / card trust line"
+      }
+    ],
+    "independent_places": [
+      {
+        "id": "bedrooms",
+        "label": "Bedrooms",
+        "surfaces": "Property Highlights, card chips, bed match"
+      },
+      {
+        "id": "bathrooms",
+        "label": "Bathrooms",
+        "surfaces": "Property Highlights"
+      },
+      {
+        "id": "property_type",
+        "label": "Property type",
+        "surfaces": "Property Highlights"
+      },
+      {
+        "id": "furnishing",
+        "label": "Furnishing",
+        "surfaces": "Property Highlights"
+      },
+      {
+        "id": "availability",
+        "label": "Availability",
+        "surfaces": "Property Highlights, card chips"
+      },
+      {
+        "id": "parking",
+        "label": "Parking",
+        "surfaces": "Property Highlights"
+      },
+      {
+        "id": "pets",
+        "label": "Pets policy",
+        "surfaces": "Property Highlights"
+      },
+      {
+        "id": "lease",
+        "label": "Lease / tenure",
+        "surfaces": "Property Highlights (agreement_type)"
+      },
+      {
+        "id": "ber",
+        "label": "BER",
+        "surfaces": "Property Highlights"
+      },
+      {
+        "id": "transit",
+        "label": "Transit / proximity",
+        "surfaces": "Transit & Commute, card commute chip"
+      },
+      {
+        "id": "rent",
+        "label": "Rent / price",
+        "surfaces": "Cards, ranking budget (not in highlight grid)"
+      },
+      {
+        "id": "title",
+        "label": "Title",
+        "surfaces": "Detail hero, cards"
+      },
+      {
+        "id": "location",
+        "label": "Location / area",
+        "surfaces": "Detail subtitle, cards"
+      },
+      {
+        "id": "photos",
+        "label": "Photos",
+        "surfaces": "ListingPhotoGallery / PropertyCard cover"
+      },
+      {
+        "id": "description",
+        "label": "Description",
+        "surfaces": "Detail DESCRIPTION (placeholder if empty)"
+      },
+      {
+        "id": "host",
+        "label": "Host",
+        "surfaces": "HOSTED BY / card trust line"
+      }
+    ],
+    "scoring": "completeness_score = present_usable_fields / relevant_field_set (rounded to 4 decimals). Presence uses the same ListingData / ListingPropertyHighlights / SharedLivingMatchTokens helpers the UI and match engine consume."
+  },
+  "extremes": {
+    "shared_living": {
+      "most_complete": {
+        "listing_id": "dub-share-01",
+        "marketplace": "shared_living",
+        "completeness_score": 0.8,
+        "present_count": 16,
+        "field_count": 20,
+        "missing_fields": [
+          "property_type",
+          "furnishing",
+          "bike",
+          "ber"
+        ],
+        "available_fields": [
+          "room_type",
+          "bathroom",
+          "rent",
+          "availability",
+          "household_type",
+          "occupants",
+          "culture_languages",
+          "culture_kitchen",
+          "culture_pets_smoking",
+          "parking",
+          "transit",
+          "title",
+          "location",
+          "photos",
+          "description",
+          "host"
+        ]
+      },
+      "least_complete": {
+        "listing_id": "dub-share-13",
+        "marketplace": "shared_living",
+        "completeness_score": 0.6,
+        "present_count": 12,
+        "field_count": 20,
+        "missing_fields": [
+          "household_type",
+          "occupants",
+          "property_type",
+          "furnishing",
+          "parking",
+          "bike",
+          "ber",
+          "transit"
+        ],
+        "available_fields": [
+          "room_type",
+          "bathroom",
+          "rent",
+          "availability",
+          "culture_languages",
+          "culture_kitchen",
+          "culture_pets_smoking",
+          "title",
+          "location",
+          "photos",
+          "description",
+          "host"
+        ]
+      }
+    },
+    "independent_places": {
+      "most_complete": {
+        "listing_id": "dub-rent-21",
+        "marketplace": "independent_places",
+        "completeness_score": 0.8125,
+        "present_count": 13,
+        "field_count": 16,
+        "missing_fields": [
+          "pets",
+          "lease",
+          "ber"
+        ],
+        "available_fields": [
+          "bedrooms",
+          "bathrooms",
+          "property_type",
+          "furnishing",
+          "availability",
+          "parking",
+          "transit",
+          "rent",
+          "title",
+          "location",
+          "photos",
+          "description",
+          "host"
+        ]
+      },
+      "least_complete": {
+        "listing_id": "dub-rent-02",
+        "marketplace": "independent_places",
+        "completeness_score": 0.6875,
+        "present_count": 11,
+        "field_count": 16,
+        "missing_fields": [
+          "parking",
+          "pets",
+          "lease",
+          "ber",
+          "transit"
+        ],
+        "available_fields": [
+          "bedrooms",
+          "bathrooms",
+          "property_type",
+          "furnishing",
+          "availability",
+          "rent",
+          "title",
+          "location",
+          "photos",
+          "description",
+          "host"
+        ]
+      }
+    }
+  },
+  "completeness_summary": {
+    "shared_living": {
+      "count": 40,
+      "min_score": 0.6,
+      "max_score": 0.8,
+      "avg_score": 0.7288,
+      "most_frequently_missing": [
+        {
+          "field": "property_type",
+          "listings_missing": 40
+        },
+        {
+          "field": "bike",
+          "listings_missing": 40
+        },
+        {
+          "field": "ber",
+          "listings_missing": 40
+        },
+        {
+          "field": "parking",
+          "listings_missing": 39
+        },
+        {
+          "field": "occupants",
+          "listings_missing": 35
+        },
+        {
+          "field": "furnishing",
+          "listings_missing": 13
+        },
+        {
+          "field": "culture_kitchen",
+          "listings_missing": 6
+        },
+        {
+          "field": "transit",
+          "listings_missing": 3
+        }
+      ]
+    },
+    "independent_places": {
+      "count": 50,
+      "min_score": 0.6875,
+      "max_score": 0.8125,
+      "avg_score": 0.7375,
+      "most_frequently_missing": [
+        {
+          "field": "pets",
+          "listings_missing": 50
+        },
+        {
+          "field": "lease",
+          "listings_missing": 50
+        },
+        {
+          "field": "ber",
+          "listings_missing": 50
+        },
+        {
+          "field": "parking",
+          "listings_missing": 48
+        },
+        {
+          "field": "transit",
+          "listings_missing": 7
+        },
+        {
+          "field": "bathrooms",
+          "listings_missing": 5
+        }
+      ]
+    }
+  },
+  "resilience": {
+    "shared_living_least_complete": {
+      "listing_id": "dub-share-13",
+      "marketplace": "shared_living",
+      "completeness_score": 0.6,
+      "missing_fields": [
+        "household_type",
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ],
+      "sections": {
+        "room_snapshot": {
+          "status": "PASS",
+          "reason": "3 cells, no blank labels",
+          "cell_count": 3,
+          "labels": [
+            "🛏️ Private",
+            "📅 13 Oct",
+            "💶 €600/month"
+          ],
+          "section_hidden_when_empty": true
+        },
+        "household_snapshot": {
+          "status": "PASS",
+          "reason": "Empty → HOUSEHOLD SNAPSHOT hidden",
+          "cell_count": 0,
+          "labels": [],
+          "section_hidden_when_empty": true
+        },
+        "household_culture": {
+          "status": "PASS",
+          "reason": "3 cells, no blank labels",
+          "cell_count": 3,
+          "labels": [
+            "Tamil",
+            "Vegetarian household",
+            "Quiet Hours"
+          ],
+          "section_hidden_when_empty": true
+        },
+        "property_details": {
+          "status": "PASS",
+          "reason": "Empty → PROPERTY DETAILS hidden",
+          "cell_count": 0,
+          "labels": [],
+          "section_hidden_when_empty": true
+        },
+        "match_explanations": {
+          "status": "PASS",
+          "reason": "1 explanation(s), no throw",
+          "explanation_count": 1,
+          "explanations": [
+            "💰 Within your budget"
+          ],
+          "section_hidden_when_empty": true,
+          "note": null
+        },
+        "ranking": {
+          "status": "PASS",
+          "reason": "ListingMatchEngine.rank completed; ranked=1 requiresOnboarding=false",
+          "ranked_count": 1
+        },
+        "transit_commute": {
+          "status": "PASS",
+          "reason": "Null/empty MultiCommuteDisplayModel → ListingDetailCommuteSection returns SizedBox.shrink()",
+          "hidden_when_empty": true,
+          "row_count": 0
+        },
+        "card_rendering": {
+          "status": "PASS",
+          "reason": "2 chip(s), no blank labels",
+          "chip_labels": [
+            "Private",
+            "13 Oct"
+          ],
+          "empty_row_shrinks": true
+        },
+        "detail_page_story": {
+          "status": "PASS",
+          "reason": "Story builders gate sections on isNotEmpty; description uses placeholder \"No description provided.\" when empty; host uses \"Your host\" fallback.",
+          "title": "Family-friendly spare room · Lucan",
+          "location_present": true,
+          "description_present": true,
+          "description_placeholder_when_empty": true,
+          "host_fallback": "Your host",
+          "sections_hidden_when_empty": [
+            "ROOM SNAPSHOT",
+            "HOUSEHOLD SNAPSHOT",
+            "HOUSEHOLD CULTURE",
+            "PROPERTY DETAILS",
+            "preference insight",
+            "TRANSIT & COMMUTE"
+          ]
+        }
+      },
+      "threw": [],
+      "section_summary": {
+        "PASS": 9,
+        "WARN": 0,
+        "FAIL": 0
+      }
+    },
+    "independent_places_least_complete": {
+      "listing_id": "dub-rent-02",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ],
+      "sections": {
+        "property_highlights": {
+          "status": "PASS",
+          "reason": "5 fact cells, no blank labels",
+          "cell_count": 5,
+          "labels": [
+            "1 Bed",
+            "1 Bath",
+            "apartment",
+            "Furnished",
+            "7 Sep"
+          ],
+          "section_hidden_when_empty": true,
+          "no_platform_fillers": true
+        },
+        "match_explanations": {
+          "status": "PASS",
+          "reason": "3 explanation(s), no throw",
+          "explanation_count": 3,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📍 Matches your preferred area",
+            "👨‍👩‍👧‍👦 Suitable for your household"
+          ],
+          "section_hidden_when_empty": true
+        },
+        "ranking": {
+          "status": "PASS",
+          "reason": "ListingMatchEngine.rank completed; ranked=1",
+          "ranked_count": 1
+        },
+        "transit_commute": {
+          "status": "PASS",
+          "reason": "1 commute row(s)",
+          "hidden_when_empty": true,
+          "row_count": 1
+        },
+        "card_rendering": {
+          "status": "PASS",
+          "reason": "2 chip(s), no blank labels",
+          "chip_labels": [
+            "1 Bed",
+            "7 Sep"
+          ],
+          "empty_row_shrinks": true
+        },
+        "detail_page_story": {
+          "status": "PASS",
+          "reason": "IP story gates highlights + preference on isNotEmpty; commute shrinks when empty",
+          "description_present": true,
+          "description_placeholder_when_empty": true,
+          "sections_hidden_when_empty": [
+            "PROPERTY HIGHLIGHTS",
+            "preference insight",
+            "TRANSIT & COMMUTE"
+          ]
+        },
+        "room_snapshot": {
+          "status": "PASS",
+          "reason": "N/A for Independent Places",
+          "applicable": false
+        },
+        "household_snapshot": {
+          "status": "PASS",
+          "reason": "N/A for Independent Places",
+          "applicable": false
+        },
+        "household_culture": {
+          "status": "PASS",
+          "reason": "N/A for Independent Places",
+          "applicable": false
+        },
+        "property_details": {
+          "status": "PASS",
+          "reason": "5 fact cells, no blank labels",
+          "cell_count": 5,
+          "labels": [
+            "1 Bed",
+            "1 Bath",
+            "apartment",
+            "Furnished",
+            "7 Sep"
+          ],
+          "section_hidden_when_empty": true,
+          "no_platform_fillers": true
+        }
+      },
+      "threw": [],
+      "section_summary": {
+        "PASS": 10,
+        "WARN": 0,
+        "FAIL": 0
+      }
+    },
+    "synthetic_empty_maps": {
+      "shared_empty_room_cells": 0,
+      "shared_empty_household_cells": 0,
+      "shared_empty_culture_cells": 0,
+      "shared_empty_property_cells": 0,
+      "ip_empty_highlight_cells": 0,
+      "legacy_grid_cells_always_4": 4,
+      "blank_label_cells": 0,
+      "share_explanations_empty": true,
+      "rent_explanations_empty": false,
+      "status": "PASS",
+      "reason": "Fully empty maps produce empty section cell lists (hidden) or legacy 4-cell platform fallbacks — no blank labels"
+    }
+  },
+  "empty_data_handling": {
+    "blank_sections": "Avoided for highlight grids — listing_detail_page_layout wraps ROOM SNAPSHOT / HOUSEHOLD SNAPSHOT / CULTURE / PROPERTY DETAILS / PROPERTY HIGHLIGHTS / preference insight in `if (cells.isNotEmpty)`.",
+    "empty_chips": "PropertyCard._CardMatchChips returns SizedBox.shrink() when no chip labels resolve; chips only appended when labels non-null/non-empty.",
+    "broken_layouts": "Fixed-height chip row still reserved on cards (chipsHeight) even when shrink — layout gap only, not broken. Detail page Column collapses hidden sections.",
+    "placeholder_text": "Description: \"No description provided.\" Host: \"Your host\". Title ListingData fallback: \"Untitled listing\". Card location can fallback toward Dublin area copy.",
+    "missing_explanations": "Preference insight card omitted when explanation list empty — expected for sparse listings / hard-filter failures.",
+    "rendering_errors": "Helpers return empty lists rather than throwing on missing fields. Legacy ListingPropertyHighlights.gridCells fills 4 platform fallbacks.",
+    "evidence_files": [
+      "lib/widgets/listing_detail_page_layout.dart",
+      "lib/widgets/listing_detail_commute_section.dart",
+      "lib/widgets/property_card.dart",
+      "lib/utils/listing_property_highlights.dart",
+      "lib/utils/listing_match_engine.dart"
+    ]
+  },
+  "findings": {
+    "blockers": [],
+    "high": [],
+    "medium": [
+      {
+        "marketplace": "shared_living",
+        "section": "completeness_corpus",
+        "reason": "40/40 Share listings missing BER — Property Details omits BER cell (section still hides empty slots correctly)"
+      },
+      {
+        "marketplace": "independent_places",
+        "section": "completeness_corpus",
+        "reason": "50/50 Rent listings missing agreement_type/lease — Property Highlights omits lease cell"
+      },
+      {
+        "marketplace": "independent_places",
+        "section": "completeness_corpus",
+        "reason": "50/50 Rent listings missing pets policy — Highlights omits pets cell"
+      },
+      {
+        "marketplace": "shared_living",
+        "section": "completeness_corpus",
+        "reason": "35/40 Share listings missing current_occupants — Household Snapshot may show cohort only or hide"
+      }
+    ]
+  },
+  "overall": {
+    "verdict": "PASS WITH WARNINGS",
+    "reason": "Resilient rendering; 0 high + 4 medium findings (sparse sections / missing explanations / corpus gaps)"
+  },
+  "success_criteria": {
+    "incomplete_listings_render": true,
+    "no_broken_detail_pages": true,
+    "no_broken_cards": true,
+    "no_empty_ui_components": true,
+    "match_explanations_remain_valid": true,
+    "no_runtime_errors": true,
+    "success_criteria_met": true
+  },
+  "listings": [
+    {
+      "listing_id": "dub-share-01",
+      "marketplace": "shared_living",
+      "completeness_score": 0.8,
+      "present_count": 16,
+      "field_count": 20,
+      "missing_fields": [
+        "property_type",
+        "furnishing",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "occupants",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "parking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-02",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "occupants",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-03",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-04",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "occupants",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-05",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-06",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "occupants",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-07",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-08",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-09",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "occupants",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-10",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-11",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-12",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-13",
+      "marketplace": "shared_living",
+      "completeness_score": 0.6,
+      "present_count": 12,
+      "field_count": 20,
+      "missing_fields": [
+        "household_type",
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-14",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-15",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-16",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-17",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-18",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "furnishing",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-19",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-20",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-21",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "culture_kitchen",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-22",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-23",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-24",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "culture_kitchen",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-25",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-26",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-27",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-28",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "culture_kitchen",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-29",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-30",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-31",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "culture_kitchen",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-32",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-33",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-34",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-35",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-36",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "culture_kitchen",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-37",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-38",
+      "marketplace": "shared_living",
+      "completeness_score": 0.7,
+      "present_count": 14,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "culture_kitchen",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-39",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-share-40",
+      "marketplace": "shared_living",
+      "completeness_score": 0.75,
+      "present_count": 15,
+      "field_count": 20,
+      "missing_fields": [
+        "occupants",
+        "property_type",
+        "parking",
+        "bike",
+        "ber"
+      ],
+      "available_fields": [
+        "room_type",
+        "bathroom",
+        "rent",
+        "availability",
+        "household_type",
+        "culture_languages",
+        "culture_kitchen",
+        "culture_pets_smoking",
+        "furnishing",
+        "transit",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-01",
+      "marketplace": "independent_places",
+      "completeness_score": 0.8125,
+      "present_count": 13,
+      "field_count": 16,
+      "missing_fields": [
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "parking",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-02",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-04",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-05",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-06",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-07",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-08",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "bathrooms",
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-09",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-10",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-11",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-12",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-13",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-14",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-16",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-17",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-18",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-19",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-20",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-21",
+      "marketplace": "independent_places",
+      "completeness_score": 0.8125,
+      "present_count": 13,
+      "field_count": 16,
+      "missing_fields": [
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "parking",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-22",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "bathrooms",
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-23",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-24",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-25",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-26",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-28",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber",
+        "transit"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-29",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-30",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-27",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-31",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-32",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "bathrooms",
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-33",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-34",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-35",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-36",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-37",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "bathrooms",
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-38",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-39",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-40",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-41",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-42",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-43",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-45",
+      "marketplace": "independent_places",
+      "completeness_score": 0.6875,
+      "present_count": 11,
+      "field_count": 16,
+      "missing_fields": [
+        "bathrooms",
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-46",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-47",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-49",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    },
+    {
+      "listing_id": "dub-rent-50",
+      "marketplace": "independent_places",
+      "completeness_score": 0.75,
+      "present_count": 12,
+      "field_count": 16,
+      "missing_fields": [
+        "parking",
+        "pets",
+        "lease",
+        "ber"
+      ],
+      "available_fields": [
+        "bedrooms",
+        "bathrooms",
+        "property_type",
+        "furnishing",
+        "availability",
+        "transit",
+        "rent",
+        "title",
+        "location",
+        "photos",
+        "description",
+        "host"
+      ]
+    }
+  ]
+}

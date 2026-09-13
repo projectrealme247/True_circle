@@ -6,7 +6,14 @@ import '../utils/geo_math.dart';
 import 'auth_service.dart';
 
 /// Path B automated transit macro-tagging for host listings.
+///
+/// Local Dublin transit matching is always available. Edge enrichment via
+/// `enrich-location` is optional best-effort and must never block listing flow.
 abstract final class TransitExtractionService {
+  /// Once the edge reports a missing Maps/Places key, skip further invokes.
+  static bool _edgeEnrichmentDisabled = false;
+  static bool _mapsKeySkipLogged = false;
+
   /// Builds `proximity_data` when coords fall within the strict walk envelope.
   static Map<String, dynamic>? extractLocally({
     required double latitude,
@@ -52,13 +59,19 @@ abstract final class TransitExtractionService {
     );
   }
 
-  /// Invokes the serverless PostGIS routing hook (best-effort; local fallback on failure).
+  /// Invokes the serverless PostGIS routing hook (best-effort; local fallback).
+  ///
+  /// Optional — missing Google Maps/Places keys skip enrichment quietly.
   static Future<Map<String, dynamic>?> enrichViaEdgeFunction({
     required double latitude,
     required double longitude,
     String? listingId,
   }) async {
     if (MarketConfig.current.id != MarketId.dublin) return null;
+
+    if (_edgeEnrichmentDisabled) {
+      return extractLocally(latitude: latitude, longitude: longitude);
+    }
 
     try {
       final response = await AuthService.client.functions.invoke(
@@ -74,16 +87,45 @@ abstract final class TransitExtractionService {
       final data = response.data;
       if (data is! Map) return null;
       final map = Map<String, dynamic>.from(data);
+      final errorText = map['error']?.toString() ?? '';
+      if (_isMissingMapsKey(errorText)) {
+        _disableEdgeForMissingMapsKey();
+        return extractLocally(latitude: latitude, longitude: longitude);
+      }
       final proximity = map['proximity_data'];
       if (proximity is Map) {
         return Map<String, dynamic>.from(proximity);
       }
       if (map.containsKey('transit_type')) return map;
       return null;
-    } catch (e, stack) {
-      debugPrint('TransitExtractionService edge enrich failed: $e\n$stack');
+    } catch (e) {
+      if (_isMissingMapsKey(e.toString())) {
+        _disableEdgeForMissingMapsKey();
+      } else if (kDebugMode) {
+        debugPrint('[Transit] edge enrich failed: $e');
+      }
       return extractLocally(latitude: latitude, longitude: longitude);
     }
+  }
+
+  static void _disableEdgeForMissingMapsKey() {
+    _edgeEnrichmentDisabled = true;
+    if (!_mapsKeySkipLogged) {
+      _mapsKeySkipLogged = true;
+      if (kDebugMode) {
+        debugPrint('[Transit] skipped - GOOGLE_MAPS_API_KEY missing');
+      }
+    }
+  }
+
+  static bool _isMissingMapsKey(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('google_maps_api_key') ||
+        lower.contains('google_places_api_key') ||
+        (lower.contains('google') &&
+            (lower.contains('not configured') ||
+                lower.contains('api key') ||
+                lower.contains('missing')));
   }
 
   /// Local extraction first for instant UI; edge hook refines when available.
@@ -129,5 +171,12 @@ abstract final class TransitExtractionService {
       'latitude': latitude,
       'longitude': longitude,
     };
+  }
+
+  /// Test-only: reset edge-skip latch between cases.
+  @visibleForTesting
+  static void resetEdgeEnrichmentStateForTests() {
+    _edgeEnrichmentDisabled = false;
+    _mapsKeySkipLogged = false;
   }
 }

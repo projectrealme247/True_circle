@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../services/open_banking_provider.dart';
 
 /// Open Banking AIS layout — AIB, BOI, Revolut institution picker.
+/// Phase 1: legacy/deferred financial-signal check — not income or affordability verification.
 class OpenBankingVerifyScreen extends StatefulWidget {
   const OpenBankingVerifyScreen({super.key});
 
@@ -26,7 +27,7 @@ class _OpenBankingVerifyScreenState extends State<OpenBankingVerifyScreen> {
   }
 
   void _bootstrap() {
-    final uri = GoRouterState.of(context).uri;
+    final uri = GoRouter.of(context).state.uri;
     final err = uri.queryParameters['error'];
     if (err != null && err.isNotEmpty) {
       setState(() => _error = Uri.decodeComponent(err));
@@ -101,15 +102,15 @@ class _OpenBankingVerifyScreenState extends State<OpenBankingVerifyScreen> {
                   child: Row(
                     children: [
                       const Icon(
-                        Icons.verified_user_outlined,
+                        Icons.account_balance_outlined,
                         color: AppColors.accentDark,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           _verified
-                              ? '👍 Grand tier active — bank link verified.'
-                              : 'Upgrade to 👍 Grand with a secure Open Banking link.',
+                              ? 'Banking verification completed. Additional financial signals collected.'
+                              : 'Optional banking check — collect additional financial signals with a secure bank link.',
                           style: AppTypography.caption.copyWith(
                             fontWeight: FontWeight.w600,
                             color: AppColors.accentDark,
@@ -137,7 +138,7 @@ class _OpenBankingVerifyScreenState extends State<OpenBankingVerifyScreen> {
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Open Banking verification complete. Your profile has been updated.',
+                            'Financial check completed. This does not verify income or rent affordability.',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -160,7 +161,7 @@ class _OpenBankingVerifyScreenState extends State<OpenBankingVerifyScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Read-only identity + liquidity signals · PSD2 secure redirect',
+                    'Read-only PSD2 redirect · optional financial signals (not income or affordability verification)',
                     style: AppTypography.caption.copyWith(height: 1.45),
                   ),
                   const SizedBox(height: 16),
@@ -303,11 +304,11 @@ class _OpenBankingPrivacyFooter extends StatelessWidget {
         border: Border.all(color: AppColors.divider),
       ),
       child: Text(
-        '🔒 Dublin Data Privacy Shield: TrueCircle utilizes zero-retention '
-        'ephemeral processing. Your private documentation and banking records '
-        'are read strictly in memory to verify trust signals and instantly '
-        'destroyed. We never store your raw files, transaction histories, or '
-        'log data on our servers.',
+        '🔒 Dublin Data Privacy Shield: TrueCircle uses zero-retention '
+        'ephemeral processing. Banking records are read in memory for an '
+        'optional financial check and then destroyed. We never store raw '
+        'files, transaction histories, or salary figures. This check does '
+        'not verify income or rent affordability.',
         style: AppTypography.caption.copyWith(
           fontSize: 11.5,
           color: AppColors.secondaryText,

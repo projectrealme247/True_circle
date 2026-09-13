@@ -1,0 +1,1315 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:57:14.637570Z",
+  "classification": {
+    "code": "A",
+    "label": "Tie Stability Audit Required",
+    "reason": "Frequent ties among consecutive ranks (exact score sets 95.5%, full-key 95.5%; top-5 exact 95.5%, top-5 full-key 95.5%) with no listing-id/timestamp final breaker."
+  },
+  "summary": {
+    "seekers_total": 66,
+    "result_sets_non_empty": 66,
+    "result_sets_empty": 0,
+    "exact_score_tie_pairs": 1622,
+    "full_key_tie_pairs": 1621,
+    "near_tie_pm1_pairs": 49,
+    "near_tie_pm2_pairs": 63,
+    "pct_result_sets_with_exact_ties": 95.5,
+    "pct_result_sets_with_full_key_ties": 95.5,
+    "pct_result_sets_with_near_pm1": 31.8,
+    "pct_result_sets_with_near_pm2": 60.6,
+    "top5_exact_score_tie_pairs": 263,
+    "top5_full_key_tie_pairs": 263,
+    "pct_result_sets_with_top5_exact_ties": 95.5,
+    "pct_result_sets_with_top5_full_key_ties": 95.5,
+    "result_sets_with_exact_ties": 63,
+    "result_sets_with_full_key_ties": 63,
+    "result_sets_with_near_pm1": 21,
+    "result_sets_with_near_pm2": 40,
+    "classification": "A"
+  },
+  "tie_definitions": {
+    "exact_score_tie": "Consecutive ranks in full eligible ranked list with equal ListingMatchResult.score.",
+    "full_key_tie": "Consecutive ranks where ListingMatchEngine.rank comparator returns 0 (preferenceScore if soft filters, qualityTier, match.score).",
+    "near_tie_pm1": "Consecutive ranks with |scoreA-scoreB|==1 (excludes exact).",
+    "near_tie_pm2": "Consecutive ranks with |scoreA-scoreB|==2 (excludes exact).",
+    "top20_definition": "Most frequent canonical listing-id pairs (idA|idB, idA<idB) that appear as consecutive exact-score ties across seekers; also top recurring tied score values."
+  },
+  "tie_breaker_analysis": {
+    "primary_sort_keys": [
+      "preferenceScore (desc) when WeightedFilterCriteria has soft filters",
+      "qualityTier from match.percentage (>=50, 25-49, <25)",
+      "match.score (desc)"
+    ],
+    "explicit_final_tie_breaker": "none",
+    "listing_id_secondary_key": false,
+    "dart_list_sort": "Dart List.sort is stable; equal comparator results preserve relative order from the weighted pool (itself sorted only by preferenceScore with no id key).",
+    "weighted_pool_sort": "WeightedListingMatcher.fetchScoredListings sorts by preference score only; equal preference scores keep filter-pass order.",
+    "exercised_when_scores_differ": true,
+    "exercised_when_all_keys_equal": "No product-level deterministic breaker; residual upstream order only (stable sort of input pool order)."
+  },
+  "top_20_exact_tie_listing_pairs": [
+    {
+      "listing_id_pair": "dub-rent-27|dub-rent-30",
+      "occurrence_count": 26
+    },
+    {
+      "listing_id_pair": "dub-share-11|dub-share-18",
+      "occurrence_count": 21
+    },
+    {
+      "listing_id_pair": "dub-share-18|dub-share-30",
+      "occurrence_count": 21
+    },
+    {
+      "listing_id_pair": "dub-share-28|dub-share-33",
+      "occurrence_count": 21
+    },
+    {
+      "listing_id_pair": "dub-rent-15|dub-rent-19",
+      "occurrence_count": 19
+    },
+    {
+      "listing_id_pair": "dub-rent-23|dub-rent-24",
+      "occurrence_count": 19
+    },
+    {
+      "listing_id_pair": "dub-rent-29|dub-rent-30",
+      "occurrence_count": 19
+    },
+    {
+      "listing_id_pair": "dub-share-02|dub-share-23",
+      "occurrence_count": 17
+    },
+    {
+      "listing_id_pair": "dub-share-20|dub-share-28",
+      "occurrence_count": 15
+    },
+    {
+      "listing_id_pair": "dub-rent-17|dub-rent-18",
+      "occurrence_count": 14
+    },
+    {
+      "listing_id_pair": "dub-share-01|dub-share-15",
+      "occurrence_count": 14
+    },
+    {
+      "listing_id_pair": "dub-rent-07|dub-rent-08",
+      "occurrence_count": 13
+    },
+    {
+      "listing_id_pair": "dub-rent-11|dub-rent-13",
+      "occurrence_count": 13
+    },
+    {
+      "listing_id_pair": "dub-share-04|dub-share-11",
+      "occurrence_count": 13
+    },
+    {
+      "listing_id_pair": "dub-rent-02|dub-rent-16",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-rent-04|dub-rent-05",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-rent-22|dub-rent-23",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-share-04|dub-share-36",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-rent-01|dub-rent-17",
+      "occurrence_count": 11
+    },
+    {
+      "listing_id_pair": "dub-rent-01|dub-rent-18",
+      "occurrence_count": 11
+    }
+  ],
+  "top_20_full_key_tie_listing_pairs": [
+    {
+      "listing_id_pair": "dub-rent-27|dub-rent-30",
+      "occurrence_count": 26
+    },
+    {
+      "listing_id_pair": "dub-share-11|dub-share-18",
+      "occurrence_count": 21
+    },
+    {
+      "listing_id_pair": "dub-share-18|dub-share-30",
+      "occurrence_count": 21
+    },
+    {
+      "listing_id_pair": "dub-share-28|dub-share-33",
+      "occurrence_count": 21
+    },
+    {
+      "listing_id_pair": "dub-rent-15|dub-rent-19",
+      "occurrence_count": 19
+    },
+    {
+      "listing_id_pair": "dub-rent-23|dub-rent-24",
+      "occurrence_count": 19
+    },
+    {
+      "listing_id_pair": "dub-rent-29|dub-rent-30",
+      "occurrence_count": 19
+    },
+    {
+      "listing_id_pair": "dub-share-02|dub-share-23",
+      "occurrence_count": 17
+    },
+    {
+      "listing_id_pair": "dub-share-20|dub-share-28",
+      "occurrence_count": 15
+    },
+    {
+      "listing_id_pair": "dub-rent-17|dub-rent-18",
+      "occurrence_count": 14
+    },
+    {
+      "listing_id_pair": "dub-share-01|dub-share-15",
+      "occurrence_count": 14
+    },
+    {
+      "listing_id_pair": "dub-rent-07|dub-rent-08",
+      "occurrence_count": 13
+    },
+    {
+      "listing_id_pair": "dub-rent-11|dub-rent-13",
+      "occurrence_count": 13
+    },
+    {
+      "listing_id_pair": "dub-share-04|dub-share-11",
+      "occurrence_count": 13
+    },
+    {
+      "listing_id_pair": "dub-rent-02|dub-rent-16",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-rent-04|dub-rent-05",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-rent-22|dub-rent-23",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-share-04|dub-share-36",
+      "occurrence_count": 12
+    },
+    {
+      "listing_id_pair": "dub-rent-01|dub-rent-17",
+      "occurrence_count": 11
+    },
+    {
+      "listing_id_pair": "dub-rent-01|dub-rent-18",
+      "occurrence_count": 11
+    }
+  ],
+  "top_20_exact_tie_score_values": [
+    {
+      "score": 60,
+      "occurrence_count": 463
+    },
+    {
+      "score": 70,
+      "occurrence_count": 256
+    },
+    {
+      "score": 50,
+      "occurrence_count": 176
+    },
+    {
+      "score": 85,
+      "occurrence_count": 166
+    },
+    {
+      "score": 75,
+      "occurrence_count": 98
+    },
+    {
+      "score": 80,
+      "occurrence_count": 97
+    },
+    {
+      "score": 55,
+      "occurrence_count": 75
+    },
+    {
+      "score": 72,
+      "occurrence_count": 57
+    },
+    {
+      "score": 78,
+      "occurrence_count": 43
+    },
+    {
+      "score": 65,
+      "occurrence_count": 24
+    },
+    {
+      "score": 40,
+      "occurrence_count": 23
+    },
+    {
+      "score": 54,
+      "occurrence_count": 22
+    },
+    {
+      "score": 45,
+      "occurrence_count": 20
+    },
+    {
+      "score": 58,
+      "occurrence_count": 15
+    },
+    {
+      "score": 69,
+      "occurrence_count": 15
+    },
+    {
+      "score": 48,
+      "occurrence_count": 10
+    },
+    {
+      "score": 67,
+      "occurrence_count": 10
+    },
+    {
+      "score": 71,
+      "occurrence_count": 10
+    },
+    {
+      "score": 51,
+      "occurrence_count": 9
+    },
+    {
+      "score": 30,
+      "occurrence_count": 4
+    }
+  ],
+  "methodology": {
+    "active_mode": "explore",
+    "code_paths": [
+      "MarketplaceSpace.fromSession",
+      "ProfilePortalInheritanceService.seekerFeedDefaults",
+      "MarketplaceListingPipeline.runWithFilters",
+      "WeightedListingMatcher.fetchScoredListings",
+      "ListingMatchEngine.rank"
+    ],
+    "listing_corpus": {
+      "name": "SampleListingsDublin",
+      "shared_living_count": 40,
+      "independent_places_count": 50,
+      "total": 90
+    },
+    "seeker_dataset": {
+      "status": "reconstructed",
+      "count": 66,
+      "shared_living": 34,
+      "independent_places": 32,
+      "includes_market_sentinels": true,
+      "fixture": "test/fixtures/uat_frozen_seekers_reconstructed.json",
+      "note": "Frozen UAT seeker JSON is not inventored under lib/. Preference maps reconstructed from the same prior UAT chat artifact used by blank_field / active_mode / zero_match harnesses (66 seekers incl. SL-MARKET-01 / IP-MARKET-01). Ranking fields only; uat_validation_points omitted."
+    },
+    "production_code_modified": false
+  },
+  "per_seeker": [
+    {
+      "seeker_id": "SL-STU-01",
+      "marketplace": "shared_living",
+      "ranked_count": 19,
+      "exact_score_tie_pairs": 6,
+      "full_key_tie_pairs": 6,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 46,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-02",
+      "marketplace": "shared_living",
+      "ranked_count": 4,
+      "exact_score_tie_pairs": 1,
+      "full_key_tie_pairs": 1,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 1,
+      "top5_full_key_tie_pairs": 1,
+      "score_range": {
+        "min": 71,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-03",
+      "marketplace": "shared_living",
+      "ranked_count": 36,
+      "exact_score_tie_pairs": 26,
+      "full_key_tie_pairs": 26,
+      "near_tie_pm1_pairs": 2,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 51,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-04",
+      "marketplace": "shared_living",
+      "ranked_count": 16,
+      "exact_score_tie_pairs": 6,
+      "full_key_tie_pairs": 6,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 44,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-05",
+      "marketplace": "shared_living",
+      "ranked_count": 9,
+      "exact_score_tie_pairs": 4,
+      "full_key_tie_pairs": 4,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 53,
+        "max": 72
+      }
+    },
+    {
+      "seeker_id": "SL-STU-06",
+      "marketplace": "shared_living",
+      "ranked_count": 34,
+      "exact_score_tie_pairs": 18,
+      "full_key_tie_pairs": 18,
+      "near_tie_pm1_pairs": 5,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 39,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-07",
+      "marketplace": "shared_living",
+      "ranked_count": 23,
+      "exact_score_tie_pairs": 8,
+      "full_key_tie_pairs": 8,
+      "near_tie_pm1_pairs": 1,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 49,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-08",
+      "marketplace": "shared_living",
+      "ranked_count": 7,
+      "exact_score_tie_pairs": 2,
+      "full_key_tie_pairs": 2,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 2,
+      "top5_full_key_tie_pairs": 2,
+      "score_range": {
+        "min": 48,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-09",
+      "marketplace": "shared_living",
+      "ranked_count": 28,
+      "exact_score_tie_pairs": 15,
+      "full_key_tie_pairs": 15,
+      "near_tie_pm1_pairs": 2,
+      "near_tie_pm2_pairs": 3,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 51,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-10",
+      "marketplace": "shared_living",
+      "ranked_count": 16,
+      "exact_score_tie_pairs": 5,
+      "full_key_tie_pairs": 5,
+      "near_tie_pm1_pairs": 1,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 39,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-STU-11",
+      "marketplace": "shared_living",
+      "ranked_count": 38,
+      "exact_score_tie_pairs": 28,
+      "full_key_tie_pairs": 28,
+      "near_tie_pm1_pairs": 2,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 51,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-01",
+      "marketplace": "shared_living",
+      "ranked_count": 36,
+      "exact_score_tie_pairs": 24,
+      "full_key_tie_pairs": 24,
+      "near_tie_pm1_pairs": 4,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 45,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-02",
+      "marketplace": "shared_living",
+      "ranked_count": 11,
+      "exact_score_tie_pairs": 5,
+      "full_key_tie_pairs": 5,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 35,
+        "max": 65
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-03",
+      "marketplace": "shared_living",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 31,
+      "full_key_tie_pairs": 31,
+      "near_tie_pm1_pairs": 2,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 40,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-04",
+      "marketplace": "shared_living",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 29,
+      "full_key_tie_pairs": 29,
+      "near_tie_pm1_pairs": 3,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 40,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-05",
+      "marketplace": "shared_living",
+      "ranked_count": 28,
+      "exact_score_tie_pairs": 14,
+      "full_key_tie_pairs": 13,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 30,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-06",
+      "marketplace": "shared_living",
+      "ranked_count": 16,
+      "exact_score_tie_pairs": 7,
+      "full_key_tie_pairs": 7,
+      "near_tie_pm1_pairs": 1,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 35,
+        "max": 67
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-07",
+      "marketplace": "shared_living",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 30,
+      "full_key_tie_pairs": 30,
+      "near_tie_pm1_pairs": 2,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 40,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-08",
+      "marketplace": "shared_living",
+      "ranked_count": 32,
+      "exact_score_tie_pairs": 22,
+      "full_key_tie_pairs": 22,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 42,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-09",
+      "marketplace": "shared_living",
+      "ranked_count": 34,
+      "exact_score_tie_pairs": 21,
+      "full_key_tie_pairs": 21,
+      "near_tie_pm1_pairs": 4,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 45,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-10",
+      "marketplace": "shared_living",
+      "ranked_count": 39,
+      "exact_score_tie_pairs": 28,
+      "full_key_tie_pairs": 28,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 37,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-01",
+      "marketplace": "shared_living",
+      "ranked_count": 2,
+      "exact_score_tie_pairs": 0,
+      "full_key_tie_pairs": 0,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 0,
+      "top5_full_key_tie_pairs": 0,
+      "score_range": {
+        "min": 42,
+        "max": 45
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-02",
+      "marketplace": "shared_living",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 32,
+      "full_key_tie_pairs": 32,
+      "near_tie_pm1_pairs": 2,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 45,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-03",
+      "marketplace": "shared_living",
+      "ranked_count": 34,
+      "exact_score_tie_pairs": 25,
+      "full_key_tie_pairs": 25,
+      "near_tie_pm1_pairs": 3,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 50,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-04",
+      "marketplace": "shared_living",
+      "ranked_count": 32,
+      "exact_score_tie_pairs": 18,
+      "full_key_tie_pairs": 18,
+      "near_tie_pm1_pairs": 2,
+      "near_tie_pm2_pairs": 3,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 37,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-05",
+      "marketplace": "shared_living",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 30,
+      "full_key_tie_pairs": 30,
+      "near_tie_pm1_pairs": 3,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 40,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-06",
+      "marketplace": "shared_living",
+      "ranked_count": 23,
+      "exact_score_tie_pairs": 8,
+      "full_key_tie_pairs": 8,
+      "near_tie_pm1_pairs": 1,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 49,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-07",
+      "marketplace": "shared_living",
+      "ranked_count": 22,
+      "exact_score_tie_pairs": 8,
+      "full_key_tie_pairs": 8,
+      "near_tie_pm1_pairs": 1,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 49,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-08",
+      "marketplace": "shared_living",
+      "ranked_count": 38,
+      "exact_score_tie_pairs": 25,
+      "full_key_tie_pairs": 25,
+      "near_tie_pm1_pairs": 4,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 35,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-09",
+      "marketplace": "shared_living",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 32,
+      "full_key_tie_pairs": 32,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 45,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-10",
+      "marketplace": "shared_living",
+      "ranked_count": 25,
+      "exact_score_tie_pairs": 11,
+      "full_key_tie_pairs": 11,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 4,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 30,
+        "max": 80
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-11",
+      "marketplace": "shared_living",
+      "ranked_count": 23,
+      "exact_score_tie_pairs": 11,
+      "full_key_tie_pairs": 11,
+      "near_tie_pm1_pairs": 1,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 51,
+        "max": 78
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-12",
+      "marketplace": "shared_living",
+      "ranked_count": 2,
+      "exact_score_tie_pairs": 1,
+      "full_key_tie_pairs": 1,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 1,
+      "top5_full_key_tie_pairs": 1,
+      "score_range": {
+        "min": 55,
+        "max": 55
+      }
+    },
+    {
+      "seeker_id": "SL-MARKET-01",
+      "marketplace": "shared_living",
+      "ranked_count": 39,
+      "exact_score_tie_pairs": 27,
+      "full_key_tie_pairs": 27,
+      "near_tie_pm1_pairs": 3,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 35,
+        "max": 81
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-01",
+      "marketplace": "independent_places",
+      "ranked_count": 22,
+      "exact_score_tie_pairs": 16,
+      "full_key_tie_pairs": 16,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 45,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-02",
+      "marketplace": "independent_places",
+      "ranked_count": 39,
+      "exact_score_tie_pairs": 32,
+      "full_key_tie_pairs": 32,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 39,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-03",
+      "marketplace": "independent_places",
+      "ranked_count": 49,
+      "exact_score_tie_pairs": 43,
+      "full_key_tie_pairs": 43,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 35,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-04",
+      "marketplace": "independent_places",
+      "ranked_count": 39,
+      "exact_score_tie_pairs": 32,
+      "full_key_tie_pairs": 32,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 39,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-05",
+      "marketplace": "independent_places",
+      "ranked_count": 42,
+      "exact_score_tie_pairs": 36,
+      "full_key_tie_pairs": 36,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 45,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-06",
+      "marketplace": "independent_places",
+      "ranked_count": 43,
+      "exact_score_tie_pairs": 36,
+      "full_key_tie_pairs": 36,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 39,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-07",
+      "marketplace": "independent_places",
+      "ranked_count": 35,
+      "exact_score_tie_pairs": 29,
+      "full_key_tie_pairs": 29,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 54,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-SIN-08",
+      "marketplace": "independent_places",
+      "ranked_count": 30,
+      "exact_score_tie_pairs": 20,
+      "full_key_tie_pairs": 20,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 36,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-01",
+      "marketplace": "independent_places",
+      "ranked_count": 33,
+      "exact_score_tie_pairs": 23,
+      "full_key_tie_pairs": 23,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 3,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 60
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-02",
+      "marketplace": "independent_places",
+      "ranked_count": 50,
+      "exact_score_tie_pairs": 43,
+      "full_key_tie_pairs": 43,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-03",
+      "marketplace": "independent_places",
+      "ranked_count": 44,
+      "exact_score_tie_pairs": 36,
+      "full_key_tie_pairs": 36,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-04",
+      "marketplace": "independent_places",
+      "ranked_count": 47,
+      "exact_score_tie_pairs": 39,
+      "full_key_tie_pairs": 39,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 10,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-05",
+      "marketplace": "independent_places",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 33,
+      "full_key_tie_pairs": 33,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 4,
+      "top5_full_key_tie_pairs": 4,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-06",
+      "marketplace": "independent_places",
+      "ranked_count": 43,
+      "exact_score_tie_pairs": 37,
+      "full_key_tie_pairs": 37,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 40,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-07",
+      "marketplace": "independent_places",
+      "ranked_count": 46,
+      "exact_score_tie_pairs": 38,
+      "full_key_tie_pairs": 38,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-FAM-01",
+      "marketplace": "independent_places",
+      "ranked_count": 46,
+      "exact_score_tie_pairs": 38,
+      "full_key_tie_pairs": 38,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-FAM-02",
+      "marketplace": "independent_places",
+      "ranked_count": 48,
+      "exact_score_tie_pairs": 40,
+      "full_key_tie_pairs": 40,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 10,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-FAM-03",
+      "marketplace": "independent_places",
+      "ranked_count": 48,
+      "exact_score_tie_pairs": 40,
+      "full_key_tie_pairs": 40,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 10,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-FAM-04",
+      "marketplace": "independent_places",
+      "ranked_count": 50,
+      "exact_score_tie_pairs": 44,
+      "full_key_tie_pairs": 44,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-FAM-05",
+      "marketplace": "independent_places",
+      "ranked_count": 46,
+      "exact_score_tie_pairs": 38,
+      "full_key_tie_pairs": 38,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 2,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-FAM-06",
+      "marketplace": "independent_places",
+      "ranked_count": 49,
+      "exact_score_tie_pairs": 44,
+      "full_key_tie_pairs": 44,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 28,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-FAM-07",
+      "marketplace": "independent_places",
+      "ranked_count": 50,
+      "exact_score_tie_pairs": 43,
+      "full_key_tie_pairs": 43,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-01",
+      "marketplace": "independent_places",
+      "ranked_count": 30,
+      "exact_score_tie_pairs": 21,
+      "full_key_tie_pairs": 21,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 3,
+      "top5_full_key_tie_pairs": 3,
+      "score_range": {
+        "min": 45,
+        "max": 100
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-02",
+      "marketplace": "independent_places",
+      "ranked_count": 50,
+      "exact_score_tie_pairs": 44,
+      "full_key_tie_pairs": 44,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-03",
+      "marketplace": "independent_places",
+      "ranked_count": 50,
+      "exact_score_tie_pairs": 45,
+      "full_key_tie_pairs": 45,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-04",
+      "marketplace": "independent_places",
+      "ranked_count": 3,
+      "exact_score_tie_pairs": 0,
+      "full_key_tie_pairs": 0,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 0,
+      "top5_full_key_tie_pairs": 0,
+      "score_range": {
+        "min": 29,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-05",
+      "marketplace": "independent_places",
+      "ranked_count": 39,
+      "exact_score_tie_pairs": 32,
+      "full_key_tie_pairs": 32,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 39,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-06",
+      "marketplace": "independent_places",
+      "ranked_count": 1,
+      "exact_score_tie_pairs": 0,
+      "full_key_tie_pairs": 0,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 0,
+      "top5_full_key_tie_pairs": 0,
+      "score_range": {
+        "min": 54,
+        "max": 54
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-07",
+      "marketplace": "independent_places",
+      "ranked_count": 50,
+      "exact_score_tie_pairs": 43,
+      "full_key_tie_pairs": 43,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 1,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 30,
+        "max": 70
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-08",
+      "marketplace": "independent_places",
+      "ranked_count": 40,
+      "exact_score_tie_pairs": 35,
+      "full_key_tie_pairs": 35,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 54,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-09",
+      "marketplace": "independent_places",
+      "ranked_count": 36,
+      "exact_score_tie_pairs": 29,
+      "full_key_tie_pairs": 29,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 45,
+        "max": 85
+      }
+    },
+    {
+      "seeker_id": "IP-MARKET-01",
+      "marketplace": "independent_places",
+      "ranked_count": 44,
+      "exact_score_tie_pairs": 35,
+      "full_key_tie_pairs": 35,
+      "near_tie_pm1_pairs": 0,
+      "near_tie_pm2_pairs": 0,
+      "top5_exact_score_tie_pairs": 5,
+      "top5_full_key_tie_pairs": 5,
+      "score_range": {
+        "min": 39,
+        "max": 85
+      }
+    }
+  ]
+}

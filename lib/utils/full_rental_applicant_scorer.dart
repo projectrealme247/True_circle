@@ -92,17 +92,6 @@ abstract final class FullRentalApplicantScorer {
       score += 10;
     }
 
-    if (household.coApplicants.any(
-      (a) => a['has_verified_grand_badge'] == true,
-    )) {
-      score += 10;
-    }
-    if (household.coApplicants.any(
-      (a) => a['has_verified_corporate_email'] == true,
-    )) {
-      score += 5;
-    }
-
     final leaseMonths = household.coApplicants
         .map((a) => a['preferred_lease_months'])
         .whereType<int>()

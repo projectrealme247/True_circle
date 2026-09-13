@@ -105,8 +105,8 @@ class _VerificationGatewayBottomSheetState
                                       ),
                                     ),
                                     child: const EmojiLeadingRow(
-                                      emoji: '👍',
-                                      text: 'Grand',
+                                      emoji: '✅',
+                                      text: 'Verified User',
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w800,
@@ -155,7 +155,7 @@ class _VerificationGatewayBottomSheetState
                               if (layout.alternates.isNotEmpty) ...[
                                 const SizedBox(height: 24),
                                 Text(
-                                  'Other verification paths',
+                                  'Other ways to verify',
                                   style: AppTypography.caption.copyWith(
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.secondaryText,
@@ -333,10 +333,10 @@ class _PrivacyShieldFooter extends StatelessWidget {
           Expanded(
             child: Text(
               'Dublin Data Privacy Shield: TrueCircle utilizes zero-retention '
-              'ephemeral processing. Your private documentation and banking records '
-              'are read strictly in memory to verify trust signals and instantly '
-              'destroyed. We never store your raw files, transaction histories, or '
-              'log data on our servers.',
+              'ephemeral processing. Your private documentation is read '
+              'strictly in memory to verify identity signals and instantly '
+              'destroyed. We never store your raw files or log data on our '
+              'servers.',
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w400,

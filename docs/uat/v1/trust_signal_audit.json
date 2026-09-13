@@ -1,0 +1,618 @@
+{
+  "audit": "trust_signal_audit",
+  "version": "v1",
+  "scope": "docs/uat/v1/implementation_file_inventory.md allowlist only",
+  "code_modified": false,
+  "inventory_paths_missing": [],
+  "not_found_in_inventored_sources": [
+    "phone verification / phone trust badge",
+    "linkedin column on user_trust_profiles",
+    "Sound/Grand/Just Landed labels inside seeker listing-feed scorer (feed uses TrustStage numerics)"
+  ],
+  "summary": {
+    "trust_signals_found": 32,
+    "affect_matching": [
+      "isPreArrivalSeeker (student-track hard conflict)",
+      "host_linkedin_badge (soft host-stage / circle derivation)",
+      "host_verified_badge (soft host-stage / circle derivation)"
+    ],
+    "affect_ranking": [
+      "trust_stage / TrustStage multipliers (host + seeker)",
+      "identity_trust_tier (indirect via TrustStage)",
+      "has_verified_pre_arrival_docs",
+      "isPreArrivalSeeker (_preArrivalScoreMultiplier 0.9)",
+      "inCircle (rank sort)",
+      "trust_tier (applicant dashboard boost + stream grouping)",
+      "overall_match_score (dashboard sort override)",
+      "has_verified_grand_badge (+10)",
+      "has_verified_corporate_email (+5)",
+      "host_trust_stage",
+      "host_linkedin_badge / host_verified_badge (fallback stage)"
+    ],
+    "affect_explanations": [
+      "inCircle",
+      "has_verified_pre_arrival_docs (Grand trust weighting reason)",
+      "host TrustStage.idVerified",
+      "host TrustStage.socialVerified"
+    ],
+    "display_only_count": 14,
+    "missing_uat_scenarios_brief": [
+      "Demo seeker never exercises pre-arrival ranking/conflict or Grand pre-arrival weighting",
+      "linkedin / aadhaar / passkey not seeded on demo seeker",
+      "has_verified_grand_badge / has_verified_corporate_email absent from applicant seeds",
+      "host_linkedin_badge / host_verified_badge / host_pre_arrival_badge not in Dublin listing seeds",
+      "open_banking_verification_seal often missing despite financial_verified mocks",
+      "No Sound/ID-verified demo seeker browse path (demo seeker fixed Just Landed)"
+    ]
+  },
+  "trust_signals": [
+    {
+      "field_name": "trust_tier",
+      "available_on": ["seeker", "landlord"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Applicant dashboard: sortPriority * 5; streams grouped Sound → Grand → Just Landed",
+      "cites": [
+        "lib/models/applicant_field_keys.dart",
+        "lib/services/applicant_dashboard_payload_builder.dart",
+        "lib/services/applicant_stream_payload_builder.dart",
+        "lib/data/mock_applicant_seeder.dart",
+        "supabase/seed/demo_applicants.sql"
+      ]
+    },
+    {
+      "field_name": "trust_stage / TrustStage",
+      "available_on": ["seeker", "listing"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "YES",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Multipliers 0.4/0.7/0.9/1.0; finalScore = avg(host,seeker)*compatibility",
+      "cites": [
+        "lib/utils/viewer_profile.dart",
+        "lib/utils/listing_match_engine.dart",
+        "lib/utils/listing_data.dart"
+      ]
+    },
+    {
+      "field_name": "identity_trust_tier",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Maps to TrustStage when trust_stage int absent; seed values Corporate_Ready / Education_Verified / Casual_Browser",
+      "cites": [
+        "lib/utils/viewer_profile.dart",
+        "lib/data/demo_applicant_supabase_seed.dart",
+        "lib/services/demo_auth_service.dart",
+        "supabase/seed/demo_applicants.sql"
+      ]
+    },
+    {
+      "field_name": "employment_verified",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Passport + applicant corporate-doc input; not used by inventored listing scorers",
+      "cites": [
+        "supabase/migrations/20260611120000_user_trust_profiles.sql",
+        "lib/services/applicant_dashboard_payload_builder.dart",
+        "lib/services/applicant_stream_payload_builder.dart",
+        "lib/utils/contextual_passport_snapshot.dart"
+      ]
+    },
+    {
+      "field_name": "financial_verified",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Open Banking AIS flag; passport verifiable budget tier",
+      "cites": [
+        "supabase/migrations/20260611130000_open_banking_trust_fields.sql",
+        "lib/services/applicant_stream_payload_builder.dart",
+        "lib/utils/contextual_passport_snapshot.dart"
+      ]
+    },
+    {
+      "field_name": "verification_track",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Corporate/Open Banking track strings; corporateDocumentVerified helper",
+      "cites": [
+        "supabase/migrations/20260611120000_user_trust_profiles.sql",
+        "lib/services/applicant_stream_payload_builder.dart",
+        "lib/data/mock_applicant_seeder.dart"
+      ]
+    },
+    {
+      "field_name": "corporate_verification_seal",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Non-empty seal + employment_verified => corporateDocumentVerified",
+      "cites": [
+        "supabase/migrations/20260611120000_user_trust_profiles.sql",
+        "lib/services/applicant_stream_payload_builder.dart",
+        "lib/data/dublin_mock_data.dart"
+      ]
+    },
+    {
+      "field_name": "open_banking_verification_seal",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Passport budget-tier verified label",
+      "cites": [
+        "supabase/migrations/20260611130000_open_banking_trust_fields.sql",
+        "lib/utils/contextual_passport_snapshot.dart"
+      ]
+    },
+    {
+      "field_name": "open_banking_verified_at",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Session timestamp checked by passport budget-tier label",
+      "cites": ["lib/utils/contextual_passport_snapshot.dart"]
+    },
+    {
+      "field_name": "profile_completeness_percent",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Displayed on applicant metrics; listing_match_engine scoring excludes profile-completeness",
+      "cites": [
+        "lib/models/applicant_field_keys.dart",
+        "lib/utils/viewer_profile.dart",
+        "lib/utils/listing_match_engine.dart",
+        "lib/services/applicant_dashboard_payload_builder.dart"
+      ]
+    },
+    {
+      "field_name": "has_verified_pre_arrival_docs",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "YES",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Affects effective seeker trust multiplier; explanation Grand trust weighting",
+      "aliases": [
+        "onboarding_letter_verified",
+        "employment_contract_verified",
+        "relocation_letter_verified"
+      ],
+      "cites": [
+        "lib/models/applicant_field_keys.dart",
+        "lib/utils/viewer_profile.dart",
+        "lib/utils/listing_match_engine.dart"
+      ]
+    },
+    {
+      "field_name": "isPreArrivalSeeker",
+      "available_on": ["seeker"],
+      "used_in_matching": "YES",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Hard conflict with onCampusOnly student track; score * 0.9 when listing allStudents",
+      "derived_from": ["pre_arrival_contact_ready", "verified_university_email empty"],
+      "cites": [
+        "lib/utils/viewer_profile.dart",
+        "lib/utils/listing_match_engine.dart"
+      ]
+    },
+    {
+      "field_name": "verified_university_email / university_email_verified",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Passport university row; contact-gate path; OTP table Track A",
+      "cites": [
+        "lib/utils/contextual_passport_snapshot.dart",
+        "supabase/migrations/20260529120000_university_email_otps.sql",
+        "lib/screens/listing_detail_screen.dart",
+        "lib/data/dublin_mock_data.dart"
+      ]
+    },
+    {
+      "field_name": "linkedin_verified / linkedin_company / linkedin_title",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "ViewerProfile session fields; contact copy mentions LinkedIn; not read by inventored scorers",
+      "cites": [
+        "lib/utils/viewer_profile.dart",
+        "lib/screens/listing_detail_screen.dart"
+      ]
+    },
+    {
+      "field_name": "host_linkedin_badge",
+      "available_on": ["listing", "landlord"],
+      "used_in_matching": "YES",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "YES",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Non-null => TrustStage.socialVerified for circle/host stage fallback",
+      "cites": [
+        "lib/utils/viewer_profile.dart",
+        "lib/utils/listing_data.dart"
+      ]
+    },
+    {
+      "field_name": "host_verified_badge",
+      "available_on": ["listing", "landlord"],
+      "used_in_matching": "YES",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "YES",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "true => TrustStage.idVerified",
+      "cites": [
+        "lib/utils/viewer_profile.dart",
+        "lib/utils/listing_data.dart"
+      ]
+    },
+    {
+      "field_name": "host_trust_stage",
+      "available_on": ["listing", "landlord"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "YES",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Primary host trust multiplier input",
+      "cites": [
+        "lib/utils/listing_data.dart",
+        "lib/utils/listing_match_engine.dart",
+        "lib/data/dublin_listing_builder.dart",
+        "lib/data/sample_listings_dublin_v2.dart"
+      ]
+    },
+    {
+      "field_name": "host_trust_multiplier",
+      "available_on": ["listing", "landlord"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Accessor/passport helper; evaluate uses TrustStage.multiplier from host_trust_stage",
+      "cites": [
+        "lib/utils/listing_data.dart",
+        "lib/utils/contextual_passport_snapshot.dart",
+        "lib/services/listings_supabase_service.dart"
+      ]
+    },
+    {
+      "field_name": "host_pre_arrival_badge",
+      "available_on": ["listing", "landlord"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "ListingData accessor; ListingMatchResult.preArrivalBadge never set true in inventored evaluate",
+      "cites": [
+        "lib/utils/listing_data.dart",
+        "lib/utils/listing_match_engine.dart",
+        "lib/widgets/listing_match_banner.dart",
+        "lib/widgets/property_card.dart"
+      ]
+    },
+    {
+      "field_name": "aadhaarVerified / is_aadhaar_verified",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "ViewerProfile field only in inventored files",
+      "cites": ["lib/utils/viewer_profile.dart"]
+    },
+    {
+      "field_name": "passkeyBound / passkey_public_key",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "ViewerProfile field only in inventored files",
+      "cites": ["lib/utils/viewer_profile.dart"]
+    },
+    {
+      "field_name": "has_verified_grand_badge",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "+10 in FullRentalApplicantScorer",
+      "cites": ["lib/utils/full_rental_applicant_scorer.dart"]
+    },
+    {
+      "field_name": "has_verified_corporate_email",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "+5 in FullRentalApplicantScorer",
+      "cites": ["lib/utils/full_rental_applicant_scorer.dart"]
+    },
+    {
+      "field_name": "inCircle",
+      "available_on": ["seeker", "listing"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "YES",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Requires trust-level circle + match >= 75%; circle listings sort first",
+      "cites": [
+        "lib/utils/listing_match_engine.dart",
+        "lib/utils/viewer_profile.dart"
+      ]
+    },
+    {
+      "field_name": "government_id (via TrustStage.idVerified label)",
+      "available_on": ["seeker", "listing"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "YES",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "No separate inventored government_id column; stage level 3 / ID Verified reason + passport label",
+      "cites": [
+        "lib/utils/contextual_passport_snapshot.dart",
+        "lib/utils/listing_match_engine.dart",
+        "lib/screens/listing_detail_screen.dart"
+      ]
+    },
+    {
+      "field_name": "university_email_otps",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Hashed OTP store for university email Track A",
+      "cites": ["supabase/migrations/20260529120000_university_email_otps.sql"]
+    },
+    {
+      "field_name": "user_trust_profiles",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "Authoritative trust flags joined into applicant dashboard/stream ranking/grouping",
+      "cites": [
+        "supabase/migrations/20260611120000_user_trust_profiles.sql",
+        "lib/services/applicant_management_supabase_service.dart"
+      ]
+    },
+    {
+      "field_name": "overall_match_score",
+      "available_on": ["seeker", "listing"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "When present, applicant dashboard sort score equals overall match %",
+      "cites": [
+        "lib/models/high_signal_match.dart",
+        "lib/services/applicant_dashboard_payload_builder.dart"
+      ]
+    },
+    {
+      "field_name": "verified_transit_duration_seconds",
+      "available_on": ["seeker", "listing"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Applicant commute label from high-signal match",
+      "cites": [
+        "lib/models/high_signal_match.dart",
+        "lib/services/applicant_stream_payload_builder.dart",
+        "lib/data/dublin_mock_data.dart"
+      ]
+    },
+    {
+      "field_name": "employment_letter_verified",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Passport employment verification row",
+      "cites": ["lib/utils/contextual_passport_snapshot.dart"]
+    },
+    {
+      "field_name": "corporateDocumentVerified",
+      "available_on": ["seeker"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "NO",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "YES",
+      "weight_or_influence_if_known": "Derived: employment_verified && (corporate track or seal)",
+      "cites": [
+        "lib/services/applicant_stream_payload_builder.dart",
+        "lib/models/independent_places_applicant_stream.dart"
+      ]
+    },
+    {
+      "field_name": "TrustStage.multiplier mechanism",
+      "available_on": ["seeker", "listing"],
+      "used_in_matching": "NO",
+      "used_in_ranking": "YES",
+      "used_in_explanations": "NO",
+      "used_in_UI_only": "NO",
+      "weight_or_influence_if_known": "anonymous=0.4 casual=0.7 socialVerified=0.9 idVerified=1.0",
+      "cites": [
+        "lib/utils/viewer_profile.dart",
+        "lib/utils/listing_match_engine.dart"
+      ]
+    }
+  ],
+  "ranking_signals": [
+    {
+      "signal": "host/seeker TrustStage multipliers",
+      "file": "lib/utils/listing_match_engine.dart",
+      "influence": "combinedTrustMult = (hostMult + seekerMult) / 2"
+    },
+    {
+      "signal": "has_verified_pre_arrival_docs",
+      "file": "lib/utils/listing_match_engine.dart",
+      "influence": "effectiveSeekerTrustMultiplier / Grand weighting path"
+    },
+    {
+      "signal": "isPreArrivalSeeker",
+      "file": "lib/utils/listing_match_engine.dart",
+      "influence": "_preArrivalScoreMultiplier 0.9 when allStudents"
+    },
+    {
+      "signal": "inCircle",
+      "file": "lib/utils/listing_match_engine.dart",
+      "influence": "rank() sorts circle above non-circle"
+    },
+    {
+      "signal": "trust_tier",
+      "file": "lib/services/applicant_dashboard_payload_builder.dart",
+      "influence": "trustBoost = sortPriority * 5"
+    },
+    {
+      "signal": "overall_match_score",
+      "file": "lib/services/applicant_dashboard_payload_builder.dart",
+      "influence": "overrides composite dashboardSortScore when present"
+    },
+    {
+      "signal": "trust_tier blocks",
+      "file": "lib/services/applicant_stream_payload_builder.dart",
+      "influence": "Sound → Grand → Just Landed grouping"
+    },
+    {
+      "signal": "has_verified_grand_badge",
+      "file": "lib/utils/full_rental_applicant_scorer.dart",
+      "influence": "+10"
+    },
+    {
+      "signal": "has_verified_corporate_email",
+      "file": "lib/utils/full_rental_applicant_scorer.dart",
+      "influence": "+5"
+    }
+  ],
+  "explanation_signals": [
+    {
+      "reason": "In your circle",
+      "trigger": "inCircle",
+      "generator": "_combinedReasons",
+      "file": "lib/utils/listing_match_engine.dart"
+    },
+    {
+      "reason": "Pre-arrival docs verified — Grand trust weighting",
+      "trigger": "hasPreArrivalTrustUpgrade",
+      "generator": "_combinedReasons",
+      "file": "lib/utils/listing_match_engine.dart"
+    },
+    {
+      "reason": "ID Verified",
+      "trigger": "hostTrust == idVerified",
+      "generator": "_combinedReasons",
+      "file": "lib/utils/listing_match_engine.dart"
+    },
+    {
+      "reason": "Socially verified",
+      "trigger": "hostTrust == socialVerified",
+      "generator": "_combinedReasons",
+      "file": "lib/utils/listing_match_engine.dart"
+    }
+  ],
+  "preference_explanations_exclude_trust": {
+    "apis": [
+      "independentPlacePreferenceExplanations",
+      "sharedLivingPreferenceExplanations"
+    ],
+    "file": "lib/utils/listing_match_engine.dart",
+    "note": "Detail preference-fit labels omit trust; trust reasons only via _combinedReasons -> match.reasons"
+  },
+  "display_only": [
+    "employment_verified",
+    "financial_verified",
+    "verification_track",
+    "corporate_verification_seal",
+    "open_banking_verification_seal",
+    "open_banking_verified_at",
+    "profile_completeness_percent",
+    "verified_university_email / university_email_verified",
+    "linkedin_verified / linkedin_company / linkedin_title",
+    "host_trust_multiplier",
+    "host_pre_arrival_badge / unused preArrivalBadge",
+    "aadhaarVerified",
+    "passkeyBound",
+    "university_email_otps / employment_letter_verified"
+  ],
+  "uat_gaps": [
+    {
+      "gap": "Pre-arrival seeker ranking / hard conflict",
+      "behavior": "isPreArrivalSeeker score *0.9 and onCampusOnly conflict",
+      "seed_status": "absent from demo_auth_service seeker defaults"
+    },
+    {
+      "gap": "Pre-arrival Grand trust weighting explanation",
+      "behavior": "_combinedReasons + seeker multiplier upgrade",
+      "seed_status": "has_verified_pre_arrival_docs not on demo seeker"
+    },
+    {
+      "gap": "LinkedIn / Aadhaar / passkey seeker paths",
+      "behavior": "ViewerProfile fields + LinkedIn contact copy",
+      "seed_status": "not in demo/applicant inventored seeds"
+    },
+    {
+      "gap": "has_verified_grand_badge / has_verified_corporate_email",
+      "behavior": "+10 / +5 FullRentalApplicantScorer",
+      "seed_status": "absent from mock_applicant_seeder and dublin_mock_data"
+    },
+    {
+      "gap": "Host badge fallbacks",
+      "behavior": "host_linkedin_badge / host_verified_badge / host_pre_arrival_badge stage/UI",
+      "seed_status": "Dublin seeds set host_trust_stage only"
+    },
+    {
+      "gap": "Open Banking seal display",
+      "behavior": "passport checks open_banking_verification_seal",
+      "seed_status": "financial_verified often set without seal"
+    },
+    {
+      "gap": "Elevated seeker TrustStage browse",
+      "behavior": "feed multiplier uses seeker trust_stage",
+      "seed_status": "demo seeker fixed Just Landed / stage 1"
+    },
+    {
+      "gap": "Applicant Sound/Grand/Just Landed matrix",
+      "behavior": "landlord stream/dashboard trust grouping",
+      "seed_status": "COVERED by inventored applicant seeds"
+    },
+    {
+      "gap": "Listing host_trust_stage variation",
+      "behavior": "host multiplier on feed",
+      "seed_status": "COVERED by Dublin listing seeds stages 1/2/3"
+    }
+  ]
+}

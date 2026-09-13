@@ -24,6 +24,22 @@ abstract final class ListingApplicationsService {
     return applicationService.rowsForListing(listingId);
   }
 
+  static Future<Map<String, dynamic>?> byId(String applicationId) async {
+    await applicationService.ensureLoaded();
+    return applicationService.rowById(applicationId);
+  }
+
+  static Future<Map<String, dynamic>?> forListingUser({
+    required String listingId,
+    required String applicantUserId,
+  }) async {
+    await applicationService.ensureLoaded();
+    return applicationService.rowForListingUser(
+      listingId: listingId,
+      userId: applicantUserId,
+    );
+  }
+
   static Future<Map<String, dynamic>> submit({
     required String listingId,
     required Map<String, dynamic> session,

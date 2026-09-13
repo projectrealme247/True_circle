@@ -3,11 +3,8 @@ import '../models/applicant_trust_tier.dart';
 import '../models/profile_onboarding_models.dart';
 import '../models/seeker_onboarding_enums.dart';
 import '../services/active_mode_service.dart';
-import '../theme/trust_tier_design.dart';
+import '../services/trust_service.dart';
 import 'profile_data.dart';
-import 'rental_date_format.dart';
-import 'tenant_verification_credentials.dart';
-import 'viewer_profile.dart';
 
 /// Normalized passport payload for the 4-track contextual profile view.
 class ContextualPassportSnapshot {
@@ -35,10 +32,15 @@ class ContextualPassportSnapshot {
     this.responsivenessLabel = '',
     this.listingTypeLabel = '',
     this.languagesLabel = '',
+    this.tenurePreferenceLabel = '',
+    this.furnishingPreferenceLabel = '',
+    this.propertyTypePreferenceLabel = '',
+    this.bathroomPreferenceLabel = '',
     this.transportPreference = '',
     this.verificationProgressLabel = '',
     this.profileCompletionPercent = 0,
     this.profileCompletenessLevel = 'Just started',
+    this.contactVerified = false,
   });
 
   final ProfileOnboardingTrack track;
@@ -74,14 +76,24 @@ class ContextualPassportSnapshot {
   // Public passport (onboarding preview)
   final String listingTypeLabel;
   final String languagesLabel;
+  final String tenurePreferenceLabel;
+  final String furnishingPreferenceLabel;
+  final String propertyTypePreferenceLabel;
+  final String bathroomPreferenceLabel;
   final String transportPreference;
   final String verificationProgressLabel;
   final int profileCompletionPercent;
   final String profileCompletenessLevel;
 
-  String get trustBadgeEmoji => TrustTierDesign.emojiPrefixFor(trustTier);
+  /// Contact-unlock badge — not derived from trust_tier / trust_stage.
+  final bool contactVerified;
 
-  String get trustBadgeLabel => TrustTierDesign.labelFor(trustTier);
+  bool get isVerifiedUser => contactVerified;
+
+  String get trustBadgeEmoji => isVerifiedUser ? '✅' : '';
+
+  String get trustBadgeLabel =>
+      isVerifiedUser ? 'Verified User' : '';
 
   static ContextualPassportSnapshot fromSession(
     Map<String, dynamic> session, {
@@ -89,6 +101,7 @@ class ContextualPassportSnapshot {
   }) {
     final track = _resolveTrack(session);
     final trustTier = ApplicantTrustTier.fromSession(session);
+    final contactVerified = TrustService.meetsContactVerification(session);
     final persona = _resolvePersona(session, track);
     final displayName = ProfileData.text(session['full_name']).trim();
 
@@ -111,7 +124,7 @@ class ContextualPassportSnapshot {
       budgetTierLabel: _budgetTierLabel(session),
       householdBreakdown: _householdBreakdown(session),
       verificationRows: verificationRows,
-      hostTrustMultiplier: _hostTrustMultiplier(session),
+      hostTrustMultiplier: null,
       houseRules: _houseRules(session),
       homeLanguages: _homeLanguages(session),
       flatmatePreferences: _flatmatePreferences(session),
@@ -119,12 +132,18 @@ class ContextualPassportSnapshot {
       licensingLabel: _licensingLabel(session),
       responsivenessLabel: _responsivenessLabel(session),
       listingTypeLabel: _listingTypeLabel(track),
-      languagesLabel: _languagesLabel(session),
+      languagesLabel: _languagesLabel(session, track),
+      tenurePreferenceLabel: _tenurePreferenceLabel(session, track),
+      furnishingPreferenceLabel: _furnishingPreferenceLabel(session, track),
+      propertyTypePreferenceLabel:
+          _propertyTypePreferenceLabel(session, track),
+      bathroomPreferenceLabel: _bathroomPreferenceLabel(session, track),
       transportPreference: _transportPreference(session),
       verificationProgressLabel:
           _verificationProgressLabel(verificationRows),
       profileCompletionPercent: completionPercent,
       profileCompletenessLevel: _profileCompletenessLevel(completionPercent),
+      contactVerified: contactVerified,
     );
   }
 
@@ -135,7 +154,13 @@ class ContextualPassportSnapshot {
     return track.isSharedSpace ? 'Shared Living' : 'Independent Place';
   }
 
-  static String _languagesLabel(Map<String, dynamic> session) {
+  static String _languagesLabel(
+    Map<String, dynamic> session,
+    ProfileOnboardingTrack track,
+  ) {
+    // Language is a Shared Living matching signal only.
+    if (!track.isLandlord && !track.isSharedSpace) return '';
+
     final langs = <String>[];
     void add(String value) {
       final trimmed = value.trim();
@@ -157,6 +182,39 @@ class ContextualPassportSnapshot {
       add(language);
     }
     return langs.join(', ');
+  }
+
+  static String _tenurePreferenceLabel(
+    Map<String, dynamic> session,
+    ProfileOnboardingTrack track,
+  ) {
+    if (track.isLandlord || track.isSharedSpace) return '';
+    // IP seekers: legacy flexible displays as Long-Term via fromSession migration.
+    return TenurePreference.fromSession(session)?.label ?? '';
+  }
+
+  static String _furnishingPreferenceLabel(
+    Map<String, dynamic> session,
+    ProfileOnboardingTrack track,
+  ) {
+    if (track.isLandlord || track.isSharedSpace) return '';
+    return FurnishingPreference.fromSession(session)?.label ?? '';
+  }
+
+  static String _propertyTypePreferenceLabel(
+    Map<String, dynamic> session,
+    ProfileOnboardingTrack track,
+  ) {
+    if (track.isLandlord || track.isSharedSpace) return '';
+    return PropertyTypePreference.fromSession(session)?.label ?? '';
+  }
+
+  static String _bathroomPreferenceLabel(
+    Map<String, dynamic> session,
+    ProfileOnboardingTrack track,
+  ) {
+    if (track.isLandlord) return '';
+    return BathroomPreference.fromSession(session)?.label ?? '';
   }
 
   static String _transportPreference(Map<String, dynamic> session) {
@@ -280,20 +338,33 @@ class ContextualPassportSnapshot {
     if (ProfileData.commuteDestinationUnknown(session)) {
       return 'Not sure yet';
     }
-    final hub = ProfileData.text(session['commute_destination']);
-    if (hub.isNotEmpty) return hub;
-
-    final profiles = session['commute_profiles'];
-    if (profiles is List && profiles.isNotEmpty) {
-      final first = profiles.first;
-      if (first is Map) {
-        final label = ProfileData.text(first['commute_destination']);
-        if (label.isNotEmpty) return label;
-        final hubId = ProfileData.text(first['commute_destination_hub_id']);
-        if (hubId.isNotEmpty) return hubId;
+    var hub = ProfileData.text(session['commute_destination']);
+    if (hub.isEmpty) {
+      final profiles = session['commute_profiles'];
+      if (profiles is List && profiles.isNotEmpty) {
+        final first = profiles.first;
+        if (first is Map) {
+          hub = ProfileData.text(first['commute_destination']);
+          if (hub.isEmpty) {
+            final hubId = ProfileData.text(first['commute_destination_hub_id']);
+            if (hubId.isNotEmpty) hub = hubId;
+          }
+        }
       }
     }
-    return '';
+    if (hub.isEmpty) return '';
+
+    // Labeling only — whose destination was entered (not dual optimization).
+    final priority =
+        ProfileData.text(session['dual_commute_priority']).toLowerCase();
+    final household = session['household_commuters_count'];
+    final partnerContext = household is num
+        ? household >= 2
+        : priority == 'person_b' || priority == 'personb';
+    if (partnerContext && (priority == 'person_b' || priority == 'personb')) {
+      return "Partner's: $hub";
+    }
+    return hub;
   }
 
   static int? _maxCommuteMinutes(Map<String, dynamic> session) {
@@ -386,8 +457,8 @@ class ContextualPassportSnapshot {
   static String _householdBreakdown(Map<String, dynamic> session) {
     final occupant = ProfileData.text(session['occupant_type']);
     if (occupant == 'Family') {
-      final adults = session['family_adults'];
-      final children = session['family_children'];
+      final adults = session['adults_count'] ?? session['family_adults'];
+      final children = session['children_count'] ?? session['family_children'];
       final adultCount = adults is num ? adults.round() : 2;
       final childCount = children is num ? children.round() : 0;
       if (childCount > 0) {
@@ -447,19 +518,6 @@ class ContextualPassportSnapshot {
     return rows;
   }
 
-  static double? _hostTrustMultiplier(Map<String, dynamic> session) {
-    final raw = session['host_trust_multiplier'];
-    if (raw is num) return raw.toDouble();
-    final parsed = double.tryParse(ProfileData.text(raw));
-    if (parsed != null) return parsed;
-
-    final stageRaw = session['host_trust_stage'] ?? session['trust_stage'];
-    if (stageRaw is int) {
-      return TrustStage.fromLevel(stageRaw).multiplier;
-    }
-    return TrustStage.casual.multiplier;
-  }
-
   static List<String> _houseRules(Map<String, dynamic> session) {
     final fromProfile = ProfileData.languageList(session['house_rules']);
     if (fromProfile.isNotEmpty) return fromProfile;
@@ -504,22 +562,13 @@ class ContextualPassportSnapshot {
   }
 
   static String _idVerificationLabel(Map<String, dynamic> session) {
-    final credentials = TenantVerificationCredentials.fromSession(session);
-    if (credentials.trustStage == TrustStage.idVerified) {
-      return 'Government ID match confirmed';
+    if (TrustService.meetsContactVerification(session)) {
+      return '✅ Verified User';
     }
-    if (credentials.trustStage == TrustStage.socialVerified) {
-      return 'Social identity verified — ID check pending';
-    }
-    return 'ID verification not yet complete';
+    return 'Verification not yet complete';
   }
 
   static String _licensingLabel(Map<String, dynamic> session) {
-    if (session['rtb_registered'] == true) {
-      return 'RTB registration on file';
-    }
-    final rtb = ProfileData.text(session['rtb_status']).toLowerCase();
-    if (rtb.contains('register')) return 'RTB registration on file';
     if (ProfileData.text(session['agency_name']).isNotEmpty) {
       return 'Agency-licensed provider';
     }
@@ -527,17 +576,10 @@ class ContextualPassportSnapshot {
   }
 
   static String _responsivenessLabel(Map<String, dynamic> session) {
-    final stageRaw = session['host_trust_stage'] ?? session['trust_stage'];
-    final stage = stageRaw is int
-        ? TrustStage.fromLevel(stageRaw)
-        : TenantVerificationCredentials.fromSession(session).trustStage;
-
-    return switch (stage) {
-      TrustStage.idVerified => 'Typically responds within 12 hours',
-      TrustStage.socialVerified => 'Typically responds within 24 hours',
-      TrustStage.casual => 'Typically responds within 48 hours',
-      TrustStage.anonymous => 'Response window not yet established',
-    };
+    if (TrustService.meetsContactVerification(session)) {
+      return 'Typically responds promptly';
+    }
+    return 'Response window not yet established';
   }
 }
 

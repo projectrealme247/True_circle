@@ -1,0 +1,3114 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:56:56.554673Z",
+  "overall": "FAIL",
+  "overall_pass": false,
+  "thresholds": {
+    "fail_avg_duplicate_pct_gt": 70,
+    "fail_identical_cluster_ge_7_seekers_ge": 3,
+    "warn_avg_duplicate_pct_range": [
+      40,
+      70
+    ],
+    "near_duplicate_definition": "Two explanations are near-duplicates when not exact-equal after normalization, but Jaccard similarity of reason-type sets ≥ 0.8. Reason types are category keys (budget, bedrooms, availability, commute, location, property_type, household, room, bathroom, lifestyle) derived from known preference-explanation templates. Exact duplicates: identical after trim + whitespace collapse + emoji/symbol strip.",
+    "duplicate_percentage_formula": "(total_listings_reviewed - unique_explanations) / total_listings_reviewed * 100"
+  },
+  "summary": {
+    "overall": "FAIL",
+    "seekers_tested": 10,
+    "shared_living_seekers": 5,
+    "independent_places_seekers": 5,
+    "average_duplicate_percentage": 66.2,
+    "average_near_duplicate_percentage": 71.2,
+    "average_unique_explanations": 3.2,
+    "seekers_with_identical_cluster_ge_7": 5,
+    "findings": {
+      "blocker": 5,
+      "high": 4,
+      "medium": 4
+    }
+  },
+  "per_seeker": [
+    {
+      "seeker_id": "SL-DUP-MANY-01",
+      "marketplace": "shared_living",
+      "match_volume_tier": "many",
+      "matches_returned": 40,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 1,
+      "duplicate_explanations": 9,
+      "duplicate_percentage": 90.0,
+      "near_unique_signatures": 1,
+      "near_duplicate_percentage": 90.0,
+      "max_exact_cluster_size": 10
+    },
+    {
+      "seeker_id": "SL-DUP-MED-02",
+      "marketplace": "shared_living",
+      "match_volume_tier": "medium",
+      "matches_returned": 19,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 5,
+      "duplicate_explanations": 5,
+      "duplicate_percentage": 50.0,
+      "near_unique_signatures": 5,
+      "near_duplicate_percentage": 50.0,
+      "max_exact_cluster_size": 4
+    },
+    {
+      "seeker_id": "SL-DUP-LIM-03",
+      "marketplace": "shared_living",
+      "match_volume_tier": "limited",
+      "matches_returned": 7,
+      "total_listings_reviewed": 7,
+      "unique_explanations": 3,
+      "duplicate_explanations": 4,
+      "duplicate_percentage": 57.1,
+      "near_unique_signatures": 3,
+      "near_duplicate_percentage": 57.1,
+      "max_exact_cluster_size": 3
+    },
+    {
+      "seeker_id": "SL-DUP-MED-04",
+      "marketplace": "shared_living",
+      "match_volume_tier": "many",
+      "matches_returned": 28,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 5,
+      "duplicate_explanations": 5,
+      "duplicate_percentage": 50.0,
+      "near_unique_signatures": 5,
+      "near_duplicate_percentage": 50.0,
+      "max_exact_cluster_size": 4
+    },
+    {
+      "seeker_id": "SL-DUP-LIM-05",
+      "marketplace": "shared_living",
+      "match_volume_tier": "medium",
+      "matches_returned": 9,
+      "total_listings_reviewed": 9,
+      "unique_explanations": 5,
+      "duplicate_explanations": 4,
+      "duplicate_percentage": 44.4,
+      "near_unique_signatures": 5,
+      "near_duplicate_percentage": 44.4,
+      "max_exact_cluster_size": 3
+    },
+    {
+      "seeker_id": "IP-DUP-MANY-01",
+      "marketplace": "independent_places",
+      "match_volume_tier": "many",
+      "matches_returned": 50,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 3,
+      "duplicate_explanations": 7,
+      "duplicate_percentage": 70.0,
+      "near_unique_signatures": 2,
+      "near_duplicate_percentage": 80.0,
+      "max_exact_cluster_size": 8
+    },
+    {
+      "seeker_id": "IP-DUP-MED-02",
+      "marketplace": "independent_places",
+      "match_volume_tier": "many",
+      "matches_returned": 40,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 2,
+      "duplicate_explanations": 8,
+      "duplicate_percentage": 80.0,
+      "near_unique_signatures": 1,
+      "near_duplicate_percentage": 90.0,
+      "max_exact_cluster_size": 7
+    },
+    {
+      "seeker_id": "IP-DUP-LIM-03",
+      "marketplace": "independent_places",
+      "match_volume_tier": "many",
+      "matches_returned": 30,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 2,
+      "duplicate_explanations": 8,
+      "duplicate_percentage": 80.0,
+      "near_unique_signatures": 1,
+      "near_duplicate_percentage": 90.0,
+      "max_exact_cluster_size": 7
+    },
+    {
+      "seeker_id": "IP-DUP-MED-04",
+      "marketplace": "independent_places",
+      "match_volume_tier": "many",
+      "matches_returned": 47,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 3,
+      "duplicate_explanations": 7,
+      "duplicate_percentage": 70.0,
+      "near_unique_signatures": 2,
+      "near_duplicate_percentage": 80.0,
+      "max_exact_cluster_size": 7
+    },
+    {
+      "seeker_id": "IP-DUP-LIM-05",
+      "marketplace": "independent_places",
+      "match_volume_tier": "many",
+      "matches_returned": 25,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 3,
+      "duplicate_explanations": 7,
+      "duplicate_percentage": 70.0,
+      "near_unique_signatures": 2,
+      "near_duplicate_percentage": 80.0,
+      "max_exact_cluster_size": 5
+    }
+  ],
+  "findings": {
+    "blocker": [
+      {
+        "seeker_id": "SL-DUP-MANY-01",
+        "severity": "blocker",
+        "code": "identical_explanations_across_many_listings",
+        "detail": "Exact same explanation on 10 of 10 reviewed listings (threshold ≥7).",
+        "duplicate_percentage": 90.0
+      },
+      {
+        "seeker_id": "IP-DUP-MANY-01",
+        "severity": "blocker",
+        "code": "identical_explanations_across_many_listings",
+        "detail": "Exact same explanation on 8 of 10 reviewed listings (threshold ≥7).",
+        "duplicate_percentage": 70.0
+      },
+      {
+        "seeker_id": "IP-DUP-MED-02",
+        "severity": "blocker",
+        "code": "identical_explanations_across_many_listings",
+        "detail": "Exact same explanation on 7 of 10 reviewed listings (threshold ≥7).",
+        "duplicate_percentage": 80.0
+      },
+      {
+        "seeker_id": "IP-DUP-LIM-03",
+        "severity": "blocker",
+        "code": "identical_explanations_across_many_listings",
+        "detail": "Exact same explanation on 7 of 10 reviewed listings (threshold ≥7).",
+        "duplicate_percentage": 80.0
+      },
+      {
+        "seeker_id": "IP-DUP-MED-04",
+        "severity": "blocker",
+        "code": "identical_explanations_across_many_listings",
+        "detail": "Exact same explanation on 7 of 10 reviewed listings (threshold ≥7).",
+        "duplicate_percentage": 70.0
+      }
+    ],
+    "high": [
+      {
+        "seeker_id": "SL-DUP-MANY-01",
+        "severity": "high",
+        "code": "templated_minimal_variation",
+        "detail": "Only 1 exact unique explanation(s) and 1 reason-type signature(s) across 10 listings — templates do not differentiate listings."
+      },
+      {
+        "seeker_id": "IP-DUP-MED-02",
+        "severity": "high",
+        "code": "templated_minimal_variation",
+        "detail": "Only 2 exact unique explanation(s) and 1 reason-type signature(s) across 10 listings — templates do not differentiate listings."
+      },
+      {
+        "seeker_id": "IP-DUP-LIM-03",
+        "severity": "high",
+        "code": "templated_minimal_variation",
+        "detail": "Only 2 exact unique explanation(s) and 1 reason-type signature(s) across 10 listings — templates do not differentiate listings."
+      },
+      {
+        "seeker_id": "IP-DUP-LIM-05",
+        "severity": "high",
+        "code": "high_exact_duplication_cluster",
+        "detail": "Exact cluster of 5 / 10 with 70.0% duplicate rate.",
+        "duplicate_percentage": 70.0
+      }
+    ],
+    "medium": [
+      {
+        "seeker_id": "SL-DUP-MANY-01",
+        "severity": "medium",
+        "code": "all_explanations_identical",
+        "detail": "All 10 reviewed listings share one identical explanation."
+      },
+      {
+        "seeker_id": "SL-DUP-MANY-01",
+        "severity": "medium",
+        "code": "fails_to_reflect_listing_differences",
+        "detail": "10 distinct listing areas and 9 price strings, but only 1 unique explanation text(s). Preference labels are category templates without listing-specific tokens (area name, rent amount, beds count in copy)."
+      },
+      {
+        "seeker_id": "IP-DUP-MED-02",
+        "severity": "medium",
+        "code": "fails_to_reflect_listing_differences",
+        "detail": "9 distinct listing areas and 7 price strings, but only 2 unique explanation text(s). Preference labels are category templates without listing-specific tokens (area name, rent amount, beds count in copy)."
+      },
+      {
+        "seeker_id": "IP-DUP-LIM-03",
+        "severity": "medium",
+        "code": "fails_to_reflect_listing_differences",
+        "detail": "8 distinct listing areas and 8 price strings, but only 2 unique explanation text(s). Preference labels are category templates without listing-specific tokens (area name, rent amount, beds count in copy)."
+      }
+    ]
+  },
+  "duplicate_pairs_examples": [
+    {
+      "seeker_id": "SL-DUP-MANY-01",
+      "listing_a": "dub-share-23",
+      "listing_b": "dub-share-02",
+      "cluster_size": 10,
+      "shared_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+      "kind": "exact"
+    },
+    {
+      "seeker_id": "SL-DUP-MED-02",
+      "listing_a": "dub-share-11",
+      "listing_b": "dub-share-18",
+      "cluster_size": 4,
+      "shared_explanation": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 👩‍🎓 Student household",
+      "kind": "exact"
+    },
+    {
+      "seeker_id": "SL-DUP-MED-02",
+      "listing_a": "dub-share-20",
+      "listing_b": "dub-share-33",
+      "cluster_size": 3,
+      "shared_explanation": "🚿 Bathroom setup matches your preference | 👩‍🎓 Student household | 📅 Available when you plan to move",
+      "kind": "exact"
+    },
+    {
+      "seeker_id": "SL-DUP-LIM-03",
+      "listing_a": "dub-share-13",
+      "listing_b": "dub-share-28",
+      "cluster_size": 3,
+      "shared_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 📅 Available when you plan to move",
+      "kind": "exact"
+    },
+    {
+      "seeker_id": "SL-DUP-LIM-03",
+      "listing_a": "dub-share-04",
+      "listing_b": "dub-share-11",
+      "cluster_size": 2,
+      "shared_explanation": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+      "kind": "exact"
+    },
+    {
+      "seeker_id": "SL-DUP-MED-04",
+      "listing_a": "dub-share-13",
+      "listing_b": "dub-share-20",
+      "cluster_size": 4,
+      "shared_explanation": "🛏️ Private room matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+      "kind": "exact"
+    },
+    {
+      "seeker_id": "SL-DUP-MED-04",
+      "listing_a": "dub-share-01",
+      "listing_b": "dub-share-05",
+      "cluster_size": 2,
+      "shared_explanation": "💼 Professional household | 💰 Within your budget",
+      "kind": "exact"
+    },
+    {
+      "seeker_id": "SL-DUP-LIM-05",
+      "listing_a": "dub-share-20",
+      "listing_b": "dub-share-28",
+      "cluster_size": 3,
+      "shared_explanation": "👩‍🎓 Student household",
+      "kind": "exact"
+    }
+  ],
+  "seekers": [
+    {
+      "seeker_id": "SL-DUP-MANY-01",
+      "marketplace": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "intended_volume": "many",
+      "match_volume_tier": "many",
+      "scenario": "Professional · high budget · broad Dublin · private room · ensuite",
+      "max_budget": 1100,
+      "preferred_locations": [
+        "Dublin 1",
+        "Dublin 2",
+        "Dublin 3",
+        "Dublin 4",
+        "Dublin 6",
+        "Dublin 7",
+        "Dublin 8",
+        "Dublin 12"
+      ],
+      "matches_returned": 40,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 1,
+      "duplicate_explanations": 9,
+      "duplicate_percentage": 90.0,
+      "near_unique_signatures": 1,
+      "near_duplicate_percentage": 90.0,
+      "max_exact_cluster_size": 10,
+      "exact_clusters": [
+        {
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "count": 10,
+          "listing_ids": [
+            "dub-share-23",
+            "dub-share-02",
+            "dub-share-40",
+            "dub-share-26",
+            "dub-share-32",
+            "dub-share-29",
+            "dub-share-19",
+            "dub-share-25",
+            "dub-share-34",
+            "dub-share-10"
+          ],
+          "sample_joined": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "bathroom+household+room",
+          "count": 10,
+          "listing_ids": [
+            "dub-share-23",
+            "dub-share-02",
+            "dub-share-40",
+            "dub-share-26",
+            "dub-share-32",
+            "dub-share-29",
+            "dub-share-19",
+            "dub-share-25",
+            "dub-share-34",
+            "dub-share-10"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-23",
+          "marketplace": "shared_living",
+          "title": "Male only · Stoneybatter Luas",
+          "area": "Stoneybatter, Dublin 7",
+          "price": "690/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-02",
+          "marketplace": "shared_living",
+          "title": "Male only · €700/person · Rialto",
+          "area": "Rialto, Dublin 12",
+          "price": "700/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-40",
+          "marketplace": "shared_living",
+          "title": "Private room · Dalkey village",
+          "area": "Dalkey, Co. Dublin South",
+          "price": "980/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-26",
+          "marketplace": "shared_living",
+          "title": "Private room · Grand Canal Dock",
+          "area": "Grand Canal Dock, Dublin 2",
+          "price": "950/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-32",
+          "marketplace": "shared_living",
+          "title": "Ensuite · Blanchardstown multi-modal",
+          "area": "Blanchardstown, Dublin 15",
+          "price": "870/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-29",
+          "marketplace": "shared_living",
+          "title": "Master room · Ballyfermot Luas",
+          "area": "Ballyfermot, Dublin 10",
+          "price": "1050/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-19",
+          "marketplace": "shared_living",
+          "title": "Ensuite · Rathmines · Luas commuter",
+          "area": "Rathmines, Dublin 6",
+          "price": "880/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-25",
+          "marketplace": "shared_living",
+          "title": "Sound host · Sandyford Luas · professionals",
+          "area": "Sandyford, Dublin 18",
+          "price": "920/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-34",
+          "marketplace": "shared_living",
+          "title": "Private room · Chapelizod Luas",
+          "area": "Chapelizod, Dublin 20",
+          "price": "720/month",
+          "score": 95,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-10",
+          "marketplace": "shared_living",
+          "title": "Professional house · Sandyford",
+          "area": "Dublin 18",
+          "price": "920/month",
+          "score": 95,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💼 Professional household"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 💼 Professional household",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | professional household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "seeker_id": "SL-DUP-MED-02",
+      "marketplace": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "intended_volume": "medium",
+      "match_volume_tier": "medium",
+      "scenario": "Student · medium budget · southside · shared room",
+      "max_budget": 650,
+      "preferred_locations": [
+        "Dublin 6",
+        "Dublin 8",
+        "Dublin 12",
+        "Rathmines"
+      ],
+      "matches_returned": 19,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 5,
+      "duplicate_explanations": 5,
+      "duplicate_percentage": 50.0,
+      "near_unique_signatures": 5,
+      "near_duplicate_percentage": 50.0,
+      "max_exact_cluster_size": 4,
+      "exact_clusters": [
+        {
+          "exact_key": "shared room matches your preference | bathroom setup matches your preference | student household",
+          "count": 4,
+          "listing_ids": [
+            "dub-share-11",
+            "dub-share-18",
+            "dub-share-30",
+            "dub-share-04"
+          ],
+          "sample_joined": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 👩‍🎓 Student household"
+        },
+        {
+          "exact_key": "bathroom setup matches your preference | student household | available when you plan to move",
+          "count": 3,
+          "listing_ids": [
+            "dub-share-20",
+            "dub-share-33",
+            "dub-share-28"
+          ],
+          "sample_joined": "🚿 Bathroom setup matches your preference | 👩‍🎓 Student household | 📅 Available when you plan to move"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "bathroom+household+room",
+          "count": 4,
+          "listing_ids": [
+            "dub-share-11",
+            "dub-share-18",
+            "dub-share-30",
+            "dub-share-04"
+          ]
+        },
+        {
+          "reason_type_signature": "availability+bathroom+household",
+          "count": 3,
+          "listing_ids": [
+            "dub-share-20",
+            "dub-share-33",
+            "dub-share-28"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-01",
+          "marketplace": "shared_living",
+          "title": "Female only · shared bed · Cherrywood",
+          "area": "Cherrywood, Dublin 18",
+          "price": "625/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 📅 Available when you plan to move",
+          "exact_key": "shared room matches your preference | bathroom setup matches your preference | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "room"
+          ],
+          "reason_type_signature": "availability+bathroom+room"
+        },
+        {
+          "listing_id": "dub-share-11",
+          "marketplace": "shared_living",
+          "title": "Budget bed · Dundalk · all-in",
+          "area": "Dundalk, County Louth",
+          "price": "380/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 👩‍🎓 Student household",
+          "exact_key": "shared room matches your preference | bathroom setup matches your preference | student household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-18",
+          "marketplace": "shared_living",
+          "title": "Student-friendly · Cherrywood Luas",
+          "area": "Cherrywood, Dublin 18",
+          "price": "540/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 👩‍🎓 Student household",
+          "exact_key": "shared room matches your preference | bathroom setup matches your preference | student household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-30",
+          "marketplace": "shared_living",
+          "title": "Bed in shared room · Finglas",
+          "area": "Finglas, Dublin 11",
+          "price": "520/month",
+          "score": 100,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 👩‍🎓 Student household",
+          "exact_key": "shared room matches your preference | bathroom setup matches your preference | student household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-04",
+          "marketplace": "shared_living",
+          "title": "All bills in · male · Dundalk DKIT",
+          "area": "Dundalk, County Louth",
+          "price": "350/month",
+          "score": 95,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 👩‍🎓 Student household",
+          "exact_key": "shared room matches your preference | bathroom setup matches your preference | student household",
+          "reason_types": [
+            "bathroom",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+household+room"
+        },
+        {
+          "listing_id": "dub-share-05",
+          "marketplace": "shared_living",
+          "title": "Bed space · female · Dublin 4 Luas",
+          "area": "Cherrywood, Dublin 18",
+          "price": "650/month",
+          "score": 95,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 🚿 Bathroom setup matches your preference | 💰 Within your budget",
+          "exact_key": "shared room matches your preference | bathroom setup matches your preference | within your budget",
+          "reason_types": [
+            "bathroom",
+            "budget",
+            "room"
+          ],
+          "reason_type_signature": "bathroom+budget+room"
+        },
+        {
+          "listing_id": "dub-share-20",
+          "marketplace": "shared_living",
+          "title": "Twin share · Drumcondra DART",
+          "area": "Drumcondra, Dublin 9",
+          "price": "620/month",
+          "score": 93,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "👩‍🎓 Student household",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 👩‍🎓 Student household | 📅 Available when you plan to move",
+          "exact_key": "bathroom setup matches your preference | student household | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "household"
+          ],
+          "reason_type_signature": "availability+bathroom+household"
+        },
+        {
+          "listing_id": "dub-share-33",
+          "marketplace": "shared_living",
+          "title": "Twin share · Coolock students",
+          "area": "Coolock, Dublin 17",
+          "price": "600/month",
+          "score": 93,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "👩‍🎓 Student household",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 👩‍🎓 Student household | 📅 Available when you plan to move",
+          "exact_key": "bathroom setup matches your preference | student household | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "household"
+          ],
+          "reason_type_signature": "availability+bathroom+household"
+        },
+        {
+          "listing_id": "dub-share-13",
+          "marketplace": "shared_living",
+          "title": "Family-friendly spare room · Lucan",
+          "area": "Lucan, Dublin",
+          "price": "600/month",
+          "score": 75,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "bathroom setup matches your preference | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bathroom+budget"
+        },
+        {
+          "listing_id": "dub-share-28",
+          "marketplace": "shared_living",
+          "title": "Twin share · Terenure",
+          "area": "Terenure, Dublin 6W",
+          "price": "580/month",
+          "score": 72,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "👩‍🎓 Student household",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 👩‍🎓 Student household | 📅 Available when you plan to move",
+          "exact_key": "bathroom setup matches your preference | student household | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "household"
+          ],
+          "reason_type_signature": "availability+bathroom+household"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 19,
+        "ranked": 19
+      }
+    },
+    {
+      "seeker_id": "SL-DUP-LIM-03",
+      "marketplace": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "intended_volume": "limited",
+      "match_volume_tier": "limited",
+      "scenario": "Professional · tight budget · narrow northside · private",
+      "max_budget": 480,
+      "preferred_locations": [
+        "Dublin 1",
+        "Dublin 7"
+      ],
+      "matches_returned": 7,
+      "total_listings_reviewed": 7,
+      "unique_explanations": 3,
+      "duplicate_explanations": 4,
+      "duplicate_percentage": 57.1,
+      "near_unique_signatures": 3,
+      "near_duplicate_percentage": 57.1,
+      "max_exact_cluster_size": 3,
+      "exact_clusters": [
+        {
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | available when you plan to move",
+          "count": 3,
+          "listing_ids": [
+            "dub-share-13",
+            "dub-share-28",
+            "dub-share-33"
+          ],
+          "sample_joined": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 📅 Available when you plan to move"
+        },
+        {
+          "exact_key": "bathroom setup matches your preference | available when you plan to move | within your budget",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-04",
+            "dub-share-11"
+          ],
+          "sample_joined": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move | 💰 Within your budget"
+        },
+        {
+          "exact_key": "bathroom setup matches your preference | available when you plan to move",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-30",
+            "dub-share-18"
+          ],
+          "sample_joined": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "availability+bathroom+room",
+          "count": 3,
+          "listing_ids": [
+            "dub-share-13",
+            "dub-share-28",
+            "dub-share-33"
+          ]
+        },
+        {
+          "reason_type_signature": "availability+bathroom+budget",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-04",
+            "dub-share-11"
+          ]
+        },
+        {
+          "reason_type_signature": "availability+bathroom",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-30",
+            "dub-share-18"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-04",
+          "marketplace": "shared_living",
+          "title": "All bills in · male · Dundalk DKIT",
+          "area": "Dundalk, County Louth",
+          "price": "350/month",
+          "score": 50,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "bathroom setup matches your preference | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bathroom+budget"
+        },
+        {
+          "listing_id": "dub-share-11",
+          "marketplace": "shared_living",
+          "title": "Budget bed · Dundalk · all-in",
+          "area": "Dundalk, County Louth",
+          "price": "380/month",
+          "score": 50,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "bathroom setup matches your preference | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bathroom+budget"
+        },
+        {
+          "listing_id": "dub-share-30",
+          "marketplace": "shared_living",
+          "title": "Bed in shared room · Finglas",
+          "area": "Finglas, Dublin 11",
+          "price": "520/month",
+          "score": 42,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move",
+          "exact_key": "bathroom setup matches your preference | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom"
+          ],
+          "reason_type_signature": "availability+bathroom"
+        },
+        {
+          "listing_id": "dub-share-13",
+          "marketplace": "shared_living",
+          "title": "Family-friendly spare room · Lucan",
+          "area": "Lucan, Dublin",
+          "price": "600/month",
+          "score": 41,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 📅 Available when you plan to move",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "room"
+          ],
+          "reason_type_signature": "availability+bathroom+room"
+        },
+        {
+          "listing_id": "dub-share-28",
+          "marketplace": "shared_living",
+          "title": "Twin share · Terenure",
+          "area": "Terenure, Dublin 6W",
+          "price": "580/month",
+          "score": 40,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 📅 Available when you plan to move",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "room"
+          ],
+          "reason_type_signature": "availability+bathroom+room"
+        },
+        {
+          "listing_id": "dub-share-33",
+          "marketplace": "shared_living",
+          "title": "Twin share · Coolock students",
+          "area": "Coolock, Dublin 17",
+          "price": "600/month",
+          "score": 40,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 🚿 Bathroom setup matches your preference | 📅 Available when you plan to move",
+          "exact_key": "private room matches your preference | bathroom setup matches your preference | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom",
+            "room"
+          ],
+          "reason_type_signature": "availability+bathroom+room"
+        },
+        {
+          "listing_id": "dub-share-18",
+          "marketplace": "shared_living",
+          "title": "Student-friendly · Cherrywood Luas",
+          "area": "Cherrywood, Dublin 18",
+          "price": "540/month",
+          "score": 35,
+          "explanations": [
+            "🚿 Bathroom setup matches your preference",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🚿 Bathroom setup matches your preference | 📅 Available when you plan to move",
+          "exact_key": "bathroom setup matches your preference | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bathroom"
+          ],
+          "reason_type_signature": "availability+bathroom"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 7,
+        "ranked": 7
+      }
+    },
+    {
+      "seeker_id": "SL-DUP-MED-04",
+      "marketplace": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "intended_volume": "medium",
+      "match_volume_tier": "many",
+      "scenario": "Professional · mid budget · city core · any bathroom · veg",
+      "max_budget": 750,
+      "preferred_locations": [
+        "Dublin 2",
+        "Dublin 4",
+        "Dublin 6"
+      ],
+      "matches_returned": 28,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 5,
+      "duplicate_explanations": 5,
+      "duplicate_percentage": 50.0,
+      "near_unique_signatures": 5,
+      "near_duplicate_percentage": 50.0,
+      "max_exact_cluster_size": 4,
+      "exact_clusters": [
+        {
+          "exact_key": "private room matches your preference | available when you plan to move | within your budget",
+          "count": 4,
+          "listing_ids": [
+            "dub-share-13",
+            "dub-share-20",
+            "dub-share-22",
+            "dub-share-33"
+          ],
+          "sample_joined": "🛏️ Private room matches your preference | 📅 Available when you plan to move | 💰 Within your budget"
+        },
+        {
+          "exact_key": "professional household | within your budget",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-01",
+            "dub-share-05"
+          ],
+          "sample_joined": "💼 Professional household | 💰 Within your budget"
+        },
+        {
+          "exact_key": "private room matches your preference | professional household | available when you plan to move",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-02",
+            "dub-share-34"
+          ],
+          "sample_joined": "🛏️ Private room matches your preference | 💼 Professional household | 📅 Available when you plan to move"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "availability+budget+room",
+          "count": 4,
+          "listing_ids": [
+            "dub-share-13",
+            "dub-share-20",
+            "dub-share-22",
+            "dub-share-33"
+          ]
+        },
+        {
+          "reason_type_signature": "budget+household",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-01",
+            "dub-share-05"
+          ]
+        },
+        {
+          "reason_type_signature": "availability+household+room",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-02",
+            "dub-share-34"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-01",
+          "marketplace": "shared_living",
+          "title": "Female only · shared bed · Cherrywood",
+          "area": "Cherrywood, Dublin 18",
+          "price": "625/month",
+          "score": 90,
+          "explanations": [
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "💼 Professional household | 💰 Within your budget",
+          "exact_key": "professional household | within your budget",
+          "reason_types": [
+            "budget",
+            "household"
+          ],
+          "reason_type_signature": "budget+household"
+        },
+        {
+          "listing_id": "dub-share-05",
+          "marketplace": "shared_living",
+          "title": "Bed space · female · Dublin 4 Luas",
+          "area": "Cherrywood, Dublin 18",
+          "price": "650/month",
+          "score": 90,
+          "explanations": [
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "💼 Professional household | 💰 Within your budget",
+          "exact_key": "professional household | within your budget",
+          "reason_types": [
+            "budget",
+            "household"
+          ],
+          "reason_type_signature": "budget+household"
+        },
+        {
+          "listing_id": "dub-share-02",
+          "marketplace": "shared_living",
+          "title": "Male only · €700/person · Rialto",
+          "area": "Rialto, Dublin 12",
+          "price": "700/month",
+          "score": 80,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "💼 Professional household",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 💼 Professional household | 📅 Available when you plan to move",
+          "exact_key": "private room matches your preference | professional household | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "availability+household+room"
+        },
+        {
+          "listing_id": "dub-share-34",
+          "marketplace": "shared_living",
+          "title": "Private room · Chapelizod Luas",
+          "area": "Chapelizod, Dublin 20",
+          "price": "720/month",
+          "score": 80,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "💼 Professional household",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 💼 Professional household | 📅 Available when you plan to move",
+          "exact_key": "private room matches your preference | professional household | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "availability+household+room"
+        },
+        {
+          "listing_id": "dub-share-13",
+          "marketplace": "shared_living",
+          "title": "Family-friendly spare room · Lucan",
+          "area": "Lucan, Dublin",
+          "price": "600/month",
+          "score": 75,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "private room matches your preference | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "budget",
+            "room"
+          ],
+          "reason_type_signature": "availability+budget+room"
+        },
+        {
+          "listing_id": "dub-share-15",
+          "marketplace": "shared_living",
+          "title": "Immediate · male · Rathmines area",
+          "area": "Dublin 12",
+          "price": "720/month",
+          "score": 75,
+          "explanations": [
+            "💼 Professional household",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "💼 Professional household | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "professional household | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "budget",
+            "household"
+          ],
+          "reason_type_signature": "availability+budget+household"
+        },
+        {
+          "listing_id": "dub-share-20",
+          "marketplace": "shared_living",
+          "title": "Twin share · Drumcondra DART",
+          "area": "Drumcondra, Dublin 9",
+          "price": "620/month",
+          "score": 75,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "private room matches your preference | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "budget",
+            "room"
+          ],
+          "reason_type_signature": "availability+budget+room"
+        },
+        {
+          "listing_id": "dub-share-22",
+          "marketplace": "shared_living",
+          "title": "Female only · Clontarf DART",
+          "area": "Clontarf, Dublin 3",
+          "price": "750/month",
+          "score": 75,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "private room matches your preference | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "budget",
+            "room"
+          ],
+          "reason_type_signature": "availability+budget+room"
+        },
+        {
+          "listing_id": "dub-share-23",
+          "marketplace": "shared_living",
+          "title": "Male only · Stoneybatter Luas",
+          "area": "Stoneybatter, Dublin 7",
+          "price": "690/month",
+          "score": 75,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 💼 Professional household | 💰 Within your budget",
+          "exact_key": "private room matches your preference | professional household | within your budget",
+          "reason_types": [
+            "budget",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "budget+household+room"
+        },
+        {
+          "listing_id": "dub-share-33",
+          "marketplace": "shared_living",
+          "title": "Twin share · Coolock students",
+          "area": "Coolock, Dublin 17",
+          "price": "600/month",
+          "score": 75,
+          "explanations": [
+            "🛏️ Private room matches your preference",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Private room matches your preference | 📅 Available when you plan to move | 💰 Within your budget",
+          "exact_key": "private room matches your preference | available when you plan to move | within your budget",
+          "reason_types": [
+            "availability",
+            "budget",
+            "room"
+          ],
+          "reason_type_signature": "availability+budget+room"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 28,
+        "ranked": 28
+      }
+    },
+    {
+      "seeker_id": "SL-DUP-LIM-05",
+      "marketplace": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "intended_volume": "limited",
+      "match_volume_tier": "medium",
+      "scenario": "Student · low budget · single area · shared · no move date",
+      "max_budget": 500,
+      "preferred_locations": [
+        "Dublin 8"
+      ],
+      "matches_returned": 9,
+      "total_listings_reviewed": 9,
+      "unique_explanations": 5,
+      "duplicate_explanations": 4,
+      "duplicate_percentage": 44.4,
+      "near_unique_signatures": 5,
+      "near_duplicate_percentage": 44.4,
+      "max_exact_cluster_size": 3,
+      "exact_clusters": [
+        {
+          "exact_key": "student household",
+          "count": 3,
+          "listing_ids": [
+            "dub-share-20",
+            "dub-share-28",
+            "dub-share-33"
+          ],
+          "sample_joined": "👩‍🎓 Student household"
+        },
+        {
+          "exact_key": "shared room matches your preference | student household | within your budget",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-04",
+            "dub-share-11"
+          ],
+          "sample_joined": "🛏️ Shared room matches your preference | 👩‍🎓 Student household | 💰 Within your budget"
+        },
+        {
+          "exact_key": "shared room matches your preference | student household",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-18",
+            "dub-share-30"
+          ],
+          "sample_joined": "🛏️ Shared room matches your preference | 👩‍🎓 Student household"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "household",
+          "count": 3,
+          "listing_ids": [
+            "dub-share-20",
+            "dub-share-28",
+            "dub-share-33"
+          ]
+        },
+        {
+          "reason_type_signature": "budget+household+room",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-04",
+            "dub-share-11"
+          ]
+        },
+        {
+          "reason_type_signature": "household+room",
+          "count": 2,
+          "listing_ids": [
+            "dub-share-18",
+            "dub-share-30"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-04",
+          "marketplace": "shared_living",
+          "title": "All bills in · male · Dundalk DKIT",
+          "area": "Dundalk, County Louth",
+          "price": "350/month",
+          "score": 78,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 👩‍🎓 Student household | 💰 Within your budget",
+          "exact_key": "shared room matches your preference | student household | within your budget",
+          "reason_types": [
+            "budget",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "budget+household+room"
+        },
+        {
+          "listing_id": "dub-share-11",
+          "marketplace": "shared_living",
+          "title": "Budget bed · Dundalk · all-in",
+          "area": "Dundalk, County Louth",
+          "price": "380/month",
+          "score": 78,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household",
+            "💰 Within your budget"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 👩‍🎓 Student household | 💰 Within your budget",
+          "exact_key": "shared room matches your preference | student household | within your budget",
+          "reason_types": [
+            "budget",
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "budget+household+room"
+        },
+        {
+          "listing_id": "dub-share-18",
+          "marketplace": "shared_living",
+          "title": "Student-friendly · Cherrywood Luas",
+          "area": "Cherrywood, Dublin 18",
+          "price": "540/month",
+          "score": 74,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 👩‍🎓 Student household",
+          "exact_key": "shared room matches your preference | student household",
+          "reason_types": [
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "household+room"
+        },
+        {
+          "listing_id": "dub-share-30",
+          "marketplace": "shared_living",
+          "title": "Bed in shared room · Finglas",
+          "area": "Finglas, Dublin 11",
+          "price": "520/month",
+          "score": 74,
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference | 👩‍🎓 Student household",
+          "exact_key": "shared room matches your preference | student household",
+          "reason_types": [
+            "household",
+            "room"
+          ],
+          "reason_type_signature": "household+room"
+        },
+        {
+          "listing_id": "dub-share-01",
+          "marketplace": "shared_living",
+          "title": "Female only · shared bed · Cherrywood",
+          "area": "Cherrywood, Dublin 18",
+          "price": "625/month",
+          "score": 71,
+          "explanations": [
+            "🛏️ Shared room matches your preference"
+          ],
+          "joined_explanation": "🛏️ Shared room matches your preference",
+          "exact_key": "shared room matches your preference",
+          "reason_types": [
+            "room"
+          ],
+          "reason_type_signature": "room"
+        },
+        {
+          "listing_id": "dub-share-20",
+          "marketplace": "shared_living",
+          "title": "Twin share · Drumcondra DART",
+          "area": "Drumcondra, Dublin 9",
+          "price": "620/month",
+          "score": 64,
+          "explanations": [
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "👩‍🎓 Student household",
+          "exact_key": "student household",
+          "reason_types": [
+            "household"
+          ],
+          "reason_type_signature": "household"
+        },
+        {
+          "listing_id": "dub-share-28",
+          "marketplace": "shared_living",
+          "title": "Twin share · Terenure",
+          "area": "Terenure, Dublin 6W",
+          "price": "580/month",
+          "score": 64,
+          "explanations": [
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "👩‍🎓 Student household",
+          "exact_key": "student household",
+          "reason_types": [
+            "household"
+          ],
+          "reason_type_signature": "household"
+        },
+        {
+          "listing_id": "dub-share-33",
+          "marketplace": "shared_living",
+          "title": "Twin share · Coolock students",
+          "area": "Coolock, Dublin 17",
+          "price": "600/month",
+          "score": 64,
+          "explanations": [
+            "👩‍🎓 Student household"
+          ],
+          "joined_explanation": "👩‍🎓 Student household",
+          "exact_key": "student household",
+          "reason_types": [
+            "household"
+          ],
+          "reason_type_signature": "household"
+        },
+        {
+          "listing_id": "dub-share-13",
+          "marketplace": "shared_living",
+          "title": "Family-friendly spare room · Lucan",
+          "area": "Lucan, Dublin",
+          "price": "600/month",
+          "score": 48,
+          "explanations": [],
+          "joined_explanation": "",
+          "exact_key": "",
+          "reason_types": [],
+          "reason_type_signature": ""
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 9,
+        "ranked": 9
+      }
+    },
+    {
+      "seeker_id": "IP-DUP-MANY-01",
+      "marketplace": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "intended_volume": "many",
+      "match_volume_tier": "many",
+      "scenario": "Couple · premium budget · broad southside · any property",
+      "max_budget": 4500,
+      "preferred_locations": [
+        "Dublin 2",
+        "Dublin 4",
+        "Dublin 6",
+        "Blackrock",
+        "Ballsbridge",
+        "Ranelagh"
+      ],
+      "matches_returned": 50,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 3,
+      "duplicate_explanations": 7,
+      "duplicate_percentage": 70.0,
+      "near_unique_signatures": 2,
+      "near_duplicate_percentage": 80.0,
+      "max_exact_cluster_size": 8,
+      "exact_clusters": [
+        {
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "count": 8,
+          "listing_ids": [
+            "dub-rent-44",
+            "dub-rent-03",
+            "dub-rent-48",
+            "dub-rent-15",
+            "dub-rent-19",
+            "dub-rent-34",
+            "dub-rent-35",
+            "dub-rent-36"
+          ],
+          "sample_joined": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "availability+bedrooms+budget",
+          "count": 9,
+          "listing_ids": [
+            "dub-rent-44",
+            "dub-rent-03",
+            "dub-rent-48",
+            "dub-rent-15",
+            "dub-rent-19",
+            "dub-rent-31",
+            "dub-rent-34",
+            "dub-rent-35",
+            "dub-rent-36"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-44",
+          "marketplace": "independent_places",
+          "title": "3 bed · Artane family",
+          "area": "Artane, Dublin 5",
+          "price": "2300/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "title": "3 bed house · Dundrum D14",
+          "area": "Dundrum, Dublin 14",
+          "price": "2800/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "marketplace": "independent_places",
+          "title": "3 bed · Palmerstown house",
+          "area": "Palmerstown, Dublin 20",
+          "price": "2100/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "marketplace": "independent_places",
+          "title": "Family 3 bed · Dublin 16",
+          "area": "Dublin 16",
+          "price": "2400/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-19",
+          "marketplace": "independent_places",
+          "title": "2 bed · Blackrock DART",
+          "area": "Blackrock, Dublin",
+          "price": "2400/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-31",
+          "marketplace": "independent_places",
+          "title": "4 bed · Docklands family home",
+          "area": "Grand Canal Dock, Dublin 2",
+          "price": "4200/month",
+          "score": 100,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-34",
+          "marketplace": "independent_places",
+          "title": "2 bed · Ballyfermot Luas",
+          "area": "Ballyfermot, Dublin 10",
+          "price": "1850/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-35",
+          "marketplace": "independent_places",
+          "title": "3 bed · Finglas house",
+          "area": "Finglas, Dublin 11",
+          "price": "2200/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-36",
+          "marketplace": "independent_places",
+          "title": "4 bed · Howth sea view",
+          "area": "Howth, Dublin 13",
+          "price": "3800/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-49",
+          "marketplace": "independent_places",
+          "title": "4 bed · Knocklyon family",
+          "area": "Knocklyon, Dublin 16",
+          "price": "3200/month",
+          "score": 90,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | bedrooms match your needs | matches your preferred area",
+          "reason_types": [
+            "bedrooms",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "bedrooms+budget+location"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    },
+    {
+      "seeker_id": "IP-DUP-MED-02",
+      "marketplace": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "intended_volume": "medium",
+      "match_volume_tier": "many",
+      "scenario": "Professional · mid budget · apartment · 1+ bed · commute TCD",
+      "max_budget": 2200,
+      "preferred_locations": [
+        "Dublin 2",
+        "Dublin 4",
+        "Dublin 8"
+      ],
+      "matches_returned": 40,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 2,
+      "duplicate_explanations": 8,
+      "duplicate_percentage": 80.0,
+      "near_unique_signatures": 1,
+      "near_duplicate_percentage": 90.0,
+      "max_exact_cluster_size": 7,
+      "exact_clusters": [
+        {
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "count": 7,
+          "listing_ids": [
+            "dub-rent-04",
+            "dub-rent-07",
+            "dub-rent-11",
+            "dub-rent-13",
+            "dub-rent-46",
+            "dub-rent-47",
+            "dub-rent-17"
+          ],
+          "sample_joined": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move"
+        },
+        {
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "count": 3,
+          "listing_ids": [
+            "dub-rent-23",
+            "dub-rent-02",
+            "dub-rent-16"
+          ],
+          "sample_joined": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "availability+bedrooms+budget",
+          "count": 10,
+          "listing_ids": [
+            "dub-rent-23",
+            "dub-rent-02",
+            "dub-rent-04",
+            "dub-rent-07",
+            "dub-rent-16",
+            "dub-rent-11",
+            "dub-rent-13",
+            "dub-rent-46",
+            "dub-rent-47",
+            "dub-rent-17"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-23",
+          "marketplace": "independent_places",
+          "title": "2 bed · Stoneybatter Luas",
+          "area": "Stoneybatter, Dublin 7",
+          "price": "2100/month",
+          "score": 100,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-02",
+          "marketplace": "independent_places",
+          "title": "1 bed · Dublin 4 · sea proximity",
+          "area": "Dublin 4",
+          "price": "2100/month",
+          "score": 100,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-04",
+          "marketplace": "independent_places",
+          "title": "2 bed · Lucan · commuter belt",
+          "area": "Lucan, Dublin",
+          "price": "1650/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-07",
+          "marketplace": "independent_places",
+          "title": "Modern 2 bed · Dublin 16",
+          "area": "Dublin 16",
+          "price": "1950/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-16",
+          "marketplace": "independent_places",
+          "title": "2 bed apartment · Dundrum Luas",
+          "area": "Dundrum, Dublin 14",
+          "price": "2200/month",
+          "score": 100,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-11",
+          "marketplace": "independent_places",
+          "title": "2 bed cottage · Lucan",
+          "area": "Lucan, Dublin",
+          "price": "1700/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-13",
+          "marketplace": "independent_places",
+          "title": "Affordable 1 bed · Rialto",
+          "area": "Rialto, Dublin 12",
+          "price": "1250/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-46",
+          "marketplace": "independent_places",
+          "title": "1 bed · Sandyford business park",
+          "area": "Sandyford, Dublin 18",
+          "price": "1650/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-47",
+          "marketplace": "independent_places",
+          "title": "2 bed · Citywest Luas",
+          "area": "Citywest, Dublin 24",
+          "price": "1950/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-17",
+          "marketplace": "independent_places",
+          "title": "1 bed · Cherrywood · new build",
+          "area": "Cherrywood, Dublin 18",
+          "price": "1600/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "seeker_id": "IP-DUP-LIM-03",
+      "marketplace": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "intended_volume": "limited",
+      "match_volume_tier": "many",
+      "scenario": "Family · tight budget · house · 3+ bed · outer suburbs",
+      "max_budget": 1600,
+      "preferred_locations": [
+        "Dublin 15",
+        "Swords",
+        "Blanchardstown"
+      ],
+      "matches_returned": 30,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 2,
+      "duplicate_explanations": 8,
+      "duplicate_percentage": 80.0,
+      "near_unique_signatures": 1,
+      "near_duplicate_percentage": 90.0,
+      "max_exact_cluster_size": 7,
+      "exact_clusters": [
+        {
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "count": 7,
+          "listing_ids": [
+            "dub-rent-05",
+            "dub-rent-13",
+            "dub-rent-18",
+            "dub-rent-30",
+            "dub-rent-27",
+            "dub-rent-32",
+            "dub-rent-37"
+          ],
+          "sample_joined": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area"
+        },
+        {
+          "exact_key": "within your budget | available when you plan to move | matches your preferred area",
+          "count": 3,
+          "listing_ids": [
+            "dub-rent-10",
+            "dub-rent-17",
+            "dub-rent-38"
+          ],
+          "sample_joined": "💰 Within your budget | 📅 Available when you plan to move | 📍 Matches your preferred area"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "availability+budget+location",
+          "count": 10,
+          "listing_ids": [
+            "dub-rent-05",
+            "dub-rent-10",
+            "dub-rent-13",
+            "dub-rent-17",
+            "dub-rent-18",
+            "dub-rent-30",
+            "dub-rent-27",
+            "dub-rent-32",
+            "dub-rent-37",
+            "dub-rent-38"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-05",
+          "marketplace": "independent_places",
+          "title": "1 bed flat · Rialto D12",
+          "area": "Rialto, Dublin 12",
+          "price": "1400/month",
+          "score": 60,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-10",
+          "marketplace": "independent_places",
+          "title": "1 bed · Dundrum shopping district",
+          "area": "Dundrum, Dublin 14",
+          "price": "1550/month",
+          "score": 60,
+          "explanations": [
+            "💰 Within your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Within your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "within your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-13",
+          "marketplace": "independent_places",
+          "title": "Affordable 1 bed · Rialto",
+          "area": "Rialto, Dublin 12",
+          "price": "1250/month",
+          "score": 60,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-17",
+          "marketplace": "independent_places",
+          "title": "1 bed · Cherrywood · new build",
+          "area": "Cherrywood, Dublin 18",
+          "price": "1600/month",
+          "score": 60,
+          "explanations": [
+            "💰 Within your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Within your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "within your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-18",
+          "marketplace": "independent_places",
+          "title": "Budget 1 bed · Lucan village",
+          "area": "Lucan, Dublin",
+          "price": "1350/month",
+          "score": 60,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-30",
+          "marketplace": "independent_places",
+          "title": "1 bed · Rathmines · Luas · student top pick",
+          "area": "Rathmines, Dublin 6",
+          "price": "1400/month",
+          "score": 60,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-27",
+          "marketplace": "independent_places",
+          "title": "Budget 1 bed · Rialto bus",
+          "area": "Rialto, Dublin 12",
+          "price": "900/month",
+          "score": 60,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-32",
+          "marketplace": "independent_places",
+          "title": "Studio · Raheny commuter",
+          "area": "Raheny, Dublin 5",
+          "price": "1350/month",
+          "score": 60,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-37",
+          "marketplace": "independent_places",
+          "title": "Studio · Blanchardstown retail",
+          "area": "Blanchardstown, Dublin 15",
+          "price": "1200/month",
+          "score": 60,
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "good value for your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        },
+        {
+          "listing_id": "dub-rent-38",
+          "marketplace": "independent_places",
+          "title": "1 bed · Coolock student pad",
+          "area": "Coolock, Dublin 17",
+          "price": "1450/month",
+          "score": 60,
+          "explanations": [
+            "💰 Within your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "💰 Within your budget | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "within your budget | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "budget",
+            "location"
+          ],
+          "reason_type_signature": "availability+budget+location"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 30,
+        "ranked": 30
+      }
+    },
+    {
+      "seeker_id": "IP-DUP-MED-04",
+      "marketplace": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "intended_volume": "medium",
+      "match_volume_tier": "many",
+      "scenario": "Couple · upper-mid · house preferred · 2+ bed · IFSC commute",
+      "max_budget": 2800,
+      "preferred_locations": [
+        "Dublin 1",
+        "Dublin 3",
+        "Dublin 7",
+        "Dublin 9"
+      ],
+      "matches_returned": 47,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 3,
+      "duplicate_explanations": 7,
+      "duplicate_percentage": 70.0,
+      "near_unique_signatures": 2,
+      "near_duplicate_percentage": 80.0,
+      "max_exact_cluster_size": 7,
+      "exact_clusters": [
+        {
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "count": 7,
+          "listing_ids": [
+            "dub-rent-44",
+            "dub-rent-48",
+            "dub-rent-15",
+            "dub-rent-19",
+            "dub-rent-34",
+            "dub-rent-35",
+            "dub-rent-07"
+          ],
+          "sample_joined": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move"
+        },
+        {
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "count": 2,
+          "listing_ids": [
+            "dub-rent-03",
+            "dub-rent-43"
+          ],
+          "sample_joined": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "availability+bedrooms+budget",
+          "count": 9,
+          "listing_ids": [
+            "dub-rent-03",
+            "dub-rent-44",
+            "dub-rent-48",
+            "dub-rent-15",
+            "dub-rent-19",
+            "dub-rent-34",
+            "dub-rent-35",
+            "dub-rent-07",
+            "dub-rent-43"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "title": "3 bed house · Dundrum D14",
+          "area": "Dundrum, Dublin 14",
+          "price": "2800/month",
+          "score": 100,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-44",
+          "marketplace": "independent_places",
+          "title": "3 bed · Artane family",
+          "area": "Artane, Dublin 5",
+          "price": "2300/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "marketplace": "independent_places",
+          "title": "3 bed · Palmerstown house",
+          "area": "Palmerstown, Dublin 20",
+          "price": "2100/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "marketplace": "independent_places",
+          "title": "Family 3 bed · Dublin 16",
+          "area": "Dublin 16",
+          "price": "2400/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-19",
+          "marketplace": "independent_places",
+          "title": "2 bed · Blackrock DART",
+          "area": "Blackrock, Dublin",
+          "price": "2400/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-34",
+          "marketplace": "independent_places",
+          "title": "2 bed · Ballyfermot Luas",
+          "area": "Ballyfermot, Dublin 10",
+          "price": "1850/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-35",
+          "marketplace": "independent_places",
+          "title": "3 bed · Finglas house",
+          "area": "Finglas, Dublin 11",
+          "price": "2200/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-40",
+          "marketplace": "independent_places",
+          "title": "3 bed · Tallaght family",
+          "area": "Tallaght, Dublin 24",
+          "price": "2450/month",
+          "score": 90,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "🚆 Good commute from this location"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 🚆 Good commute from this location",
+          "exact_key": "good value for your budget | bedrooms match your needs | good commute from this location",
+          "reason_types": [
+            "bedrooms",
+            "budget",
+            "commute"
+          ],
+          "reason_type_signature": "bedrooms+budget+commute"
+        },
+        {
+          "listing_id": "dub-rent-07",
+          "marketplace": "independent_places",
+          "title": "Modern 2 bed · Dublin 16",
+          "area": "Dublin 16",
+          "price": "1950/month",
+          "score": 90,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-43",
+          "marketplace": "independent_places",
+          "title": "2 bed · Ballsbridge DART",
+          "area": "Ballsbridge, Dublin 4",
+          "price": "2800/month",
+          "score": 90,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 47,
+        "ranked": 47
+      }
+    },
+    {
+      "seeker_id": "IP-DUP-LIM-05",
+      "marketplace": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "intended_volume": "limited",
+      "match_volume_tier": "many",
+      "scenario": "Professional · low-mid · apartment · studio/1 · narrow area",
+      "max_budget": 1500,
+      "preferred_locations": [
+        "Dublin 8"
+      ],
+      "matches_returned": 25,
+      "total_listings_reviewed": 10,
+      "unique_explanations": 3,
+      "duplicate_explanations": 7,
+      "duplicate_percentage": 70.0,
+      "near_unique_signatures": 2,
+      "near_duplicate_percentage": 80.0,
+      "max_exact_cluster_size": 5,
+      "exact_clusters": [
+        {
+          "exact_key": "bedrooms match your needs | available when you plan to move | matches your preferred area",
+          "count": 5,
+          "listing_ids": [
+            "dub-rent-04",
+            "dub-rent-10",
+            "dub-rent-17",
+            "dub-rent-42",
+            "dub-rent-46"
+          ],
+          "sample_joined": "🛏️ Bedrooms match your needs | 📅 Available when you plan to move | 📍 Matches your preferred area"
+        },
+        {
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "count": 3,
+          "listing_ids": [
+            "dub-rent-05",
+            "dub-rent-50",
+            "dub-rent-30"
+          ],
+          "sample_joined": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move"
+        },
+        {
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "count": 2,
+          "listing_ids": [
+            "dub-rent-13",
+            "dub-rent-18"
+          ],
+          "sample_joined": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move"
+        }
+      ],
+      "near_clusters": [
+        {
+          "reason_type_signature": "availability+bedrooms+budget",
+          "count": 5,
+          "listing_ids": [
+            "dub-rent-05",
+            "dub-rent-13",
+            "dub-rent-18",
+            "dub-rent-50",
+            "dub-rent-30"
+          ]
+        },
+        {
+          "reason_type_signature": "availability+bedrooms+location",
+          "count": 5,
+          "listing_ids": [
+            "dub-rent-04",
+            "dub-rent-10",
+            "dub-rent-17",
+            "dub-rent-42",
+            "dub-rent-46"
+          ]
+        }
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-05",
+          "marketplace": "independent_places",
+          "title": "1 bed flat · Rialto D12",
+          "area": "Rialto, Dublin 12",
+          "price": "1400/month",
+          "score": 100,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-13",
+          "marketplace": "independent_places",
+          "title": "Affordable 1 bed · Rialto",
+          "area": "Rialto, Dublin 12",
+          "price": "1250/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-18",
+          "marketplace": "independent_places",
+          "title": "Budget 1 bed · Lucan village",
+          "area": "Lucan, Dublin",
+          "price": "1350/month",
+          "score": 100,
+          "explanations": [
+            "💰 Good value for your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Good value for your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "good value for your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-50",
+          "marketplace": "independent_places",
+          "title": "1 bed · Smithfield Luas",
+          "area": "Smithfield, Dublin 7",
+          "price": "1500/month",
+          "score": 100,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        },
+        {
+          "listing_id": "dub-rent-04",
+          "marketplace": "independent_places",
+          "title": "2 bed · Lucan · commuter belt",
+          "area": "Lucan, Dublin",
+          "price": "1650/month",
+          "score": 90,
+          "explanations": [
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "🛏️ Bedrooms match your needs | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "bedrooms match your needs | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "location"
+          ],
+          "reason_type_signature": "availability+bedrooms+location"
+        },
+        {
+          "listing_id": "dub-rent-10",
+          "marketplace": "independent_places",
+          "title": "1 bed · Dundrum shopping district",
+          "area": "Dundrum, Dublin 14",
+          "price": "1550/month",
+          "score": 90,
+          "explanations": [
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "🛏️ Bedrooms match your needs | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "bedrooms match your needs | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "location"
+          ],
+          "reason_type_signature": "availability+bedrooms+location"
+        },
+        {
+          "listing_id": "dub-rent-17",
+          "marketplace": "independent_places",
+          "title": "1 bed · Cherrywood · new build",
+          "area": "Cherrywood, Dublin 18",
+          "price": "1600/month",
+          "score": 90,
+          "explanations": [
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "🛏️ Bedrooms match your needs | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "bedrooms match your needs | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "location"
+          ],
+          "reason_type_signature": "availability+bedrooms+location"
+        },
+        {
+          "listing_id": "dub-rent-42",
+          "marketplace": "independent_places",
+          "title": "1 bed · Swords airport corridor",
+          "area": "Swords, Co. Dublin North",
+          "price": "1550/month",
+          "score": 90,
+          "explanations": [
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "🛏️ Bedrooms match your needs | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "bedrooms match your needs | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "location"
+          ],
+          "reason_type_signature": "availability+bedrooms+location"
+        },
+        {
+          "listing_id": "dub-rent-46",
+          "marketplace": "independent_places",
+          "title": "1 bed · Sandyford business park",
+          "area": "Sandyford, Dublin 18",
+          "price": "1650/month",
+          "score": 90,
+          "explanations": [
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "joined_explanation": "🛏️ Bedrooms match your needs | 📅 Available when you plan to move | 📍 Matches your preferred area",
+          "exact_key": "bedrooms match your needs | available when you plan to move | matches your preferred area",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "location"
+          ],
+          "reason_type_signature": "availability+bedrooms+location"
+        },
+        {
+          "listing_id": "dub-rent-30",
+          "marketplace": "independent_places",
+          "title": "1 bed · Rathmines · Luas · student top pick",
+          "area": "Rathmines, Dublin 6",
+          "price": "1400/month",
+          "score": 85,
+          "explanations": [
+            "💰 Within your budget",
+            "🛏️ Bedrooms match your needs",
+            "📅 Available when you plan to move"
+          ],
+          "joined_explanation": "💰 Within your budget | 🛏️ Bedrooms match your needs | 📅 Available when you plan to move",
+          "exact_key": "within your budget | bedrooms match your needs | available when you plan to move",
+          "reason_types": [
+            "availability",
+            "bedrooms",
+            "budget"
+          ],
+          "reason_type_signature": "availability+bedrooms+budget"
+        }
+      ],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 25,
+        "ranked": 25
+      }
+    }
+  ],
+  "methodology": {
+    "active_mode": "explore",
+    "code_paths": [
+      "MarketplaceSpace.fromSession",
+      "MarketplaceListingPipeline.runWithFilters (tower → rank)",
+      "ListingMatchEngine.sharedLivingPreferenceExplanations",
+      "ListingMatchEngine.independentPlacePreferenceExplanations"
+    ],
+    "listing_corpus": {
+      "name": "SampleListingsDublin",
+      "shared_living_count": 40,
+      "independent_places_count": 50,
+      "total": 90
+    },
+    "top_n": 10,
+    "sources": [
+      "docs/uat/v1/implementation_file_inventory.md",
+      "inventory categories 5, 6, 7, 8, 11, 12 (execution only)"
+    ],
+    "production_code_modified": false
+  }
+}

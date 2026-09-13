@@ -23,20 +23,20 @@ void main() {
       expect(listing['property_type'], 'Share');
     });
 
-    test('applicant stream has balanced trust-tier blocks', () {
+    test('applicant stream is flat (no trust-tier sections)', () {
       final stream = DublinMockData.applicantStream();
 
       expect(stream.listingId, DublinMockData.listingId);
       expect(stream.totalCount, 9);
-      expect(stream.blocks, hasLength(3));
-      expect(stream.blocks.map((b) => b.trustTier), [
-        ApplicantTrustTier.sound,
-        ApplicantTrustTier.grand,
-        ApplicantTrustTier.justLanded,
-      ]);
+      expect(stream.blocks, hasLength(1));
+      expect(stream.blocks.first.applicants, hasLength(9));
       expect(
-        stream.blocks.map((b) => b.applicants.length),
-        [3, 3, 3],
+        stream.flattenedApplicants.map((a) => a.trustTier).toSet(),
+        containsAll([
+          ApplicantTrustTier.sound,
+          ApplicantTrustTier.grand,
+          ApplicantTrustTier.justLanded,
+        ]),
       );
     });
 

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../utils/json_safe.dart';
+
 void agentLog(
   String hypothesisId,
   String location,
@@ -9,15 +11,15 @@ void agentLog(
 ) {
   try {
     final payload = jsonEncode({
-      'sessionId': '41df06',
+      'sessionId': 'd7a881',
       'hypothesisId': hypothesisId,
       'location': location,
       'message': message,
-      'data': data,
+      'data': JsonSafe.encodeMap(data),
       'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'runId': 'pre-fix',
+      'runId': 'post-fix',
     });
-    File('debug-41df06.log')
+    File('debug-d7a881.log')
         .writeAsStringSync('$payload\n', mode: FileMode.append);
   } catch (_) {}
 }

@@ -75,7 +75,7 @@ abstract final class DublinCommuterHubs {
 
   static const cherrywoodBusinessPark = DublinCommuterHub(
     id: 'cherrywood_business_park',
-    label: 'Cherrywood Business Park',
+    label: 'Cherrywood',
     latitude: 53.2440,
     longitude: -6.1465,
     anchorStationId: 'luas_green_cherrywood',
@@ -83,7 +83,7 @@ abstract final class DublinCommuterHubs {
 
   static const ifscDocklands = DublinCommuterHub(
     id: 'ifsc_docklands',
-    label: 'IFSC / Docklands',
+    label: 'IFSC',
     latitude: 53.3478,
     longitude: -6.2427,
     anchorStationId: 'luas_red_connolly',
@@ -107,7 +107,7 @@ abstract final class DublinCommuterHubs {
 
   static const dublinAirport = DublinCommuterHub(
     id: 'dublin_airport',
-    label: 'Dublin Airport',
+    label: 'Dublin Airport / North Dublin',
     latitude: 53.4264,
     longitude: -6.2499,
     anchorStationId: 'dart_clontarf_road',
@@ -131,10 +131,26 @@ abstract final class DublinCommuterHubs {
 
   static const rcsi = DublinCommuterHub(
     id: 'rcsi',
-    label: 'RCSI (Royal College of Surgeons)',
+    label: 'Royal College of Surgeons in Ireland (RCSI)',
     latitude: 53.3412,
     longitude: -6.2575,
     anchorStationId: 'luas_green_st_stephens_green',
+  );
+
+  static const nci = DublinCommuterHub(
+    id: 'nci',
+    label: 'National College of Ireland (NCI)',
+    latitude: 53.3489,
+    longitude: -6.2432,
+    anchorStationId: 'luas_green_mayor_square',
+  );
+
+  static const blanchardstownBusinessPark = DublinCommuterHub(
+    id: 'blanchardstown_business_park',
+    label: 'Blanchardstown Business & Technology Park',
+    latitude: 53.4057,
+    longitude: -6.3779,
+    anchorStationId: 'bus_hf_blanchardstown',
   );
 
   static const tuDublin = DublinCommuterHub(
@@ -169,13 +185,15 @@ abstract final class DublinCommuterHubs {
     stJamesHospital,
     beaumontHospital,
     rcsi,
+    nci,
     tuDublin,
     maynooth,
+    blanchardstownBusinessPark,
   ];
 
-  /// Quick-tap macro presets for seeker onboarding screen 3 (default order).
+  /// Quick-tap macro presets (passport / legacy surfaces).
   static const seekerMacroPresets = <SeekerMacroPreset>[
-    SeekerMacroPreset(chipLabel: '🎓 Trinity College', hub: tcd),
+    SeekerMacroPreset(chipLabel: '🎓 Trinity (TCD)', hub: tcd),
     SeekerMacroPreset(chipLabel: '🎓 UCD', hub: ucd),
     SeekerMacroPreset(chipLabel: '🎓 DCU', hub: dcu),
     SeekerMacroPreset(chipLabel: '🧑‍💻 Silicon Docks', hub: siliconDocks),
@@ -183,58 +201,58 @@ abstract final class DublinCommuterHubs {
     SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
   ];
 
-  /// Full onboarding destination grid.
-  static const seekerOnboardingPresets = <SeekerMacroPreset>[
-    SeekerMacroPreset(chipLabel: '🎓 Trinity College', hub: tcd),
-    SeekerMacroPreset(chipLabel: '🎓 UCD', hub: ucd),
-    SeekerMacroPreset(chipLabel: '🎓 DCU', hub: dcu),
-    SeekerMacroPreset(chipLabel: '🎓 TU Dublin', hub: tuDublin),
-    SeekerMacroPreset(chipLabel: '🩺 RCSI', hub: rcsi),
-    SeekerMacroPreset(chipLabel: '🎓 Maynooth', hub: maynooth),
-    SeekerMacroPreset(chipLabel: '🧑‍💻 Silicon Docks', hub: siliconDocks),
-    SeekerMacroPreset(chipLabel: '💼 IFSC', hub: ifscDocklands),
-    SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
-    SeekerMacroPreset(chipLabel: '🏙️ City Centre', hub: stStephensGreen),
-    SeekerMacroPreset(chipLabel: '🏢 Cherrywood', hub: cherrywoodBusinessPark),
-    SeekerMacroPreset(chipLabel: '🏥 St James\'s', hub: stJamesHospital),
-    SeekerMacroPreset(chipLabel: '🏥 Beaumont', hub: beaumontHospital),
-  ];
-
-  /// Student weekday destination presets (Destination IA).
+  /// Student weekday destination presets (Destination Step V3).
+  /// Destination is required via preset or custom search — no "Not sure yet".
   static const studentDestinationPresets = <SeekerMacroPreset>[
-    SeekerMacroPreset(chipLabel: '🎓 Trinity College', hub: tcd),
-    SeekerMacroPreset(chipLabel: '🎓 UCD', hub: ucd),
-    SeekerMacroPreset(chipLabel: '🎓 DCU', hub: dcu),
+    SeekerMacroPreset(chipLabel: '🎓 Trinity College Dublin (TCD)', hub: tcd),
+    SeekerMacroPreset(chipLabel: '🎓 University College Dublin (UCD)', hub: ucd),
+    SeekerMacroPreset(chipLabel: '🎓 Dublin City University (DCU)', hub: dcu),
     SeekerMacroPreset(chipLabel: '🎓 TU Dublin', hub: tuDublin),
-    SeekerMacroPreset(chipLabel: '🩺 RCSI', hub: rcsi),
-    SeekerMacroPreset(chipLabel: '🎓 Maynooth', hub: maynooth),
+    SeekerMacroPreset(chipLabel: '🎓 Maynooth University', hub: maynooth),
+    SeekerMacroPreset(chipLabel: '🎓 National College of Ireland (NCI)', hub: nci),
+    SeekerMacroPreset(
+      chipLabel: '🩺 Royal College of Surgeons in Ireland (RCSI)',
+      hub: rcsi,
+    ),
   ];
 
-  /// Working professional weekday destination presets (Destination IA).
+  /// Professional / Family weekday destination presets (Destination Step V3).
   static const professionalDestinationPresets = <SeekerMacroPreset>[
-    SeekerMacroPreset(chipLabel: '🏙️ City Centre', hub: stStephensGreen),
     SeekerMacroPreset(chipLabel: '💼 IFSC', hub: ifscDocklands),
     SeekerMacroPreset(chipLabel: '🧑‍💻 Silicon Docks', hub: siliconDocks),
+    SeekerMacroPreset(chipLabel: '🏙️ City Centre', hub: stStephensGreen),
     SeekerMacroPreset(chipLabel: '🏪 Sandyford', hub: sandyford),
     SeekerMacroPreset(chipLabel: '🏢 Cherrywood', hub: cherrywoodBusinessPark),
+    SeekerMacroPreset(
+      chipLabel: '🏬 Blanchardstown Business & Technology Park',
+      hub: blanchardstownBusinessPark,
+    ),
+    SeekerMacroPreset(
+      chipLabel: '✈️ Dublin Airport / North Dublin',
+      hub: dublinAirport,
+    ),
+  ];
+
+  /// Union of student + professional presets (legacy surfaces).
+  static const seekerOnboardingPresets = <SeekerMacroPreset>[
+    ...studentDestinationPresets,
+    ...professionalDestinationPresets,
   ];
 
   /// Persona-filtered hub list for onboarding popular destinations.
   ///
-  /// Student → colleges; Professional → business hubs;
-  /// Family / Relocating → full onboarding set (family UI may override).
+  /// Student → colleges; Professional / Family / Relocating → business hubs.
   static List<SeekerMacroPreset> seekerOnboardingPresetsForPersona(
     SeekerPersona? persona,
   ) {
     return switch (persona) {
       SeekerPersona.student =>
         List<SeekerMacroPreset>.from(studentDestinationPresets),
-      SeekerPersona.professional =>
-        List<SeekerMacroPreset>.from(professionalDestinationPresets),
+      SeekerPersona.professional ||
       SeekerPersona.family ||
       SeekerPersona.relocating ||
       null =>
-        List<SeekerMacroPreset>.from(seekerOnboardingPresets),
+        List<SeekerMacroPreset>.from(professionalDestinationPresets),
     };
   }
 
@@ -306,6 +324,22 @@ abstract final class DublinCommuterHubs {
   static DublinCommuterHub? byLabel(String? label) {
     final normalized = _normalizeLabel(label);
     if (normalized.isEmpty) return null;
+    // Legacy saved labels after Destination Step V3 renames.
+    if (normalized == 'ifsc / docklands' || normalized == 'ifsc') {
+      return ifscDocklands;
+    }
+    if (normalized == 'cherrywood business park' || normalized == 'cherrywood') {
+      return cherrywoodBusinessPark;
+    }
+    if (normalized == 'dublin airport' ||
+        normalized == 'dublin airport / north dublin') {
+      return dublinAirport;
+    }
+    if (normalized == 'rcsi (royal college of surgeons)' ||
+        normalized == 'royal college of surgeons in ireland (rcsi)' ||
+        normalized == 'rcsi') {
+      return rcsi;
+    }
     for (final hub in all) {
       if (_normalizeLabel(hub.label) == normalized) return hub;
     }

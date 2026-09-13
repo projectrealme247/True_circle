@@ -1,30 +1,13 @@
-import '../config/market/market_config.dart';
 import '../screens/auth_screen.dart';
 import '../utils/irish_university_domains.dart';
 import '../utils/profile_data.dart';
 import '../utils/viewer_profile.dart';
 import 'profile_storage_service.dart';
 
-/// Manages trust stage transitions for the progressive trust funnel.
+/// Manages verification method flags and related session upgrades.
+/// Does not write trust_stage / identity_trust_tier (T3).
 abstract final class TrustService {
-  static bool isAtLeastStage(TrustStage minimum) =>
-      currentStage().level >= minimum.level;
-
-  static bool isSocialVerifiedOrAbove() =>
-      isAtLeastStage(TrustStage.socialVerified);
-
-  static bool isIdVerifiedOrAbove() => isAtLeastStage(TrustStage.idVerified);
-
-  /// Current trust stage from session.
-  static TrustStage currentStage() {
-    final session = AuthScreen.currentUserSession;
-    if (session == null) return TrustStage.anonymous;
-    final raw = session['trust_stage'];
-    if (raw is int) return TrustStage.fromLevel(raw);
-    return TrustStage.casual;
-  }
-
-  /// Upgrade to Stage 2 after LinkedIn verification.
+  /// Upgrade after LinkedIn verification.
   static Future<void> upgradeSocial({
     required String company,
     required String jobTitle,
@@ -36,8 +19,6 @@ abstract final class TrustService {
     final session = AuthScreen.currentUserSession;
     if (session == null) return;
 
-    session['trust_stage'] = TrustStage.socialVerified.level;
-    session['identity_trust_tier'] = 'Social_Verified';
     session['linkedin_verified'] = true;
     session['linkedin_company'] = company;
     session['linkedin_title'] = jobTitle;
@@ -59,15 +40,13 @@ abstract final class TrustService {
     await ProfileStorageService.save(session);
   }
 
-  /// Upgrade to Stage 3 after ID verification (Aadhaar + Passkey).
+  /// Upgrade after ID verification (Aadhaar + Passkey).
   static Future<void> upgradeIdVerified({
     String? verifiedName,
   }) async {
     final session = AuthScreen.currentUserSession;
     if (session == null) return;
 
-    session['trust_stage'] = TrustStage.idVerified.level;
-    session['identity_trust_tier'] = 'ID_Verified';
     session['is_aadhaar_verified'] = true;
     if (verifiedName != null) {
       session['verified_legal_name'] = verifiedName;
@@ -77,7 +56,7 @@ abstract final class TrustService {
     await ProfileStorageService.save(session);
   }
 
-  /// Track A — Dublin light trust via university email (Stage 3).
+  /// Track A — Dublin light trust via university email.
   static Future<void> upgradeLightTrust({
     required String method,
     String? verifiedEmail,
@@ -85,8 +64,6 @@ abstract final class TrustService {
     final session = AuthScreen.currentUserSession;
     if (session == null) return;
 
-    session['trust_stage'] = TrustStage.idVerified.level;
-    session['identity_trust_tier'] = 'ID_Verified';
     session['light_trust_verified'] = true;
     session['light_trust_method'] = method;
     if (verifiedEmail != null) {
@@ -94,60 +71,44 @@ abstract final class TrustService {
           IrishUniversityDomains.maskEmail(verifiedEmail);
     }
 
-    // Promoted from pre-arrival Track B — clear contact-only flags.
+    // Promoted from pre-arrival Path B — clear contact-only flags.
     session.remove('invite_code_verified');
+    session.remove('invite_code_used');
     session.remove('invited_by_user_id');
     session.remove('onboarding_letter_verified');
     session.remove('onboarding_letter_path');
     session.remove('pre_arrival_contact_ready');
+    session.remove('pre_arrival_student');
 
     AuthScreen.currentUserSession = session;
     await ProfileStorageService.save(session);
   }
 
-  /// Track B step 1 — invite code redeemed (Stage 2, contact-only path).
-  static Future<void> completeInviteCodeRedemption({
-    required String code,
-    required String invitedByUserId,
-  }) async {
+  /// Path B — student declaration (no invite code or document upload).
+  static Future<void> submitPreArrivalStudentDeclaration() async {
     final session = AuthScreen.currentUserSession;
     if (session == null) return;
 
-    session['invite_code_verified'] = true;
-    session['invite_code_used'] = code.trim().toUpperCase();
-    session['invited_by_user_id'] = invitedByUserId;
-    _syncPreArrivalContactReady(session);
+    session['pre_arrival_student'] = true;
+    session['pre_arrival_contact_ready'] = true;
 
     AuthScreen.currentUserSession = session;
     await ProfileStorageService.save(session);
   }
 
-  /// Track B step 2 — onboarding letter uploaded (Stage 2, contact-only).
-  static Future<void> submitOnboardingLetter({
-    required String localPath,
-  }) async {
-    final session = AuthScreen.currentUserSession;
-    if (session == null) return;
-
-    session['onboarding_letter_verified'] = true;
-    session['onboarding_letter_path'] = localPath;
-    _syncPreArrivalContactReady(session);
-
-    AuthScreen.currentUserSession = session;
-    await ProfileStorageService.save(session);
-  }
-
-  static void _syncPreArrivalContactReady(Map<String, dynamic> session) {
-    final ready = session['invite_code_verified'] == true &&
-        session['onboarding_letter_verified'] == true;
-    session['pre_arrival_contact_ready'] = ready;
-  }
-
-  /// True when Track B invite + letter are both complete (Stage 2 contact path).
-  static bool preArrivalContactReady() {
-    final session = AuthScreen.currentUserSession;
+  /// True when Path B declaration is set, or a legacy invite+letter session.
+  static bool preArrivalContactReady([Map<String, dynamic>? raw]) {
+    final session = raw ?? AuthScreen.currentUserSession;
     if (session == null) return false;
-    return session['pre_arrival_contact_ready'] == true;
+    return meetsPreArrivalUnlock(session);
+  }
+
+  /// Declaration, stored ready flag, or legacy invite + letter.
+  static bool meetsPreArrivalUnlock(Map<String, dynamic> session) {
+    if (session['pre_arrival_student'] == true) return true;
+    if (session['pre_arrival_contact_ready'] == true) return true;
+    return session['invite_code_verified'] == true &&
+        session['onboarding_letter_verified'] == true;
   }
 
   /// Corporate Track — server-verified employment document (zero-retention).
@@ -159,9 +120,6 @@ abstract final class TrustService {
     final session = AuthScreen.currentUserSession;
     if (session == null) return;
 
-    session['trust_tier'] = 'Grand';
-    session['trust_stage'] = TrustStage.socialVerified.level;
-    session['identity_trust_tier'] = 'Social_Verified';
     session['employment_verified'] = true;
     session['verification_track'] = verificationTrack;
     session['corporate_verification_seal'] = verificationSeal;
@@ -175,7 +133,8 @@ abstract final class TrustService {
     await ProfileStorageService.save(session);
   }
 
-  /// Open Banking Track — read-once AIS verification (tokens never stored).
+  /// Open Banking Track — deferred/legacy financial-signal stamp.
+  /// Does not verify income, salary, or rent affordability. Tokens never stored.
   static Future<void> upgradeOpenBanking({
     required String verificationSeal,
     required String verifiedAt,
@@ -185,9 +144,6 @@ abstract final class TrustService {
     final session = AuthScreen.currentUserSession;
     if (session == null) return;
 
-    session['trust_tier'] = 'Grand';
-    session['trust_stage'] = TrustStage.socialVerified.level;
-    session['identity_trust_tier'] = 'Social_Verified';
     session['financial_verified'] = true;
     session['verification_track'] = verificationTrack;
     session['open_banking_verification_seal'] = verificationSeal;
@@ -210,15 +166,13 @@ abstract final class TrustService {
     session['employment_letter_verified'] = true;
     session['employment_letter_path'] = localPath;
     session['jit_verification_method'] = 'employment_letter';
-    session['trust_stage'] = TrustStage.socialVerified.level;
-    session['identity_trust_tier'] = 'Social_Verified';
-    session['trust_tier'] = 'Grand';
 
     AuthScreen.currentUserSession = session;
     await ProfileStorageService.save(session);
   }
 
-  /// Phase 3 — arriving family: local bank statement summary scan.
+  /// Legacy family budget-proof writer — retained for stored sessions.
+  /// Not used as a contact-unlock path (families use LinkedIn / employment).
   static Future<void> submitJitFamilyBudgetProof({
     required String localPath,
   }) async {
@@ -228,8 +182,6 @@ abstract final class TrustService {
     session['family_budget_proof_verified'] = true;
     session['family_budget_proof_path'] = localPath;
     session['jit_verification_method'] = 'family_budget_proof';
-    session['trust_stage'] = TrustStage.socialVerified.level;
-    session['identity_trust_tier'] = 'Social_Verified';
 
     AuthScreen.currentUserSession = session;
     await ProfileStorageService.save(session);
@@ -245,67 +197,52 @@ abstract final class TrustService {
     await ProfileStorageService.save(session);
   }
 
-  /// Stamp trust fields onto a listing before publishing.
+  /// Stamp non-ranking host metadata onto a listing before publishing.
+  /// Does not write host_trust_stage / host_trust_multiplier / host_verified_badge.
   static Map<String, dynamic> stampListingTrust(Map<String, dynamic> listing) {
     final session = AuthScreen.currentUserSession;
     if (session == null) return listing;
 
-    final stage = currentStage();
-    final profile = ViewerProfile.fromSession(session);
-    final preArrival =
-        stage.level < TrustStage.idVerified.level && preArrivalContactReady();
-
     return {
       ...listing,
-      'host_trust_stage': stage.level,
-      'host_trust_multiplier': stage.multiplier,
-      if (profile != null) 'host_circle_markers': profile.circleMarkers,
       if (session['linkedin_verified'] == true)
         'host_linkedin_badge':
             '${session['linkedin_title'] ?? ''} at ${session['linkedin_company'] ?? ''}'
                 .trim(),
-      'host_verified_badge': stage == TrustStage.idVerified,
-      'host_pre_arrival_badge': preArrival,
+      // Pre-arrival host signal (declaration or legacy ready flag).
+      'host_pre_arrival_badge': preArrivalContactReady(),
     };
   }
 
-  /// Any signed-in user (Stage 1+) can publish. Trust badges and the
-  /// multiplier handle ranking -- no gatekeeping.
-  static bool canPublish() =>
-      currentStage().level >= TrustStage.casual.level;
+  /// Contacting a host — verification-signal gates by seeker cohort.
+  static bool canContact() =>
+      meetsContactVerification(AuthScreen.currentUserSession);
 
-  /// Contacting a host — cohort-aware progressive trust gates.
-  static bool canContact() {
-    final session = AuthScreen.currentUserSession;
-    if (session == null) return false;
+  /// Same criteria as [canContact], for any session map (badges, landlord views).
+  ///
+  /// Students: university email OR pre-arrival declaration (legacy letter still counts).
+  /// Professionals / families: LinkedIn OR employment verified.
+  /// Does **not** use trust_stage / trust_tier / identity_trust_tier.
+  static bool meetsContactVerification(Map<String, dynamic>? session) {
+    if (session == null || session.isEmpty) return false;
 
-    final stage = currentStage();
     final cohort = ViewerProfile.seekerCohortFromSession(session);
-
     if (cohort == SeekerCohort.student) {
-      if (stage.level >= TrustStage.idVerified.level) return true;
-
-      if (MarketConfig.current.trustVerificationKind ==
-          TrustVerificationKind.lightTrust) {
-        return stage.level >= TrustStage.socialVerified.level &&
-            preArrivalContactReady();
-      }
-
-      return false;
+      return _hasStudentContactVerification(session);
     }
+    return _hasProfessionalContactVerification(session);
+  }
 
-    if (cohort.needsJitSocialGate) {
-      return stage.level >= TrustStage.socialVerified.level;
-    }
+  static bool _hasStudentContactVerification(Map<String, dynamic> session) {
+    if (meetsPreArrivalUnlock(session)) return true;
+    if (session['onboarding_letter_verified'] == true) return true;
+    if (session['light_trust_verified'] == true) return true;
+    return ProfileData.text(session['verified_university_email']).isNotEmpty;
+  }
 
-    if (stage.level >= TrustStage.idVerified.level) return true;
-
-    if (MarketConfig.current.trustVerificationKind ==
-        TrustVerificationKind.lightTrust) {
-      return stage.level >= TrustStage.socialVerified.level &&
-          preArrivalContactReady();
-    }
-
-    return false;
+  static bool _hasProfessionalContactVerification(Map<String, dynamic> session) {
+    return session['linkedin_verified'] == true ||
+        session['employment_verified'] == true ||
+        session['employment_letter_verified'] == true;
   }
 }

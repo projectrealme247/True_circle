@@ -5,15 +5,16 @@ import '../config/market/market_config.dart';
 import '../services/trust_service.dart';
 import '../theme/app_typography.dart';
 import '../theme/home_marketplace_theme.dart';
-import '../utils/viewer_profile.dart';
+import '../widgets/trust_badge.dart';
 
-/// Dublin light trust hub — two student tracks plus future options.
+/// Dublin verification hub — college email or pre-arrival paths.
 class DublinLightTrustScreen extends StatelessWidget {
   const DublinLightTrustScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final stage = TrustService.currentStage();
+    final isVerified = TrustService.canContact();
+    final fullyVerified = isVerified;
     final preArrivalReady = TrustService.preArrivalContactReady();
 
     return Scaffold(
@@ -26,48 +27,54 @@ class DublinLightTrustScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Community trust for Dublin',
+              'Verify your profile',
               style: AppTypography.sectionTitle(),
             ),
             const SizedBox(height: 8),
             Text(
-              'Choose the path that fits your situation. Browsing is always '
-              'free — verification unlocks contacting hosts.',
+              'Browsing is always free. Verification unlocks contacting hosts.',
               style: AppTypography.detail().copyWith(
                 color: HomeMarketplaceTheme.textSecondary,
               ),
             ),
-            const SizedBox(height: 8),
-            _StageChip(stage: stage, preArrivalReady: preArrivalReady),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: isVerified
+                  ? const TrustBadge(isVerified: true, compact: true)
+                  : Text(
+                      'Verification pending',
+                      style: AppTypography.detail().copyWith(
+                        color: HomeMarketplaceTheme.textSecondary,
+                      ),
+                    ),
+            ),
             const SizedBox(height: 24),
             Text(
-              'Choose your path',
+              'How do you want to verify?',
               style: AppTypography.detail().copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             _TrackCard(
               icon: Icons.school_outlined,
-              title: 'I have a college email',
-              subtitle:
-                  'Verify with your .ac.ie or university inbox → Community Verified (Stage 3)',
-              badge: stage.level >= TrustStage.idVerified.level
-                  ? 'Complete'
-                  : 'Track A',
-              onTap: stage.level >= TrustStage.idVerified.level
+              title: 'I have a university email',
+              subtitle: 'Verify with your university inbox.',
+              badge: fullyVerified ? 'Complete' : null,
+              onTap: fullyVerified
                   ? null
                   : () => context.push('/verify/id/university-email'),
             ),
             _TrackCard(
               icon: Icons.flight_takeoff_outlined,
-              title: 'Joining from abroad',
+              title: "I don't have a university email yet",
               subtitle:
-                  'Invite code + university offer letter → contact hosts at Stage 2 (Pre-Arrival)',
+                  'For students relocating to Dublin before university accounts are issued.',
               badge: preArrivalReady
                   ? 'Contact unlocked'
-                  : stage.level >= TrustStage.idVerified.level
-                      ? 'N/A'
-                      : 'Track B',
-              onTap: stage.level >= TrustStage.idVerified.level
+                  : fullyVerified
+                      ? 'Complete'
+                      : null,
+              onTap: fullyVerified
                   ? null
                   : () => context.push('/verify/pre-arrival'),
             ),
@@ -83,7 +90,7 @@ class DublinLightTrustScreen extends StatelessWidget {
             const _TrustOption(
               icon: Icons.link_rounded,
               title: 'LinkedIn',
-              subtitle: 'Stage 2 social verification — connect your profile',
+              subtitle: 'Connect your profile to become a Verified User',
               onTapRoute: '/verify/social',
             ),
             const _TrustOption(
@@ -111,104 +118,84 @@ class DublinLightTrustScreen extends StatelessWidget {
   }
 }
 
-class _StageChip extends StatelessWidget {
-  const _StageChip({required this.stage, required this.preArrivalReady});
-
-  final TrustStage stage;
-  final bool preArrivalReady;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = switch (stage) {
-      TrustStage.idVerified => 'Stage 3 · Community Verified · 1.0×',
-      TrustStage.socialVerified when preArrivalReady =>
-        'Stage 2 · Pre-Arrival contact · 0.9×',
-      TrustStage.socialVerified => 'Stage 2 · Social Verified · 0.9×',
-      TrustStage.casual => 'Stage 1 · Casual · 0.7×',
-      TrustStage.anonymous => 'Stage 0 · Anonymous',
-    };
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: HomeMarketplaceTheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: HomeMarketplaceTheme.border),
-        ),
-        child: Text(label, style: AppTypography.detail()),
-      ),
-    );
-  }
-}
-
 class _TrackCard extends StatelessWidget {
   const _TrackCard({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.badge,
+    this.badge,
     this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final String badge;
+  final String? badge;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: HomeMarketplaceTheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: onTap == null
-                ? HomeMarketplaceTheme.border
-                : HomeMarketplaceTheme.primary.withValues(alpha: 0.4),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
-          child: ListTile(
-            leading: Icon(icon, color: HomeMarketplaceTheme.primary),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: AppTypography.detail()
-                        .copyWith(fontWeight: FontWeight.w600),
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: HomeMarketplaceTheme.border),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    color: enabled
+                        ? HomeMarketplaceTheme.textPrimary
+                        : HomeMarketplaceTheme.textMuted,
                   ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: HomeMarketplaceTheme.accentSurface,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    badge,
-                    style: AppTypography.detail().copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: HomeMarketplaceTheme.accent,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: AppTypography.detail().copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: enabled
+                                ? HomeMarketplaceTheme.textPrimary
+                                : HomeMarketplaceTheme.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: AppTypography.detail().copyWith(
+                            color: HomeMarketplaceTheme.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  if (badge != null)
+                    Text(
+                      badge!,
+                      style: AppTypography.detail().copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: HomeMarketplaceTheme.textMuted,
+                      ),
+                    ),
+                ],
+              ),
             ),
-            subtitle: Text(subtitle, style: AppTypography.detail()),
-            trailing: onTap != null
-                ? const Icon(Icons.chevron_right_rounded)
-                : const Icon(Icons.check_circle_outline,
-                    color: Color(0xFF008A05)),
           ),
         ),
       ),
@@ -231,33 +218,17 @@ class _TrustOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: HomeMarketplaceTheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: HomeMarketplaceTheme.border),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: ListTile(
-          onTap: onTapRoute == null ? null : () => context.push(onTapRoute!),
-          leading: Icon(icon, color: HomeMarketplaceTheme.textMuted),
-          title: Text(
-            title,
-            style: AppTypography.detail().copyWith(
-              fontWeight: FontWeight.w600,
-              color: HomeMarketplaceTheme.textSecondary,
-            ),
-          ),
-          subtitle: Text(
-            subtitle,
-            style: AppTypography.detail().copyWith(
-              color: HomeMarketplaceTheme.textMuted,
-            ),
-          ),
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: HomeMarketplaceTheme.textMuted),
+      title: Text(title, style: AppTypography.detail()),
+      subtitle: Text(
+        subtitle,
+        style: AppTypography.detail().copyWith(
+          color: HomeMarketplaceTheme.textMuted,
         ),
       ),
+      onTap: onTapRoute == null ? null : () => context.push(onTapRoute!),
     );
   }
 }

@@ -92,8 +92,6 @@ abstract class MarketConfig {
 
   List<String> get profileStudentFundingOptions;
 
-  String get profileNativePlaceHint;
-
   String get profileBudgetSubtitle;
 
   String get profileBudgetMinHint;

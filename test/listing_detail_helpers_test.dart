@@ -25,10 +25,9 @@ void main() {
       expect(profile.destination, 'Sandymount Strand');
     });
 
-    test('rtb and parking matrix use softer copy when unknown', () {
+    test('parking matrix uses softer copy when unknown', () {
       final listing = <String, dynamic>{};
 
-      expect(ListingData.rtbMatrixLabel(listing), 'RTB Status Not Provided');
       expect(ListingData.parkingMatrixLabel(listing), 'Ask Host About Parking');
     });
   });

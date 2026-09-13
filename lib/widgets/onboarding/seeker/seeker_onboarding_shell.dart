@@ -61,10 +61,9 @@ class SeekerOnboardingShell extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   Expanded(
-                                    child: Align(
-                                      alignment: Alignment.topCenter,
-                                      child: leftBody,
-                                    ),
+                                    // Tight bounds so step bodies (incl. scroll)
+                                    // never get unconstrained width/height.
+                                    child: leftBody,
                                   ),
                                   const SizedBox(
                                     height: OnboardingTokens.space8,

@@ -9,7 +9,6 @@ import '../../theme/app_typography.dart';
 import '../../utils/landlord_dashboard_helpers.dart';
 import 'landlord_empty_stream_state.dart';
 import 'landlord_unlock_wave_tile.dart';
-import '../trust_tier_badge.dart';
 
 class IndependentPlacesStreamView extends StatelessWidget {
   const IndependentPlacesStreamView({
@@ -52,7 +51,6 @@ class IndependentPlacesStreamView extends StatelessWidget {
 
     final visible = active.take(visibleLimit).toList();
     final remaining = active.length - visible.length;
-    ApplicantTrustTier? lastTier;
 
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 32),
@@ -67,39 +65,13 @@ class IndependentPlacesStreamView extends StatelessWidget {
         }
 
         final row = visible[index];
-        final showHeader = row.trustTier != lastTier;
-        lastTier = row.trustTier;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showHeader) _TrustTierHeader(tier: row.trustTier),
-            IndependentPlacesApplicantCard(
-              row: row,
-              onInvite: () => onInvite(row),
-              onArchive: () => onArchive(row),
-              isLoading: actionLoadingId == row.applicationId,
-            ),
-          ],
+        return IndependentPlacesApplicantCard(
+          row: row,
+          onInvite: () => onInvite(row),
+          onArchive: () => onArchive(row),
+          isLoading: actionLoadingId == row.applicationId,
         );
       },
-    );
-  }
-}
-
-class _TrustTierHeader extends StatelessWidget {
-  const _TrustTierHeader({required this.tier});
-
-  final ApplicantTrustTier tier;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: TrustTierBadge(
-        tier: tier,
-        compact: true,
-      ),
     );
   }
 }
@@ -156,7 +128,7 @@ class IndependentPlacesApplicantCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${row.trustTier.displayToken} · ${row.compatibilityScore}% fit',
+                        '${row.decision?.isVerifiedUser == true ? ApplicantTrustTier.verifiedUserLabel : 'Verification pending'} · ${row.compatibilityScore}% fit',
                         style: AppTypography.meta(),
                       ),
                     ],
@@ -242,6 +214,7 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = switch (status) {
       ApplicantApplicationStatus.pending => 'Pending',
+      ApplicantApplicationStatus.viewingInvitationSent => 'Invitation sent',
       ApplicantApplicationStatus.viewingScheduled => 'Viewing set',
       ApplicantApplicationStatus.accepted => 'Accepted',
       ApplicantApplicationStatus.declined => 'Declined',

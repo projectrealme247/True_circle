@@ -287,7 +287,7 @@ class _PassportIdentityHeader extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             TrustBadge(
-              tier: snapshot.trustTier,
+              isVerified: snapshot.isVerifiedUser,
               compact: true,
               showTooltip: false,
             ),
@@ -365,11 +365,27 @@ class _PublicPassportBody extends StatelessWidget {
         .where((part) => part.isNotEmpty)
         .toList();
 
+    final preferenceChips = <String>[
+      if (snapshot.tenurePreferenceLabel.trim().isNotEmpty)
+        '📅 ${snapshot.tenurePreferenceLabel.trim()}',
+      if (snapshot.furnishingPreferenceLabel.trim().isNotEmpty)
+        '🛋️ ${snapshot.furnishingPreferenceLabel.trim()}',
+      if (snapshot.propertyTypePreferenceLabel.trim().isNotEmpty)
+        '🏠 ${snapshot.propertyTypePreferenceLabel.trim()}',
+      if (snapshot.bathroomPreferenceLabel.trim().isNotEmpty)
+        '🛁 ${snapshot.bathroomPreferenceLabel.trim()}',
+      if (snapshot.householdBreakdown.trim().isNotEmpty &&
+          !snapshot.track.isSharedSpace &&
+          !snapshot.track.isLandlord)
+        '👨‍👩‍👧‍👦 ${snapshot.householdBreakdown.trim()}',
+    ];
+
     final whoTraits = <String>[
       if (personaValue.isNotEmpty) personaValue,
       if (snapshot.listingTypeLabel.trim().isNotEmpty)
         snapshot.listingTypeLabel.trim(),
       ...languageChips,
+      ...preferenceChips,
     ];
 
     final transportEmoji =
@@ -390,13 +406,15 @@ class _PublicPassportBody extends StatelessWidget {
     final sections = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _PublicPassportSectionHeader(title: 'Budget'),
-        const SizedBox(height: SeekerOnboardingLayout.passportRelatedGap),
-        _PublicPassportValueLine(
-          value: budgetValue,
-          placeholder: 'Add max rent',
-        ),
-        const SizedBox(height: SeekerOnboardingLayout.passportSectionGap),
+        if (budgetValue.isNotEmpty) ...[
+          const _PublicPassportSectionHeader(title: 'Budget'),
+          const SizedBox(height: SeekerOnboardingLayout.passportRelatedGap),
+          _PublicPassportValueLine(
+            value: budgetValue,
+            placeholder: 'Add max rent',
+          ),
+          const SizedBox(height: SeekerOnboardingLayout.passportSectionGap),
+        ],
         const _PublicPassportSectionHeader(title: 'Who you are'),
         const SizedBox(height: SeekerOnboardingLayout.passportRelatedGap),
         if (whoTraits.isEmpty)
@@ -409,15 +427,10 @@ class _PublicPassportBody extends StatelessWidget {
               for (final trait in whoTraits) _PassportTraitChip(label: trait),
             ],
           ),
-        const SizedBox(height: SeekerOnboardingLayout.passportSectionGap),
-        const _PublicPassportSectionHeader(title: 'Commute'),
-        const SizedBox(height: SeekerOnboardingLayout.passportRelatedGap),
-        if (commuteTraits.isEmpty)
-          Text(
-            'Add destination and travel details',
-            style: SeekerOnboardingLayout.helperText,
-          )
-        else
+        if (commuteTraits.isNotEmpty) ...[
+          const SizedBox(height: SeekerOnboardingLayout.passportSectionGap),
+          const _PublicPassportSectionHeader(title: 'Commute'),
+          const SizedBox(height: SeekerOnboardingLayout.passportRelatedGap),
           Wrap(
             spacing: OnboardingTokens.chipSpacing,
             runSpacing: OnboardingTokens.chipSpacing,
@@ -426,13 +439,14 @@ class _PublicPassportBody extends StatelessWidget {
                 _PassportTraitChip(label: trait),
             ],
           ),
+        ],
         const SizedBox(height: SeekerOnboardingLayout.passportSectionGap),
         const _PublicPassportSectionHeader(title: 'Trust'),
         const SizedBox(height: SeekerOnboardingLayout.passportRelatedGap),
         Align(
           alignment: Alignment.centerLeft,
           child: TrustBadge(
-            tier: snapshot.trustTier,
+            isVerified: snapshot.isVerifiedUser,
             compact: false,
             showTooltip: false,
           ),
@@ -447,7 +461,7 @@ class _PublicPassportBody extends StatelessWidget {
         if (_verificationIncomplete(snapshot)) ...[
           const SizedBox(height: OnboardingTokens.space4),
           Text(
-            'Next step: Complete verification to unlock a higher trust tier.',
+            'Next step: Complete verification to become a Verified User.',
             style: SeekerOnboardingLayout.helperText.copyWith(
               fontSize: 13,
               color: SeekerOnboardingLayout.labelMuted,
@@ -755,38 +769,22 @@ class _LandlordSharedBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final multiplier = snapshot.hostTrustMultiplier;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _PassportSectionCard(
-          titleEmoji: '☘️',
-          title: 'Trust Multiplier Focus',
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                child: Text(
-                  snapshot.trustBadgeEmoji,
-                  style: const TextStyle(fontSize: 16, height: 1.1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  multiplier == null
-                      ? 'Host multiplier pending'
-                      : '${multiplier.toStringAsFixed(1)}× community tier multiplier',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: ContextualPassportCard._titleColor,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ],
+          titleEmoji: '✅',
+          title: 'Verification',
+          child: Text(
+            snapshot.isVerifiedUser
+                ? '✅ Verified User'
+                : 'Verification pending',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: ContextualPassportCard._titleColor,
+              height: 1.35,
+            ),
           ),
         ),
         const SizedBox(height: 12),

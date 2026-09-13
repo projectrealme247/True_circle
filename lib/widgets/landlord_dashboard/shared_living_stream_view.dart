@@ -9,7 +9,6 @@ import '../../theme/app_typography.dart';
 import '../../utils/landlord_dashboard_helpers.dart';
 import 'landlord_empty_stream_state.dart';
 import 'landlord_unlock_wave_tile.dart';
-import '../trust_tier_badge.dart';
 import 'lifestyle_match_score_ring.dart';
 
 class SharedLivingStreamView extends StatelessWidget {
@@ -53,7 +52,6 @@ class SharedLivingStreamView extends StatelessWidget {
 
     final visible = active.take(visibleLimit).toList();
     final remaining = active.length - visible.length;
-    ApplicantTrustTier? lastTier;
 
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 32),
@@ -68,27 +66,11 @@ class SharedLivingStreamView extends StatelessWidget {
         }
 
         final row = visible[index];
-        final showHeader = row.trustTier != lastTier;
-        lastTier = row.trustTier;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showHeader)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: TrustTierBadge(
-                  tier: row.trustTier,
-                  compact: true,
-                ),
-              ),
-            SharedLivingApplicantCard(
-              row: row,
-              onInvite: () => onInvite(row),
-              onArchive: () => onArchive(row),
-              isLoading: actionLoadingId == row.applicationId,
-            ),
-          ],
+        return SharedLivingApplicantCard(
+          row: row,
+          onInvite: () => onInvite(row),
+          onArchive: () => onArchive(row),
+          isLoading: actionLoadingId == row.applicationId,
         );
       },
     );
@@ -144,7 +126,7 @@ class SharedLivingApplicantCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${row.trustTier.displayToken} · Lifestyle match',
+                        '${row.decision?.isVerifiedUser == true ? ApplicantTrustTier.verifiedUserLabel : 'Verification pending'} · Lifestyle match',
                         style: AppTypography.meta(),
                       ),
                       if (row.kitchenCultureAligned) ...[
@@ -323,6 +305,7 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = switch (status) {
       ApplicantApplicationStatus.pending => 'Pending',
+      ApplicantApplicationStatus.viewingInvitationSent => 'Invitation sent',
       ApplicantApplicationStatus.viewingScheduled => 'Viewing set',
       ApplicantApplicationStatus.accepted => 'Accepted',
       ApplicantApplicationStatus.declined => 'Declined',

@@ -4,9 +4,11 @@ import '../debug/agent_log.dart';
 import '../debug/debug_session_log.dart';
 
 import '../models/move_in_timing.dart';
-import '../theme/trust_tier_design.dart';
+import '../models/seeker_onboarding_enums.dart';
 import 'listing_data.dart';
 import 'listing_search_intent.dart';
+import 'preferred_layout_match.dart';
+import 'shared_living_match_tokens.dart';
 import 'viewer_profile.dart';
 
 import '../services/commute_scoring_service.dart';
@@ -27,8 +29,6 @@ class ListingMatchResult {
     required this.reasons,
     required this.excluded,
     required this.tower,
-    this.trustStage = TrustStage.casual,
-    this.inCircle = false,
     this.preArrivalBadge = false,
   });
 
@@ -39,8 +39,6 @@ class ListingMatchResult {
   final List<String> reasons;
   final bool excluded;
   final MatchTower tower;
-  final TrustStage trustStage;
-  final bool inCircle;
   final bool preArrivalBadge;
 
   static const noProfile = ListingMatchResult(
@@ -86,9 +84,10 @@ class ListingRankOutcome {
   final bool requiresOnboarding;
 }
 
-/// Hard filters + tower scoring + trust multiplier + circle ranking.
+/// Hard filters + tower compatibility scoring + preference ranking.
 ///
-/// Final Score = TrustMultiplier x CompatibilityScore
+/// Final score equals the tower compatibility score (budget, availability,
+/// lifestyle, location, commute).
 abstract final class ListingMatchEngine {
   static const rentMaxScore = 100;
   static const buyMaxScore = 175;
@@ -100,17 +99,6 @@ abstract final class ListingMatchEngine {
       WeightedListingMatcher.budgetHardCapRatio;
   static const _shareBudgetStretchStartRatio =
       WeightedListingMatcher.budgetStretchStartRatio;
-
-  /// Minimum compatibility (0.0–1.0) required to surface the In Your Circle badge.
-  static const inCircleMinMatchFraction = 0.75;
-
-  static bool qualifiesForInCircle({
-    required bool networkConnected,
-    required double matchPercentage,
-  }) {
-    final matchScore = matchPercentage / 100.0;
-    return networkConnected && matchScore >= inCircleMinMatchFraction;
-  }
 
   // ΓöÇΓöÇ Public API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
@@ -222,10 +210,9 @@ abstract final class ListingMatchEngine {
 
     // Priority ranking:
     // 1. Weighted lifestyle preference score (when active soft filters exist)
-    // 2. Circle listings → highest quality first
-    // 3. High-match (>= 50%) → sorted by score descending
-    // 4. Medium-match (25-49%) → sorted by score descending
-    // 5. Low-match (< 25%) → pushed to end
+    // 2. High-match (>= 50%) → sorted by score descending
+    // 3. Medium-match (25-49%) → sorted by score descending
+    // 4. Low-match (< 25%) → pushed to end
     final usesWeightedSort = weightedCriteria != null &&
         _weightedCriteriaHasSoftFilters(weightedCriteria);
     scored.sort((a, b) {
@@ -233,10 +220,6 @@ abstract final class ListingMatchEngine {
         final pref = b.preferenceScore.compareTo(a.preferenceScore);
         if (pref != 0) return pref;
       }
-
-      final aCircle = a.match.inCircle ? 1 : 0;
-      final bCircle = b.match.inCircle ? 1 : 0;
-      if (aCircle != bCircle) return bCircle - aCircle;
 
       final aTier = _qualityTier(a.match);
       final bTier = _qualityTier(b.match);
@@ -273,6 +256,207 @@ abstract final class ListingMatchEngine {
     if (m.percentage >= 50) return 2;
     if (m.percentage >= 25) return 1;
     return 0;
+  }
+
+  /// Independent Places detail: up to [maxReasons] positive preference-fit labels.
+  ///
+  /// Human-readable only — no scores, weights, language, food, or warnings.
+  /// Preference-framed labels require an explicit seeker preference (not blank /
+  /// any / no_preference); matching/ranking blank-compat is unchanged.
+  static List<String> independentPlacePreferenceExplanations(
+    Map<String, dynamic> listing,
+    ViewerProfile? viewer, {
+    Map<String, dynamic>? viewerSession,
+    int maxReasons = 3,
+  }) {
+    if (viewer == null || viewer.needsOnboarding) return const [];
+    if (_towerFor(listing) != MatchTower.rent) return const [];
+    if (_studentTrackConflict(viewer, listing)) return const [];
+    if (_failsHardFilter(listing, viewer, MatchTower.rent)) return const [];
+
+    final f = _MatchFlags.build(
+      listing,
+      viewer,
+      viewerSession: viewerSession,
+    );
+
+    // Priority: Budget → Bedrooms → Availability → Location/Commute →
+    // Property Type → Household. One label per category.
+    final byPriority = <int, String>{};
+
+    if (viewer.budgetMax != null && f.priceFit) {
+      final price = _parsePrice(ListingData.price(listing));
+      final goodValue = price != null &&
+          price <= (viewer.budgetMax! * 0.9).round();
+      byPriority[1] = goodValue
+          ? '💰 Good value for your budget'
+          : '💰 Within your budget';
+    }
+
+    if (f.bhkMatch) {
+      byPriority[2] = '🛏️ Bedrooms match your needs';
+    }
+
+    if (_hasExplicitMoveInPreference(viewer, viewerSession) &&
+        f.timingMatch &&
+        f.timingQuality.earnsTimingScore) {
+      byPriority[3] = '📅 Available when you plan to move';
+    }
+
+    final hasCommuteIntent = viewerSession != null &&
+        !ProfileData.commuteDestinationUnknown(viewerSession) &&
+        (ProfileData.maximumCommuteBudgetMinutes(viewerSession) != null ||
+            CommuteProfileRegistry.fromSession(viewerSession).isNotEmpty);
+    if (hasCommuteIntent &&
+        f.commuteWithinBudget &&
+        !f.commuteOverBudget) {
+      byPriority[4] = '🚆 Good commute from this location';
+    } else if (f.locationMatch) {
+      byPriority[4] = '📍 Matches your preferred area';
+    }
+
+    if (_independentPlacePropertyTypeFits(listing, viewerSession)) {
+      byPriority[5] = '🏠 Matches your preferred property type';
+    }
+
+    if (f.occupantMatch || f.studentMatch) {
+      byPriority[6] = '👨‍👩‍👧‍👦 Suitable for your household';
+    }
+
+    final priorities = byPriority.keys.toList()..sort();
+    return [
+      for (final p in priorities.take(maxReasons.clamp(0, 3))) byPriority[p]!,
+    ];
+  }
+
+  /// Shared Living detail: up to [maxReasons] positive preference-fit labels.
+  ///
+  /// Room/household/timing focused — no scores, language, or food matching copy.
+  /// Preference-framed labels require an explicit seeker preference (not blank /
+  /// any / no_preference); matching/ranking blank-compat is unchanged.
+  static List<String> sharedLivingPreferenceExplanations(
+    Map<String, dynamic> listing,
+    ViewerProfile? viewer, {
+    Map<String, dynamic>? viewerSession,
+    int maxReasons = 3,
+  }) {
+    if (viewer == null || viewer.needsOnboarding) return const [];
+    if (_towerFor(listing) != MatchTower.share) return const [];
+    if (_isFamilyOccupant(viewer)) return const [];
+    if (_studentTrackConflict(viewer, listing)) return const [];
+    if (_failsHardFilter(listing, viewer, MatchTower.share)) return const [];
+
+    final f = _MatchFlags.build(
+      listing,
+      viewer,
+      viewerSession: viewerSession,
+    );
+
+    // Priority: Room → Bathroom → Household → Availability → Lifestyle.
+    final byPriority = <int, String>{};
+
+    final seekerRoom = viewerSession != null
+        ? SharedLivingMatchTokens.roomFromSeeker(viewerSession)
+        : viewer.shareRoomLayout;
+    if (seekerRoom.isNotEmpty && f.shareRoomMatch) {
+      final room = SharedLivingMatchTokens.roomFromListing(listing);
+      byPriority[1] = room == SharedLivingMatchTokens.sharedRoom
+          ? '🛏️ Shared room matches your preference'
+          : '🛏️ Private room matches your preference';
+    }
+
+    final seekerBath = viewerSession != null
+        ? SharedLivingMatchTokens.bathroomFromSeeker(viewerSession)
+        : viewer.shareBathroomPreference;
+    if (seekerBath.isNotEmpty &&
+        seekerBath != SharedLivingMatchTokens.noPreference &&
+        f.shareBathroomMatch) {
+      byPriority[2] = '🚿 Bathroom setup matches your preference';
+    }
+
+    // Prefer seeker-supplied household signals only — not roommateTypeMatch
+    // alone (that can fire from listing bachelor/professional tags).
+    final occ = ListingData.occupantType(listing).toLowerCase();
+    if (f.occupantMatch || f.studentMatch) {
+      if (occ.contains('student') || f.studentMatch) {
+        byPriority[3] = '👩‍🎓 Student household';
+      } else if (occ.contains('professional') || occ.contains('working')) {
+        byPriority[3] = '💼 Professional household';
+      } else {
+        byPriority[3] = '🏡 Household type fits your preference';
+      }
+    }
+
+    if (_hasExplicitMoveInPreference(viewer, viewerSession) &&
+        f.timingMatch &&
+        f.timingQuality.earnsTimingScore) {
+      byPriority[4] = '📅 Available when you plan to move';
+    }
+
+    if (_hasExplicitFoodPreference(viewer) &&
+        f.lifestyleCompatible &&
+        !f.foodMatch &&
+        ListingData.lifestyleFlags(listing).isNotEmpty) {
+      byPriority[5] = '🍴 Household lifestyle looks compatible';
+    }
+
+    if (viewer.budgetMax != null && f.priceFit) {
+      byPriority.putIfAbsent(6, () => '💰 Within your budget');
+    }
+
+    final priorities = byPriority.keys.toList()..sort();
+    return [
+      for (final p in priorities.take(maxReasons.clamp(0, 3))) byPriority[p]!,
+    ];
+  }
+
+  /// Explanation-only: seeker supplied a move-in window or legacy move date.
+  static bool _hasExplicitMoveInPreference(
+    ViewerProfile viewer,
+    Map<String, dynamic>? viewerSession,
+  ) {
+    if (viewerSession != null) {
+      return SeekerMoveInWindow.fromSession(viewerSession) != null;
+    }
+    return viewer.moveInWindow.isNotEmpty ||
+        viewer.earliestMoveInDate.isNotEmpty;
+  }
+
+  /// Explanation-only: seeker supplied a concrete food preference.
+  static bool _hasExplicitFoodPreference(ViewerProfile viewer) {
+    final raw = viewer.foodPreference.trim().toLowerCase();
+    if (raw.isEmpty ||
+        raw == 'any' ||
+        raw == 'no_preference' ||
+        raw == 'no preference') {
+      return false;
+    }
+    final norm = _normFood(viewer.foodPreference);
+    return norm.isNotEmpty &&
+        norm != 'any' &&
+        norm != 'no_preference' &&
+        norm != 'no preference';
+  }
+
+  static bool _independentPlacePropertyTypeFits(
+    Map<String, dynamic> listing,
+    Map<String, dynamic>? viewerSession,
+  ) {
+    final pref = PropertyTypePreference.fromSession(viewerSession);
+    if (pref == null || pref == PropertyTypePreference.noPreference) {
+      return false;
+    }
+    final cat = ListingData.propertyCategory(listing).toLowerCase();
+    final sub = ListingData.text(listing['property_sub_type']).toLowerCase();
+    return switch (pref) {
+      PropertyTypePreference.house =>
+        cat.contains('house') || sub == 'house',
+      PropertyTypePreference.apartment =>
+        cat.contains('apartment') ||
+            cat.contains('flat') ||
+            sub == 'apartment',
+      PropertyTypePreference.noPreference => false,
+    };
   }
 
   static ListingMatchResult evaluate(
@@ -360,46 +544,18 @@ abstract final class ListingMatchEngine {
         ),
     };
 
-    // Trust multiplier: average host + seeker (avoids compounding two penalties).
-    final hostTrust = TrustStage.fromLevel(ListingData.hostTrustStage(listing));
-    final trustMult = hostTrust.multiplier;
-    final seekerMult = viewer == null
-        ? 1.0
-        : TrustTierDesign.effectiveSeekerTrustMultiplier(
-            baseStage: viewer.trustStage,
-            hasVerifiedPreArrivalDocs: viewer.hasVerifiedPreArrivalDocs,
-          );
-    final combinedTrustMult = (trustMult + seekerMult) / 2;
-    final finalScoreBeforeArrival =
-        (combinedTrustMult * compatibilityScore).round();
-    final finalScore = (finalScoreBeforeArrival *
-            _preArrivalScoreMultiplier(viewer, listing))
-        .round();
+    final finalScore = compatibilityScore;
 
     final max = hasSearch && viewer == null
         ? _searchOnlyMax(tower)
         : _maxFor(tower);
     final pct = max > 0 ? ((finalScore / max) * 100).clamp(0, 100) : 0.0;
 
-    final networkInCircle = viewer?.isInCircle(listing) ?? false;
-    final inCircle = qualifiesForInCircle(
-      networkConnected: networkInCircle,
-      matchPercentage: pct.toDouble(),
-    );
-
     final reasons = _combinedReasons(
       flags,
       searchFlags,
       tower,
-      hostTrust: hostTrust,
-      inCircle: inCircle,
       maxReasons: 4,
-      viewer: viewer,
-      hasPreArrivalTrustUpgrade: viewer != null &&
-          TrustTierDesign.hasPreArrivalTrustUpgrade(
-            baseStage: viewer.trustStage,
-            hasVerifiedPreArrivalDocs: viewer.hasVerifiedPreArrivalDocs,
-          ),
     );
 
     return ListingMatchResult(
@@ -410,8 +566,6 @@ abstract final class ListingMatchEngine {
       reasons: reasons,
       excluded: false,
       tower: tower,
-      trustStage: hostTrust,
-      inCircle: inCircle,
     );
   }
 
@@ -438,11 +592,9 @@ abstract final class ListingMatchEngine {
       final title = ListingData.title(s.listing);
       final m = s.match;
       debugPrint(
-        '#${i + 1} $title ΓåÆ ${m.score}/${m.maxScore} '
+        '#${i + 1} $title → ${m.score}/${m.maxScore} '
         '(${m.percentage.round()}%) ${m.label} '
-        'trust: ${m.trustStage.label} '
-        'circle: ${m.inCircle} '
-        'reasons: ${m.reasons.join(' ΓÇó ')}',
+        'reasons: ${m.reasons.join(' • ')}',
       );
     }
     debugPrint('--- end ranking ---');
@@ -502,9 +654,6 @@ abstract final class ListingMatchEngine {
   }
 
   static bool _shareHardFilter(Map<String, dynamic> listing, ViewerProfile viewer) {
-    if (_genderMismatch(viewer.genderPreference, ListingData.bachelorPreference(listing))) {
-      return true;
-    }
     if (_sharePetSmokingHardExclude(viewer, listing)) return true;
     return false;
   }
@@ -623,18 +772,6 @@ abstract final class ListingMatchEngine {
         StudentTrackPreference.onCampusOnly;
   }
 
-  static double _preArrivalScoreMultiplier(
-    ViewerProfile? viewer,
-    Map<String, dynamic> listing,
-  ) {
-    if (viewer == null || !viewer.isPreArrivalSeeker) return 1.0;
-    if (ListingData.tenantTrackPreference(listing) ==
-        StudentTrackPreference.allStudents) {
-      return 0.9;
-    }
-    return 1.0;
-  }
-
   static int _commuteOverBudgetPenalty(
     Map<String, dynamic>? viewerSession,
     Map<String, dynamic> listing,
@@ -700,20 +837,6 @@ abstract final class ListingMatchEngine {
   static bool _studentMismatch(String viewerStudent, String listingStudent) {
     if (viewerStudent.isEmpty || listingStudent.isEmpty) return false;
     return viewerStudent.toLowerCase() != listingStudent.toLowerCase();
-  }
-
-  static bool _genderMismatch(String viewerGender, String listingBachelorPref) {
-    if (viewerGender.isEmpty || listingBachelorPref.isEmpty) return false;
-    final g = viewerGender.toLowerCase();
-    final pref = listingBachelorPref.toLowerCase();
-    if (pref.contains('boys & girls') || pref.contains('mixed')) return false;
-    if (pref.contains('boys only') && (g.contains('female') || g.contains('girl'))) {
-      return true;
-    }
-    if (pref.contains('girls only') && (g.contains('male') || g.contains('boy'))) {
-      return true;
-    }
-    return false;
   }
 
   static bool _lifestyleConflict(ViewerProfile viewer, Map<String, dynamic> listing) {
@@ -817,10 +940,8 @@ abstract final class ListingMatchEngine {
     _MatchFlags f,
     _SearchMatchFlags search,
   ) {
-    var matched = 0.0;
-    if (f.occupantMatch || search.occupantExact) matched += 1;
-    if (f.furnishingMatch) matched += 1;
-    return matched / 2;
+    if (f.occupantMatch || search.occupantExact) return 1.0;
+    return 0.0;
   }
 
   static bool _rentPetSmokingMismatch(
@@ -851,7 +972,6 @@ abstract final class ListingMatchEngine {
     if (f.categoryMatch) score += 15;
     if (f.possessionMatch) score += 10;
     if (f.languageMatch) score += 10;
-    if (f.nativityMatch) score += 5;
     if (viewer != null && _mutualMatchBuy(viewer, listing)) score += 10;
     return score;
   }
@@ -881,7 +1001,7 @@ abstract final class ListingMatchEngine {
     score += weights.budget * _shareBudgetFitFraction(price, viewer);
 
     score += weights.lifestyle *
-        _shareLifestyleSocialFraction(f, viewer, listing);
+        _shareLifestyleSocialFraction(f, viewer, listing, viewerSession);
 
     if (f.timingMatch) score += weights.timing;
 
@@ -903,6 +1023,7 @@ abstract final class ListingMatchEngine {
     _MatchFlags f,
     ViewerProfile? viewer,
     Map<String, dynamic> listing,
+    Map<String, dynamic>? viewerSession,
   ) {
     var matched = 0;
     var signals = 0;
@@ -922,6 +1043,13 @@ abstract final class ListingMatchEngine {
       signals++;
       if (_scheduleCompatible(viewer, listing)) matched++;
     }
+
+    // Shared Living token-aligned signals (bathroom / room).
+    signals++;
+    if (f.shareBathroomMatch) matched++;
+
+    signals++;
+    if (f.shareRoomMatch) matched++;
 
     if (signals == 0) return 0;
     return matched / signals;
@@ -955,25 +1083,9 @@ abstract final class ListingMatchEngine {
     _MatchFlags f,
     _SearchMatchFlags search,
     MatchTower tower, {
-    required TrustStage hostTrust,
-    required bool inCircle,
     required int maxReasons,
-    ViewerProfile? viewer,
-    bool hasPreArrivalTrustUpgrade = false,
   }) {
     final all = <String>[];
-
-    if (inCircle) all.add('≡ƒñ¥ In your circle');
-
-    if (hasPreArrivalTrustUpgrade) {
-      all.add('✅ Pre-arrival docs verified — Grand trust weighting');
-    }
-
-    if (hostTrust == TrustStage.idVerified) {
-      all.add('≡ƒ¢í∩╕Å ID Verified');
-    } else if (hostTrust == TrustStage.socialVerified) {
-      all.add('≡ƒÆ╝ Socially verified');
-    }
 
     _appendExactSearchReasons(all, search);
 
@@ -996,12 +1108,7 @@ abstract final class ListingMatchEngine {
         if (!search.occupantExact && f.occupantMatch) {
           all.add('Γ£à Matches your living preference');
         }
-        if (!search.genderExact && f.genderMatch) {
-          all.add('Γ£à Gender preference aligned');
-        }
-        if (f.nativityMatch) all.add('Γ£à Same native region');
         if (f.bhkMatch) all.add('Γ£à Bed count fits your need');
-        if (f.furnishingMatch) all.add('Γ£à Furnished');
         if (f.studentMatch) all.add('Γ£à Student background fits');
         if (f.priceFit) all.add('Γ£à Price in your range');
         if (f.timingMatch && f.timingQuality.label.isNotEmpty) {
@@ -1020,7 +1127,6 @@ abstract final class ListingMatchEngine {
         if (f.categoryMatch) all.add('Γ£à Property category fits');
         if (f.possessionMatch) all.add('Γ£à Ready to move');
         if (f.languageMatch) all.add('Γ£à Speaks your language');
-        if (f.nativityMatch) all.add('Γ£à Same native region');
       case MatchTower.share:
         if (f.budgetSoftOver) {
           all.add('⚠️ Slightly over your max budget');
@@ -1049,9 +1155,6 @@ abstract final class ListingMatchEngine {
         if (!search.cityExact && f.locationMatch) {
           all.add('Γ£à Same city');
         }
-        if (!search.genderExact && f.genderMatch) {
-          all.add('Γ£à Gender preference aligned');
-        }
         if (!search.occupantExact && f.roommateTypeMatch) {
           all.add('Γ£à Roommate type fits');
         }
@@ -1077,9 +1180,6 @@ abstract final class ListingMatchEngine {
     if (search.occupantExact && search.occupantLabel.isNotEmpty) {
       all.add('≡ƒöì Matches search: ${search.occupantLabel}');
     }
-    if (search.genderExact && search.genderLabel.isNotEmpty) {
-      all.add('≡ƒöì Matches search: ${search.genderLabel}');
-    }
     if (search.showRelated) {
       all.add('≡ƒöì Related to your search');
     }
@@ -1101,22 +1201,15 @@ abstract final class ListingMatchEngine {
   }
 
   static String _norm(String value) => value.trim().toLowerCase();
-
-  static String _resolveBedLabel(Map<String, dynamic> listing) {
-    final raw = listing['bedrooms'] ?? listing['bhk'];
-    return raw?.toString().toLowerCase().trim() ?? '';
-  }
 }
 
-// ΓöÇΓöÇ Match flags ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ── Match flags ───────────────────────────────────────────────────────────────
 
 class _MatchFlags {
   const _MatchFlags({
     required this.foodMatch,
     required this.languageMatch,
-    required this.nativityMatch,
     required this.occupantMatch,
-    required this.genderMatch,
     required this.studentMatch,
     required this.locationMatch,
     required this.priceFit,
@@ -1126,10 +1219,11 @@ class _MatchFlags {
     required this.lifestyleCompatible,
     required this.roommateTypeMatch,
     required this.bhkMatch,
-    required this.furnishingMatch,
     required this.categoryMatch,
     required this.possessionMatch,
     required this.roomTypeMatch,
+    required this.shareBathroomMatch,
+    required this.shareRoomMatch,
     required this.shareBudgetScore,
     required this.budgetSoftOver,
     required this.budgetExactFit,
@@ -1142,9 +1236,7 @@ class _MatchFlags {
 
   final bool foodMatch;
   final bool languageMatch;
-  final bool nativityMatch;
   final bool occupantMatch;
-  final bool genderMatch;
   final bool studentMatch;
   final bool locationMatch;
   final bool priceFit;
@@ -1154,10 +1246,11 @@ class _MatchFlags {
   final bool lifestyleCompatible;
   final bool roommateTypeMatch;
   final bool bhkMatch;
-  final bool furnishingMatch;
   final bool categoryMatch;
   final bool possessionMatch;
   final bool roomTypeMatch;
+  final bool shareBathroomMatch;
+  final bool shareRoomMatch;
   final int shareBudgetScore;
   final bool budgetSoftOver;
   final bool budgetExactFit;
@@ -1170,9 +1263,7 @@ class _MatchFlags {
   static _MatchFlags empty() => const _MatchFlags(
         foodMatch: false,
         languageMatch: false,
-        nativityMatch: false,
         occupantMatch: false,
-        genderMatch: false,
         studentMatch: false,
         locationMatch: false,
         priceFit: false,
@@ -1182,10 +1273,11 @@ class _MatchFlags {
         lifestyleCompatible: false,
         roommateTypeMatch: false,
         bhkMatch: false,
-        furnishingMatch: false,
         categoryMatch: false,
         possessionMatch: false,
         roomTypeMatch: false,
+        shareBathroomMatch: false,
+        shareRoomMatch: false,
         shareBudgetScore: 0,
         budgetSoftOver: false,
         budgetExactFit: false,
@@ -1209,7 +1301,6 @@ class _MatchFlags {
         viewerFood == listingFood;
 
     final languageMatch = _languageMatch(listing, viewer);
-    final nativityMatch = _nativityMatch(listing, viewer);
     final locationMatch = _locationMatch(listing, viewer);
 
     final listingOccupant = ListingData.occupantType(listing);
@@ -1218,7 +1309,20 @@ class _MatchFlags {
         ListingData.matchesOccupantType(listing, viewer.occupantType);
 
     final bachelor = ListingData.bachelorPreference(listing);
-    final genderMatchResolved = _genderAligned(viewer.genderPreference, bachelor);
+
+    final shareBathroomMatch = SharedLivingMatchTokens.bathroomCompatible(
+      listingCanonical: SharedLivingMatchTokens.bathroomFromListing(listing),
+      seekerCanonical: viewerSession != null
+          ? SharedLivingMatchTokens.bathroomFromSeeker(viewerSession)
+          : viewer.shareBathroomPreference,
+    );
+
+    final shareRoomMatch = SharedLivingMatchTokens.roomCompatible(
+      listingCanonical: SharedLivingMatchTokens.roomFromListing(listing),
+      seekerCanonical: viewerSession != null
+          ? SharedLivingMatchTokens.roomFromSeeker(viewerSession)
+          : viewer.shareRoomLayout,
+    );
 
     final listingStudent = ListingData.studentType(listing);
     final studentMatch = viewer.studentType.isNotEmpty &&
@@ -1240,13 +1344,10 @@ class _MatchFlags {
         occupantMatch || (listingOccupant == 'Bachelors' && bachelor.isNotEmpty) ||
         (listingOccupant == 'Working Professionals' && bachelor.isNotEmpty);
 
-    final listingBhk = ListingMatchEngine._resolveBedLabel(listing);
-    final bhkMatch = listingBhk.isNotEmpty && _inferredBhkMatches(listingBhk, viewer);
-
-    final listingFurnishing = ListingMatchEngine._norm(ListingData.furnishing(listing));
-    final furnishingMatch = listingFurnishing.isNotEmpty &&
-        listingFurnishing.contains('furnished') &&
-        !listingFurnishing.contains('unfurnished');
+    final bhkMatch = PreferredLayoutMatch.evaluate(
+      preferredLayout: viewer.preferredLayout,
+      listing: listing,
+    ).matches;
 
     final listingCategory = ListingMatchEngine._norm(ListingData.propertyCategory(listing));
     final categoryMatch = listingCategory.isNotEmpty;
@@ -1278,9 +1379,7 @@ class _MatchFlags {
     return _MatchFlags(
       foodMatch: foodMatch,
       languageMatch: languageMatch,
-      nativityMatch: nativityMatch,
       occupantMatch: occupantMatch,
-      genderMatch: genderMatchResolved,
       studentMatch: studentMatch,
       locationMatch: locationMatch,
       priceFit: priceFit,
@@ -1290,10 +1389,11 @@ class _MatchFlags {
       lifestyleCompatible: lifestyleOk,
       roommateTypeMatch: roommateTypeMatch,
       bhkMatch: bhkMatch,
-      furnishingMatch: furnishingMatch,
       categoryMatch: categoryMatch,
       possessionMatch: possessionMatch,
       roomTypeMatch: roomTypeMatch,
+      shareBathroomMatch: shareBathroomMatch,
+      shareRoomMatch: shareRoomMatch,
       shareBudgetScore: shareBudgetScore,
       budgetSoftOver: budgetSoftOver,
       budgetExactFit: budgetExactFit,
@@ -1303,27 +1403,6 @@ class _MatchFlags {
       commuteOverBudget: commuteOverBudget,
       commuteWithinBudget: commuteWithinBudget,
     );
-  }
-
-  static bool _inferredBhkMatches(String listingBhk, ViewerProfile viewer) {
-    final occupant = viewer.occupantType.toLowerCase();
-    if (occupant.contains('family')) {
-      return listingBhk.contains('2') || listingBhk.contains('3') || listingBhk.contains('4');
-    }
-    if (occupant.contains('student') || occupant.contains('working') || occupant.contains('bachelor')) {
-      return listingBhk.contains('1') || listingBhk.contains('rk');
-    }
-    return true;
-  }
-
-  static bool _genderAligned(String viewerGender, String bachelorPref) {
-    if (viewerGender.isEmpty || bachelorPref.isEmpty) return false;
-    final g = viewerGender.toLowerCase();
-    final p = bachelorPref.toLowerCase();
-    if (p.contains('boys & girls') || p.contains('mixed')) return true;
-    if (p.contains('boys') && (g.contains('male') || g.contains('boy'))) return true;
-    if (p.contains('girls') && (g.contains('female') || g.contains('girl'))) return true;
-    return false;
   }
 
   static bool _languageMatch(Map<String, dynamic> listing, ViewerProfile viewer) {
@@ -1338,16 +1417,6 @@ class _MatchFlags {
       if (hostMother.contains(token) || hostLang.contains(token)) return true;
     }
     return false;
-  }
-
-  static bool _nativityMatch(Map<String, dynamic> listing, ViewerProfile viewer) {
-    if (viewer.nativePlace.isEmpty) return false;
-    final native = ListingMatchEngine._norm(viewer.nativePlace);
-    final hostCity = ListingMatchEngine._norm(ListingData.hostCity(listing));
-    final location = ListingMatchEngine._norm(ListingData.location(listing));
-    return hostCity.contains(native) ||
-        location.contains(native) ||
-        native.contains(hostCity);
   }
 
   static bool _locationMatch(Map<String, dynamic> listing, ViewerProfile viewer) {

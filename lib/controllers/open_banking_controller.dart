@@ -37,6 +37,7 @@ class OpenBankingVerifyResult {
 }
 
 /// Option B — secure AIS mapping controller (TrueLayer / GoCardless wrapper style).
+/// Phase 1: deferred financial-signal path — does not prove income or affordability.
 abstract final class OpenBankingController {
   static const _functionName = 'open-banking-verify';
   static const _stateKey = 'truecircle_open_banking_oauth_state';
@@ -120,7 +121,8 @@ abstract final class OpenBankingController {
     }
   }
 
-  /// Completes handshake — server read-once AIS evaluation, local trust mutation.
+  /// Completes handshake — server read-once AIS evaluation, then stamps
+  /// deferred financial-signal metadata (not income or affordability proof).
   static Future<OpenBankingVerifyResult> completeCallback({
     required String code,
     required String state,
@@ -138,7 +140,7 @@ abstract final class OpenBankingController {
     );
     if (fullName.isEmpty) {
       throw OpenBankingException(
-        'Add your full name in Profile before completing bank verification.',
+        'Add your full name in Profile before completing the banking check.',
       );
     }
 
@@ -207,7 +209,7 @@ abstract final class OpenBankingController {
     } catch (e) {
       debugPrint('TrueCircle open banking complete failed: $e');
       throw OpenBankingException(
-        'We could not verify your bank link right now. Try again shortly.',
+        'We could not complete your banking check right now. Try again shortly.',
       );
     } finally {
       await clearPendingHandshake();
@@ -307,12 +309,12 @@ abstract final class OpenBankingController {
     if (error != null && error.isNotEmpty) return error;
     if (status == 401) return 'Sign in required.';
     if (status == 422) {
-      return 'Your bank link could not be verified. Check your account and try again.';
+      return 'Your banking check could not be completed. Check your account and try again.';
     }
     if (status == 404) {
       return 'Open Banking service not deployed. Run: supabase functions deploy open-banking-verify';
     }
-    return 'Bank verification could not be completed. Try again.';
+    return 'Banking check could not be completed. Try again.';
   }
 
   static String _messageFromFunctionException(FunctionException e) {

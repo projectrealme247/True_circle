@@ -7,7 +7,6 @@ class IdentityProfile {
     this.contactPhoneE164 = '',
     this.prefersWhatsapp = false,
     this.motherTongue = '',
-    this.nativePlace = '',
     this.languages = const [],
   });
 
@@ -18,7 +17,6 @@ class IdentityProfile {
   final String contactPhoneE164;
   final bool prefersWhatsapp;
   final String motherTongue;
-  final String nativePlace;
   final List<String> languages;
 }
 

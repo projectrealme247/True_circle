@@ -40,7 +40,7 @@ final class DublinMarketConfig implements MarketConfig {
   String get tagline => 'Trusted home for Indians in Dublin';
 
   @override
-  int get seedVersion => 5;
+  int get seedVersion => 6;
 
   @override
   List<String> get enabledTowers => const ['Rent', 'Share'];
@@ -216,12 +216,9 @@ final class DublinMarketConfig implements MarketConfig {
   @override
   List<String> get profileStudentFundingOptions => const [
         'Family supported',
-        'Education loan (bank financed)',
+        'Education loan',
         'Self funded',
       ];
-
-  @override
-  String get profileNativePlaceHint => 'e.g. Hyderabad, Chennai';
 
   @override
   String get profileBudgetSubtitle => 'Monthly rent budget (€).';

@@ -1,0 +1,333 @@
+{
+  "meta": {
+    "version": "v1",
+    "code_modified": false,
+    "sources": [
+      "docs/uat/v1/implementation_file_inventory.md (cat 5 matching, cat 6 ranking)",
+      "docs/uat/v1/trust_signal_audit.md (pointer only; verified in source)",
+      "lib/utils/listing_match_engine.dart",
+      "lib/utils/marketplace_listing_pipeline.dart",
+      "lib/utils/weighted_listing_matcher.dart",
+      "lib/utils/viewer_profile.dart",
+      "lib/theme/trust_tier_design.dart",
+      "lib/utils/listing_data.dart",
+      "lib/services/applicant_dashboard_payload_builder.dart",
+      "lib/services/applicant_stream_payload_builder.dart",
+      "lib/utils/full_rental_applicant_scorer.dart",
+      "lib/models/applicant_trust_tier.dart"
+    ],
+    "surfaces": {
+      "seeker_browse_active_mode_explore": "MarketplaceListingPipeline -> ListingMatchEngine.rank/evaluate",
+      "landlord_applicant_dashboard": "ApplicantDashboardPayloadBuilder",
+      "landlord_applicant_streams": "ApplicantStreamPayloadBuilder",
+      "landlord_ip_applicant_scorer": "FullRentalApplicantScorer"
+    }
+  },
+  "seeker_feed_sort_order": {
+    "when_weighted_soft_filters_active_first": "preferenceScore descending",
+    "then": [
+      "inCircle true before false",
+      "quality_tier from trust-scaled percentage (>=50=2, >=25=1, else 0)",
+      "score descending (trust-scaled)"
+    ],
+    "score_formula": "finalScore = round(round(((hostMult + seekerMult) / 2) * compatibilityScore) * preArrivalListingMult)",
+    "trust_stage_multipliers": {
+      "anonymous": 0.4,
+      "casual": 0.7,
+      "socialVerified": 0.9,
+      "idVerified": 1.0
+    },
+    "in_circle_min_match_fraction": 0.75,
+    "pre_arrival_doc_upgrade_multiplier": 0.9,
+    "pre_arrival_all_students_listing_multiplier": 0.9
+  },
+  "active_mode_seeker_feed_summary": {
+    "signals_that_matter": [
+      "host TrustStage (host_trust_stage)",
+      "seeker TrustStage (+ pre-arrival docs upgrade when casual)",
+      "inCircle",
+      "isPreArrivalSeeker x listing student track (0.9 / hard exclude onCampusOnly)"
+    ],
+    "signals_that_do_not_matter": [
+      "trust_tier labels",
+      "grand badge",
+      "corporate badge",
+      "seeker LinkedIn fields",
+      "host_linkedin_badge / host_verified_badge when host_trust_stage set",
+      "host_pre_arrival_badge"
+    ],
+    "can_reorder_top_5": true,
+    "can_reorder_top_1": true
+  },
+  "signals": [
+    {
+      "id": "trust_tier",
+      "classification": {
+        "seeker_browse": "A",
+        "landlord_applicants": "C"
+      },
+      "seeker_browse": {
+        "where": "Not read by ListingMatchEngine / MarketplaceListingPipeline / WeightedListingMatcher",
+        "ranking_impact": "None",
+        "weight": null,
+        "can_promote_less_relevant": false,
+        "can_change_top_5": false,
+        "can_change_top_1": false
+      },
+      "landlord_applicants": {
+        "where": [
+          "ApplicantDashboardPayloadBuilder._dashboardSortScore",
+          "ApplicantDashboardPayloadBuilder applicant sort comparator",
+          "ApplicantStreamPayloadBuilder trust tier blocks"
+        ],
+        "ranking_impact": "trustBoost = sortPriority * 5 in composite; stream groups Sound then Grand then Just Landed; high-signal overallMatchScore replaces composite",
+        "weight": {
+          "sortPriority": { "sound": 3, "grand": 2, "justLanded": 1 },
+          "trustBoost": { "sound": 15, "grand": 10, "justLanded": 5 },
+          "shared_living_formula": "lifestyle*0.55 + compatibility*0.35 + trustBoost",
+          "independent_places_formula": "independent*0.50 + compatibility*0.40 + trustBoost"
+        },
+        "can_promote_less_relevant": true,
+        "can_change_top_5": true,
+        "can_change_top_1": true,
+        "why": "Tier boost and hard stream grouping can outrank lifestyle/compatibility"
+      }
+    },
+    {
+      "id": "TrustStage",
+      "classification": {
+        "seeker_browse": "C",
+        "landlord_applicants": "C"
+      },
+      "seeker_browse": {
+        "where": [
+          "ViewerProfile._resolveTrustStage / trustStage",
+          "ListingData.hostTrustStage",
+          "ListingMatchEngine.evaluate"
+        ],
+        "ranking_impact": "Averages host and seeker multipliers; scales compatibility into final score and percentage (quality tiers)",
+        "weight": {
+          "anonymous": 0.4,
+          "casual": 0.7,
+          "socialVerified": 0.9,
+          "idVerified": 1.0,
+          "combined": "(hostMult + seekerMult) / 2"
+        },
+        "can_promote_less_relevant": true,
+        "can_change_top_5": true,
+        "can_change_top_1": true,
+        "example": {
+          "seeker_mult": 0.7,
+          "listing_A": { "compat": 80, "host_mult": 1.0, "score": 68 },
+          "listing_B": { "compat": 95, "host_mult": 0.4, "score": 52 },
+          "result": "A ranks above B"
+        },
+        "why": "Higher host/seeker stage can lift lower-compatibility listings over higher-compat lower-trust listings"
+      },
+      "landlord_applicants": {
+        "where": "ApplicantTrustTier.fromTrustProfile stage fallback when trust_tier string absent",
+        "ranking_impact": "Maps stage>=3 to Sound, >=2 to Grand, else Just Landed",
+        "weight": "Indirect via trust_tier sortPriority",
+        "can_promote_less_relevant": true,
+        "can_change_top_5": true,
+        "can_change_top_1": true
+      }
+    },
+    {
+      "id": "inCircle",
+      "classification": {
+        "seeker_browse": "C",
+        "landlord_applicants": "A"
+      },
+      "seeker_browse": {
+        "where": [
+          "ViewerProfile.isInCircle",
+          "ListingMatchEngine.qualifiesForInCircle",
+          "ListingMatchEngine.rank sort"
+        ],
+        "ranking_impact": "Primary boolean sort key after optional weighted preferenceScore; before quality tier and score",
+        "weight": {
+          "network": "hostTrust.level >= seekerTrust.level AND shared circle marker",
+          "match_gate": "trust-scaled percentage >= 75 (inCircleMinMatchFraction 0.75)"
+        },
+        "can_promote_less_relevant": true,
+        "can_change_top_5": true,
+        "can_change_top_1": true,
+        "example": "Circle score 60 beats non-circle score 95",
+        "why": "Circle listings always sort above non-circle when preference scores tie or weighted sort inactive"
+      },
+      "landlord_applicants": {
+        "where": "Not used in inventored applicant dashboard/stream/IP scorers",
+        "ranking_impact": "None",
+        "weight": null,
+        "can_promote_less_relevant": false,
+        "can_change_top_5": false,
+        "can_change_top_1": false
+      }
+    },
+    {
+      "id": "grand_badge",
+      "field": "has_verified_grand_badge",
+      "classification": {
+        "seeker_browse": "A",
+        "landlord_applicants": "C"
+      },
+      "seeker_browse": {
+        "where": "Not in ListingMatchEngine",
+        "ranking_impact": "None",
+        "weight": null,
+        "can_promote_less_relevant": false,
+        "can_change_top_5": false,
+        "can_change_top_1": false
+      },
+      "landlord_applicants": {
+        "where": "FullRentalApplicantScorer.scoreApplicantGroup",
+        "ranking_impact": "Adds points if any co-applicant has flag",
+        "weight": 10,
+        "can_promote_less_relevant": true,
+        "can_change_top_5": true,
+        "can_change_top_1": true,
+        "surface": "Independent Places landlord applicant ranking only"
+      }
+    },
+    {
+      "id": "corporate_badge",
+      "field": "has_verified_corporate_email",
+      "classification": {
+        "seeker_browse": "A",
+        "landlord_applicants": "C"
+      },
+      "seeker_browse": {
+        "where": "Not in ListingMatchEngine",
+        "ranking_impact": "None",
+        "weight": null,
+        "can_promote_less_relevant": false,
+        "can_change_top_5": false,
+        "can_change_top_1": false
+      },
+      "landlord_applicants": {
+        "where": "FullRentalApplicantScorer.scoreApplicantGroup",
+        "ranking_impact": "Adds points if any co-applicant has flag",
+        "weight": 5,
+        "can_promote_less_relevant": true,
+        "can_change_top_5": true,
+        "can_change_top_1": true,
+        "surface": "Independent Places landlord applicant ranking only"
+      }
+    },
+    {
+      "id": "pre_arrival_documents",
+      "fields": [
+        "has_verified_pre_arrival_docs",
+        "onboarding_letter_verified",
+        "employment_contract_verified",
+        "relocation_letter_verified",
+        "isPreArrivalSeeker"
+      ],
+      "classification": {
+        "seeker_browse": "C",
+        "landlord_applicants": "A"
+      },
+      "seeker_browse": {
+        "where": [
+          "TrustTierDesign.effectiveSeekerTrustMultiplier / hasPreArrivalTrustUpgrade",
+          "ListingMatchEngine._preArrivalScoreMultiplier",
+          "ListingMatchEngine._studentTrackConflict"
+        ],
+        "ranking_impact": "Casual seeker with verified docs uses 0.9 seeker mult; pre-arrival seeker x0.9 on allStudents listings; hard exclude onCampusOnly",
+        "weight": {
+          "doc_upgrade_when_casual": 0.9,
+          "all_students_listing_mult": 0.9,
+          "on_campus_only": "hard_exclude"
+        },
+        "can_promote_less_relevant": true,
+        "can_change_top_5": true,
+        "can_change_top_1": true,
+        "note": "Uniform seekerMult upgrade alone does not reorder two listings for the same seeker; student-track x0.9 and host mult interaction can reorder"
+      },
+      "landlord_applicants": {
+        "where": "Not in inventored dashboard/stream/IP score formulas",
+        "ranking_impact": "None in inventored scorers",
+        "weight": null,
+        "can_promote_less_relevant": false,
+        "can_change_top_5": false,
+        "can_change_top_1": false
+      }
+    },
+    {
+      "id": "host_verification_signals",
+      "fields": [
+        "host_trust_stage",
+        "host_linkedin_badge",
+        "host_verified_badge",
+        "host_pre_arrival_badge",
+        "host_trust_multiplier"
+      ],
+      "classification": {
+        "seeker_browse_host_trust_stage": "C",
+        "seeker_browse_host_linkedin_verified_badges": "A_score_B_circle_fallback",
+        "seeker_browse_host_pre_arrival_badge": "A",
+        "landlord_applicants": "A"
+      },
+      "seeker_browse": {
+        "host_trust_stage": {
+          "where": "ListingData.hostTrustStage -> ListingMatchEngine.evaluate; ViewerProfile.isInCircle",
+          "ranking_impact": "Primary host multiplier for score; primary host stage for circle",
+          "weight": "TrustStage multipliers 0.4/0.7/0.9/1.0",
+          "classification": "C",
+          "can_promote_less_relevant": true,
+          "can_change_top_5": true,
+          "can_change_top_1": true
+        },
+        "host_verified_badge": {
+          "where_score": "Not read by ListingData.hostTrustStage (defaults missing stage to 1)",
+          "where_circle": "ViewerProfile._hostTrustStage fallback -> idVerified when host_trust_stage not int",
+          "classification": "A for score; B for circle fallback",
+          "can_change_top_5_when_stage_set": false,
+          "can_change_top_1_when_stage_set": false
+        },
+        "host_linkedin_badge": {
+          "where_score": "Not read by ListingData.hostTrustStage",
+          "where_circle": "ViewerProfile._hostTrustStage fallback -> socialVerified when host_trust_stage not int",
+          "classification": "A for score; B for circle fallback",
+          "can_change_top_5_when_stage_set": false,
+          "can_change_top_1_when_stage_set": false
+        },
+        "host_pre_arrival_badge": {
+          "ranking_impact": "None in evaluate/rank",
+          "classification": "A"
+        },
+        "host_trust_multiplier": {
+          "ranking_impact": "Accessor only; engine uses TrustStage.multiplier from stage",
+          "classification": "A"
+        }
+      },
+      "landlord_applicants": {
+        "ranking_impact": "None in inventored applicant scorers",
+        "classification": "A"
+      }
+    }
+  ],
+  "classification_table": [
+    { "signal": "trust_tier", "seeker_browse": "A", "landlord_applicants": "C" },
+    { "signal": "TrustStage", "seeker_browse": "C", "landlord_applicants": "C" },
+    { "signal": "inCircle", "seeker_browse": "C", "landlord_applicants": "A" },
+    { "signal": "grand_badge", "seeker_browse": "A", "landlord_applicants": "C" },
+    { "signal": "corporate_badge", "seeker_browse": "A", "landlord_applicants": "C" },
+    { "signal": "pre_arrival_documents", "seeker_browse": "C", "landlord_applicants": "A" },
+    { "signal": "host_trust_stage", "seeker_browse": "C", "landlord_applicants": "A" },
+    { "signal": "host_linkedin_verified_badges", "seeker_browse": "A/B", "landlord_applicants": "A" }
+  ],
+  "key_files": [
+    "lib/utils/marketplace_listing_pipeline.dart",
+    "lib/utils/listing_match_engine.dart",
+    "lib/utils/viewer_profile.dart",
+    "lib/theme/trust_tier_design.dart",
+    "lib/utils/listing_data.dart",
+    "lib/utils/weighted_listing_matcher.dart",
+    "lib/services/applicant_dashboard_payload_builder.dart",
+    "lib/services/applicant_stream_payload_builder.dart",
+    "lib/utils/full_rental_applicant_scorer.dart",
+    "lib/models/applicant_trust_tier.dart"
+  ]
+}

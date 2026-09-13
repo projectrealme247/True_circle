@@ -4,7 +4,7 @@ import '../../services/active_mode_service.dart';
 import '../../theme/app_typography.dart';
 import '../../core/theme/app_theme.dart' show AppColors;
 
-/// Persistent Explore | Hosting switch with cross-mode unread badges.
+/// Persistent Explore | Hosting | Applications switch with cross-mode badges.
 class ActiveModeSwitch extends StatelessWidget {
   const ActiveModeSwitch({
     super.key,
@@ -14,6 +14,9 @@ class ActiveModeSwitch extends StatelessWidget {
     required this.canHost,
     required this.onModeSelected,
     this.compact = false,
+    this.applicationsSelected = false,
+    this.applicationsCount = 0,
+    this.onApplicationsSelected,
   });
 
   final ActiveMode current;
@@ -22,11 +25,22 @@ class ActiveModeSwitch extends StatelessWidget {
   final bool canHost;
   final ValueChanged<ActiveMode> onModeSelected;
   final bool compact;
+  final bool applicationsSelected;
+  final int applicationsCount;
+  final VoidCallback? onApplicationsSelected;
+
+  static String applicationsLabel(int count) {
+    if (count <= 0) return 'Applications';
+    return 'Applications ($count)';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final showApplications = onApplicationsSelected != null && canSeek;
     if (!canSeek && !canHost) return const SizedBox.shrink();
-    if (canSeek && !canHost) return const SizedBox.shrink();
+    if (!showApplications && canSeek && !canHost) {
+      return const SizedBox.shrink();
+    }
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -41,23 +55,39 @@ class ActiveModeSwitch extends StatelessWidget {
           children: [
             if (canSeek)
               _Segment(
-                label: compact ? 'Explore' : 'Explore',
-                selected: current == ActiveMode.explore,
-                badgeCount: current == ActiveMode.hosting
+                label: 'Explore',
+                selected:
+                    !applicationsSelected && current == ActiveMode.explore,
+                badgeCount: !applicationsSelected &&
+                        current == ActiveMode.hosting
                     ? unread.seekerBadgeCount
                     : 0,
+                compact: compact,
                 onTap: () => onModeSelected(ActiveMode.explore),
               ),
             if (canSeek && canHost) const SizedBox(width: 2),
             if (canHost)
               _Segment(
-                label: compact ? 'Hosting' : 'Hosting',
-                selected: current == ActiveMode.hosting,
-                badgeCount: current == ActiveMode.explore
+                label: 'Hosting',
+                selected:
+                    !applicationsSelected && current == ActiveMode.hosting,
+                badgeCount: !applicationsSelected &&
+                        current == ActiveMode.explore
                     ? unread.hostBadgeCount
                     : 0,
+                compact: compact,
                 onTap: () => onModeSelected(ActiveMode.hosting),
               ),
+            if (showApplications) ...[
+              if (canSeek || canHost) const SizedBox(width: 2),
+              _Segment(
+                label: applicationsLabel(applicationsCount),
+                selected: applicationsSelected,
+                badgeCount: 0,
+                compact: compact,
+                onTap: onApplicationsSelected!,
+              ),
+            ],
           ],
         ),
       ),
@@ -71,12 +101,14 @@ class _Segment extends StatelessWidget {
     required this.selected,
     required this.badgeCount,
     required this.onTap,
+    this.compact = false,
   });
 
   final String label;
   final bool selected;
   final int badgeCount;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +119,10 @@ class _Segment extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 8 : 10,
+            vertical: compact ? 5 : 6,
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

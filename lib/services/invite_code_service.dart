@@ -4,8 +4,7 @@ import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../screens/auth_screen.dart';
-import '../utils/viewer_profile.dart';
-import 'trust_service.dart';
+import '../utils/profile_data.dart';
 
 /// Summary of a stored invite code.
 class InviteCodeRecord {
@@ -25,24 +24,34 @@ class InviteCodeRecord {
   bool get isExhausted => redemptions >= maxRedemptions;
 }
 
-/// Local invite codes for Track B pre-arrival contact (POC).
+/// Dormant local invite-code store. Seeker redemption was retired from Phase 1.
 abstract final class InviteCodeService {
   static const _storageKey = 'circlekey_invite_codes_v1';
   static const maxRedemptionsPerCode = 5;
 
-  /// Demo code seeded for local testing when no Stage 3 user exists yet.
+  /// Demo code seeded for local testing when no university-verified issuer exists yet.
   static const demoCode = 'DUBLIN-DEMO';
-  static const demoInviterId = 'demo-stage3-host';
+  static const demoInviterId = 'demo-university-host';
 
   static String get currentUserId =>
       AuthScreen.currentUserSession?['supabase_user_id']?.toString() ??
       AuthScreen.currentUserSession?['email']?.toString() ??
       'local-user';
 
-  /// Generates a shareable invite code for the current Stage 3 user.
+  /// University-verified members may mint invites (Track A method flags).
+  static bool canMintInviteCodes([Map<String, dynamic>? session]) {
+    final s = session ?? AuthScreen.currentUserSession;
+    if (s == null || s.isEmpty) return false;
+    if (s['light_trust_verified'] == true) return true;
+    return ProfileData.text(s['verified_university_email']).isNotEmpty;
+  }
+
+  /// Generates a shareable invite code for the current university-verified user.
   static Future<String> generateForCurrentUser() async {
-    if (TrustService.currentStage().level < TrustStage.idVerified.level) {
-      throw StateError('Only Stage 3 users can generate invite codes.');
+    if (!canMintInviteCodes()) {
+      throw StateError(
+        'Only university-verified users can generate invite codes.',
+      );
     }
 
     final userId = currentUserId;
@@ -59,7 +68,7 @@ abstract final class InviteCodeService {
 
   /// Active and exhausted codes created by the current user, newest first.
   static Future<List<InviteCodeRecord>> listForCurrentUser() async {
-    if (TrustService.currentStage().level < TrustStage.idVerified.level) {
+    if (!canMintInviteCodes()) {
       return const [];
     }
 

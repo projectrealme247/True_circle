@@ -6,12 +6,7 @@ import '../models/applicant_trust_tier.dart';
 
 import '../core/theme/app_theme.dart' show AppColors, AppTypography;
 
-import '../utils/viewer_profile.dart';
-
-
-
 /// Premium trust-tier labels + neutral badge capsule tokens.
-
 abstract final class TrustTierDesign {
 
   /// Neutral badge palette — single style for every tier surface.
@@ -25,20 +20,6 @@ abstract final class TrustTierDesign {
   static const trustScaleCapsulePadding =
 
       EdgeInsets.symmetric(horizontal: 11, vertical: 5);
-
-
-
-  static ApplicantTrustTier fromTrustStage(TrustStage stage) {
-
-    if (stage == TrustStage.idVerified) return ApplicantTrustTier.sound;
-
-    if (stage == TrustStage.socialVerified) return ApplicantTrustTier.grand;
-
-    return ApplicantTrustTier.justLanded;
-
-  }
-
-
 
   static String labelFor(ApplicantTrustTier tier) => switch (tier) {
 
@@ -71,60 +52,6 @@ abstract final class TrustTierDesign {
   static String trustScaleEmojiLabel(ApplicantTrustTier tier) =>
 
       '${emojiPrefixFor(tier)} ${labelFor(tier)}';
-
-
-
-  static String trustScaleLegendLabel(ApplicantTrustTier tier) =>
-
-      switch (tier) {
-
-        ApplicantTrustTier.justLanded =>
-
-          '🌱 Just Landed (Casual / Inbound)',
-
-        ApplicantTrustTier.grand => '☘️ Grand (Verified Intent)',
-
-        ApplicantTrustTier.sound => '💎 Sound (Vouched & Secured)',
-
-      };
-
-
-
-  /// Just Landed seekers with verified inbound docs evaluate at Grand (0.9x) weighting.
-
-  static const double preArrivalTrustUpgradeMultiplier = 0.9;
-
-
-
-  static double effectiveSeekerTrustMultiplier({
-
-    required TrustStage baseStage,
-
-    required bool hasVerifiedPreArrivalDocs,
-
-  }) {
-
-    if (baseStage == TrustStage.casual && hasVerifiedPreArrivalDocs) {
-
-      return preArrivalTrustUpgradeMultiplier;
-
-    }
-
-    return baseStage.multiplier;
-
-  }
-
-
-
-  static bool hasPreArrivalTrustUpgrade({
-
-    required TrustStage baseStage,
-
-    required bool hasVerifiedPreArrivalDocs,
-
-  }) =>
-
-      baseStage == TrustStage.casual && hasVerifiedPreArrivalDocs;
 
 
 

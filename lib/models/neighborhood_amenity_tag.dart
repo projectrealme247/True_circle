@@ -33,4 +33,30 @@ class NeighborhoodAmenityTag {
         : '${distanceKm.toStringAsFixed(1)} km';
     return '$emoji $name ($distance)';
   }
+
+  Map<String, dynamic> toJson() => {
+        'category': category.name,
+        'name': name,
+        'distance_km': distanceKm,
+        'emoji': emoji,
+      };
+
+  static NeighborhoodAmenityTag? fromJson(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    final name = raw['name']?.toString().trim() ?? '';
+    if (name.isEmpty) return null;
+    final categoryName = raw['category']?.toString() ?? '';
+    final category = NeighborhoodAmenityCategory.values.firstWhere(
+      (c) => c.name == categoryName,
+      orElse: () => NeighborhoodAmenityCategory.attraction,
+    );
+    final distance = (raw['distance_km'] as num?)?.toDouble() ?? 0;
+    final emoji = raw['emoji']?.toString().trim() ?? '📍';
+    return NeighborhoodAmenityTag(
+      category: category,
+      name: name,
+      distanceKm: distance,
+      emoji: emoji.isEmpty ? '📍' : emoji,
+    );
+  }
 }

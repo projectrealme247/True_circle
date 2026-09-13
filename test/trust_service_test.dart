@@ -4,7 +4,6 @@ import 'package:true_circle/screens/auth_screen.dart';
 import 'package:true_circle/services/invite_code_service.dart';
 import 'package:true_circle/services/trust_service.dart';
 import 'package:true_circle/utils/irish_university_domains.dart';
-import 'package:true_circle/utils/viewer_profile.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -31,9 +30,9 @@ void main() {
   });
 
   group('TrustService Dublin two-track', () {
-    test('Stage 3 via upgradeLightTrust unlocks contact', () async {
+    test('upgradeLightTrust unlocks contact via university flags', () async {
       AuthScreen.currentUserSession = {
-        'trust_stage': TrustStage.socialVerified.level,
+        'occupant_type': 'Students',
       };
 
       await TrustService.upgradeLightTrust(
@@ -41,48 +40,50 @@ void main() {
         verifiedEmail: 'student@ucdconnect.ie',
       );
 
-      expect(TrustService.currentStage(), TrustStage.idVerified);
+      final session = AuthScreen.currentUserSession!;
+      expect(session.containsKey('trust_stage'), isFalse);
+      expect(session.containsKey('identity_trust_tier'), isFalse);
+      expect(session['light_trust_verified'], isTrue);
+      expect(TrustService.canContact(), isTrue);
+      expect(session['verified_university_email'], contains('@'));
+    });
+
+    test('declaration unlocks pre-arrival contact', () async {
+      AuthScreen.currentUserSession = {
+        'occupant_type': 'Students',
+      };
+
+      await TrustService.submitPreArrivalStudentDeclaration();
+
+      expect(TrustService.preArrivalContactReady(), isTrue);
       expect(TrustService.canContact(), isTrue);
       expect(
-        AuthScreen.currentUserSession!['verified_university_email'],
-        contains('@'),
+        AuthScreen.currentUserSession!['pre_arrival_student'],
+        isTrue,
+      );
+      expect(
+        AuthScreen.currentUserSession!.containsKey('invite_code_verified'),
+        isFalse,
+      );
+      expect(
+        AuthScreen.currentUserSession!.containsKey('onboarding_letter_verified'),
+        isFalse,
       );
     });
 
-    test('Track B invite only does not unlock contact', () async {
+    test('legacy invite plus letter still unlocks contact', () async {
       AuthScreen.currentUserSession = {
-        'trust_stage': TrustStage.socialVerified.level,
+        'occupant_type': 'Students',
+        'invite_code_verified': true,
+        'onboarding_letter_verified': true,
       };
 
-      await TrustService.completeInviteCodeRedemption(
-        code: 'CK-TEST',
-        invitedByUserId: 'host-1',
-      );
-
-      expect(TrustService.currentStage(), TrustStage.socialVerified);
-      expect(TrustService.preArrivalContactReady(), isFalse);
-      expect(TrustService.canContact(), isFalse);
-    });
-
-    test('Track B invite plus letter unlocks contact at Stage 2', () async {
-      AuthScreen.currentUserSession = {
-        'trust_stage': TrustStage.socialVerified.level,
-      };
-
-      await TrustService.completeInviteCodeRedemption(
-        code: 'CK-TEST',
-        invitedByUserId: 'host-1',
-      );
-      await TrustService.submitOnboardingLetter(localPath: 'offer.pdf');
-
-      expect(TrustService.currentStage(), TrustStage.socialVerified);
       expect(TrustService.preArrivalContactReady(), isTrue);
       expect(TrustService.canContact(), isTrue);
     });
 
     test('upgradeLightTrust clears pre-arrival flags', () async {
       AuthScreen.currentUserSession = {
-        'trust_stage': TrustStage.socialVerified.level,
         'invite_code_verified': true,
         'onboarding_letter_verified': true,
         'pre_arrival_contact_ready': true,
@@ -94,13 +95,16 @@ void main() {
       );
 
       expect(AuthScreen.currentUserSession!['pre_arrival_contact_ready'], isNull);
-      expect(TrustService.currentStage(), TrustStage.idVerified);
+      expect(AuthScreen.currentUserSession!['pre_arrival_student'], isNull);
+      expect(
+        AuthScreen.currentUserSession!.containsKey('trust_stage'),
+        isFalse,
+      );
     });
 
-    test('upgradeCorporateDocument sets Grand tier metadata', () async {
+    test('upgradeCorporateDocument sets employment flags without trust fields', () async {
       AuthScreen.currentUserSession = {
         'full_name': 'Priya Sharma',
-        'trust_stage': TrustStage.casual.level,
       };
 
       await TrustService.upgradeCorporateDocument(
@@ -109,15 +113,15 @@ void main() {
       );
 
       final session = AuthScreen.currentUserSession!;
-      expect(session['trust_tier'], 'Grand');
+      expect(session.containsKey('trust_tier'), isFalse);
+      expect(session.containsKey('trust_stage'), isFalse);
+      expect(session.containsKey('identity_trust_tier'), isFalse);
       expect(session['employment_verified'], isTrue);
       expect(session['verification_track'], 'Corporate Track');
-      expect(TrustService.currentStage(), TrustStage.socialVerified);
     });
 
-    test('stampListingTrust sets pre-arrival badge', () {
+    test('stampListingTrust sets pre-arrival badge without host trust fields', () {
       AuthScreen.currentUserSession = {
-        'trust_stage': TrustStage.socialVerified.level,
         'invite_code_verified': true,
         'onboarding_letter_verified': true,
         'pre_arrival_contact_ready': true,
@@ -125,15 +129,29 @@ void main() {
 
       final stamped = TrustService.stampListingTrust({'title': 'Room'});
       expect(stamped['host_pre_arrival_badge'], isTrue);
-      expect(stamped['host_verified_badge'], isFalse);
-      expect(stamped['host_trust_multiplier'], 0.9);
+      expect(stamped.containsKey('host_trust_stage'), isFalse);
+      expect(stamped.containsKey('host_trust_multiplier'), isFalse);
+      expect(stamped.containsKey('host_verified_badge'), isFalse);
+    });
+
+    test('stampListingTrust pre-arrival badge ignores trust_stage', () {
+      AuthScreen.currentUserSession = {
+        'trust_stage': 3,
+        'invite_code_verified': true,
+        'onboarding_letter_verified': true,
+        'pre_arrival_contact_ready': true,
+      };
+
+      final stamped = TrustService.stampListingTrust({'title': 'Room'});
+      expect(stamped['host_pre_arrival_badge'], isTrue);
     });
   });
 
   group('InviteCodeService', () {
-    test('generate and list codes for Stage 3 user', () async {
+    test('generate and list codes for university-verified user', () async {
       AuthScreen.currentUserSession = {
-        'trust_stage': TrustStage.idVerified.level,
+        'light_trust_verified': true,
+        'verified_university_email': 'a***@ucd.ie',
         'email': 'host@example.com',
       };
 
@@ -144,6 +162,20 @@ void main() {
       expect(listed.length, 1);
       expect(listed.first.code, code);
       expect(listed.first.remaining, InviteCodeService.maxRedemptionsPerCode);
+    });
+
+    test('stage alone does not allow minting invite codes', () async {
+      AuthScreen.currentUserSession = {
+        'trust_stage': 3,
+        'email': 'host@example.com',
+      };
+
+      expect(InviteCodeService.canMintInviteCodes(), isFalse);
+      expect(
+        () => InviteCodeService.generateForCurrentUser(),
+        throwsA(isA<StateError>()),
+      );
+      expect(await InviteCodeService.listForCurrentUser(), isEmpty);
     });
   });
 }

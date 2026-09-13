@@ -8,39 +8,36 @@ class SeekerOnboardingStepTracker extends StatelessWidget {
     super.key,
     required this.current,
     this.onStepTap,
+    this.isSharedTrack = false,
   });
 
   final int current;
   final ValueChanged<int>? onStepTap;
+  final bool isSharedTrack;
 
-  static const _steps = ['Basics', 'Preferences', 'Destination'];
+  static const _ipSteps = ['Basics', 'Rental Plan', 'Destination'];
+  static const _sharedSteps = [
+    'Basics',
+    'Profile',
+    'Search',
+    'Location',
+  ];
 
   @override
   Widget build(BuildContext context) {
-    // Width is owned by [SeekerOnboardingShell] content band — fill parent.
+    final steps = isSharedTrack ? _sharedSteps : _ipSteps;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _SeekerStepLabel(
-          index: 0,
-          label: _steps[0],
-          state: _stepState(0),
-          onTap: _tapFor(0),
-        ),
-        const Expanded(child: _SeekerStepConnector()),
-        _SeekerStepLabel(
-          index: 1,
-          label: _steps[1],
-          state: _stepState(1),
-          onTap: _tapFor(1),
-        ),
-        const Expanded(child: _SeekerStepConnector()),
-        _SeekerStepLabel(
-          index: 2,
-          label: _steps[2],
-          state: _stepState(2),
-          onTap: _tapFor(2),
-        ),
+        for (var i = 0; i < steps.length; i++) ...[
+          if (i > 0) const Expanded(child: _SeekerStepConnector()),
+          _SeekerStepLabel(
+            index: i,
+            label: steps[i],
+            state: _stepState(i),
+            onTap: _tapFor(i),
+          ),
+        ],
       ],
     );
   }
@@ -104,7 +101,7 @@ class _SeekerStepLabel extends StatelessWidget {
           Text(
             '${index + 1} $label',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: active ? FontWeight.w700 : FontWeight.w500,
               color: textColor,
               height: 1.4,
@@ -143,7 +140,7 @@ class _SeekerStepConnector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 10),
+      padding: EdgeInsets.symmetric(horizontal: 6),
       child: Divider(
         height: 1,
         thickness: 1,

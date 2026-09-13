@@ -1,0 +1,766 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:56:47.086796Z",
+  "overall_pass": true,
+  "success_criteria": {
+    "marketplace_isolation_100pct": true,
+    "cross_marketplace_listings": 0,
+    "marketplace_bleed": 0,
+    "seekers_tested": 2,
+    "seekers_pass": 2
+  },
+  "summary": {
+    "total_matches": 83,
+    "cross_marketplace_count": 0,
+    "overall": "PASS"
+  },
+  "methodology": {
+    "active_mode": "explore",
+    "code_paths": [
+      "MarketplaceSpace.fromSession (marketplace routing from seeker session)",
+      "MarketplaceSpace.towerPropertyType (Share vs Rent tower token)",
+      "MarketplaceListingPipeline.runWithFilters (tower equality filter → weighted pool → ListingMatchEngine.rank)",
+      "ListingData.listingType / MarketplaceSpace.fromTowerPropertyType (classify returned listings)"
+    ],
+    "listing_corpus": {
+      "name": "SampleListingsDublin (local Dublin marketplace seed)",
+      "paths": [
+        "lib/data/sample_listings_dublin.dart",
+        "lib/data/sample_listings_dublin_v2.dart",
+        "lib/data/sample_listings_dublin_legacy.dart",
+        "lib/data/sample_listings_dublin_expansion.dart",
+        "lib/data/dublin_listing_builder.dart"
+      ],
+      "shared_living_count": 40,
+      "independent_places_count": 50,
+      "total": 90
+    },
+    "marketplace_determination": "Canonical tower = ListingData.listingType (listing_type → type → marketplace_category). Share = shared_living; Rent = independent_places. Feed isolation is tower equality only in MarketplaceListingPipeline.run (afterTower).",
+    "seeker_dataset": {
+      "status": "reconstructed",
+      "note": "Frozen UAT seeker JSON is not checked into the repo. Sentinel preference fields reconstructed from prior UAT chat artifact (SL-MARKET-01 / IP-MARKET-01) and mapped into app session keys.",
+      "source_seeker_ids": [
+        "SL-MARKET-01",
+        "IP-MARKET-01"
+      ]
+    }
+  },
+  "seekers": [
+    {
+      "seeker_id": "SL-MARKET-01",
+      "uat_scenario": "Marketplace Separation Validation — Shared Living Sentinel",
+      "marketplace_requested": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "tower_property_type": "Share",
+      "active_mode": "explore",
+      "marketplace_returned": "shared_living",
+      "matches_returned": 39,
+      "shared_living_count": 39,
+      "independent_places_count": 0,
+      "cross_marketplace_count": 0,
+      "marketplace_correct": "YES",
+      "returned_listing_ids": [
+        "dub-share-19",
+        "dub-share-37",
+        "dub-share-40",
+        "dub-share-05",
+        "dub-share-06",
+        "dub-share-15",
+        "dub-share-32",
+        "dub-share-10",
+        "dub-share-31",
+        "dub-share-12",
+        "dub-share-26",
+        "dub-share-01",
+        "dub-share-39",
+        "dub-share-25",
+        "dub-share-02",
+        "dub-share-24",
+        "dub-share-34",
+        "dub-share-23",
+        "dub-share-29",
+        "dub-share-07",
+        "dub-share-16",
+        "dub-share-21",
+        "dub-share-13",
+        "dub-share-20",
+        "dub-share-18",
+        "dub-share-14",
+        "dub-share-28",
+        "dub-share-30",
+        "dub-share-11",
+        "dub-share-09",
+        "dub-share-33",
+        "dub-share-27",
+        "dub-share-35",
+        "dub-share-36",
+        "dub-share-04",
+        "dub-share-22",
+        "dub-share-08",
+        "dub-share-17",
+        "dub-share-38"
+      ],
+      "bleed_listing_ids": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 39,
+        "ranked": 39,
+        "requires_onboarding": false
+      },
+      "classifications": [
+        {
+          "listing_id": "dub-share-19",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Ensuite · Rathmines · Luas commuter",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-37",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Private room · Sandymount DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-40",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Private room · Dalkey village",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-05",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Bed space · female · Dublin 4 Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-06",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Lime House · €800/person · multi-slot",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-15",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Immediate · male · Rathmines area",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-32",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Ensuite · Blanchardstown multi-modal",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-10",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Professional house · Sandyford",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-31",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Private room · Howth coastal",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-12",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Glass Bottle · sea view · Dublin 4",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-26",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Private room · Grand Canal Dock",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-01",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Female only · shared bed · Cherrywood",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-39",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Ensuite · Malahide DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-25",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Sound host · Sandyford Luas · professionals",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-02",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Male only · €700/person · Rialto",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-24",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Portobello room · multi-modal transit",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-34",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Private room · Chapelizod Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-23",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Male only · Stoneybatter Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-29",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Master room · Ballyfermot Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-07",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Ensuite double · female · Two Oaks D16",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-16",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Co-living · Dublin 16 · gym access",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-21",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Master room · Phibsborough bus links",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-13",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Family-friendly spare room · Lucan",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-20",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Twin share · Drumcondra DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-18",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Student-friendly · Cherrywood Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-14",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Twin room · UCD commute · Dundrum",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-28",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Twin share · Terenure",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-30",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Bed in shared room · Finglas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-11",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Budget bed · Dundalk · all-in",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-09",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Private room · veg kitchen · Rialto",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-33",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Twin share · Coolock students",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-27",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Ensuite · Raheny DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-35",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Ensuite · Tallaght Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-36",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Bed space · Temple Bar bus",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-04",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "All bills in · male · Dundalk DKIT",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-22",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Female only · Clontarf DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-08",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Ensuite for 2 · Lucan · WFH desk",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-17",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Tech corridor · Grand Canal Dock",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-share-38",
+          "marketplace": "shared_living",
+          "listing_type": "Share",
+          "title": "Master room · Rathfarnham family",
+          "is_cross_marketplace": false
+        }
+      ]
+    },
+    {
+      "seeker_id": "IP-MARKET-01",
+      "uat_scenario": "Marketplace Separation Validation — Independent Places Sentinel",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "tower_property_type": "Rent",
+      "active_mode": "explore",
+      "marketplace_returned": "independent_places",
+      "matches_returned": 44,
+      "shared_living_count": 0,
+      "independent_places_count": 44,
+      "cross_marketplace_count": 0,
+      "marketplace_correct": "YES",
+      "returned_listing_ids": [
+        "dub-rent-16",
+        "dub-rent-02",
+        "dub-rent-50",
+        "dub-rent-04",
+        "dub-rent-05",
+        "dub-rent-42",
+        "dub-rent-07",
+        "dub-rent-08",
+        "dub-rent-39",
+        "dub-rent-10",
+        "dub-rent-11",
+        "dub-rent-13",
+        "dub-rent-37",
+        "dub-rent-33",
+        "dub-rent-01",
+        "dub-rent-17",
+        "dub-rent-18",
+        "dub-rent-46",
+        "dub-rent-20",
+        "dub-rent-47",
+        "dub-rent-25",
+        "dub-rent-23",
+        "dub-rent-24",
+        "dub-rent-32",
+        "dub-rent-09",
+        "dub-rent-19",
+        "dub-rent-29",
+        "dub-rent-30",
+        "dub-rent-27",
+        "dub-rent-15",
+        "dub-rent-34",
+        "dub-rent-35",
+        "dub-rent-38",
+        "dub-rent-40",
+        "dub-rent-45",
+        "dub-rent-44",
+        "dub-rent-48",
+        "dub-rent-22",
+        "dub-rent-14",
+        "dub-rent-06",
+        "dub-rent-43",
+        "dub-rent-26",
+        "dub-rent-21",
+        "dub-rent-03"
+      ],
+      "bleed_listing_ids": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 44,
+        "ranked": 44,
+        "requires_onboarding": false
+      },
+      "classifications": [
+        {
+          "listing_id": "dub-rent-16",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed apartment · Dundrum Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-02",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Dublin 4 · sea proximity",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-50",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Smithfield Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-04",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Lucan · commuter belt",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-05",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed flat · Rialto D12",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-42",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Swords airport corridor",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-07",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Modern 2 bed · Dublin 16",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-08",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Studio · Grand Canal Dock",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-39",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Chapelizod riverside",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-10",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Dundrum shopping district",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-11",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed cottage · Lucan",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-13",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Affordable 1 bed · Rialto",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-37",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Studio · Blanchardstown retail",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-33",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Terenure quiet",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-01",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed apartment · Cherrywood · Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-17",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Cherrywood · new build",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-18",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Budget 1 bed · Lucan village",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-46",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Sandyford business park",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-20",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Portobello canal",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-47",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Citywest Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-25",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Phibsborough bus corridor",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-23",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Stoneybatter Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-24",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Drumcondra DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-32",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Studio · Raheny commuter",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-09",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed semi-D · Cherrywood",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-19",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Blackrock DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-29",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Rathmines student-friendly",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-30",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Rathmines · Luas · student top pick",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-27",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Budget 1 bed · Rialto bus",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Family 3 bed · Dublin 16",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-34",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Ballyfermot Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-35",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed · Finglas house",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-38",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "1 bed · Coolock student pad",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-40",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed · Tallaght family",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-45",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Studio · Walkinstown budget",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-44",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed · Artane family",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed · Palmerstown house",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-22",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "Studio · Dublin City Centre",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-14",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Dundalk town centre",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-06",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Dundalk · near DKIT",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-43",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "2 bed · Ballsbridge DART",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-26",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed · Ranelagh Luas",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-21",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed house · Clontarf",
+          "is_cross_marketplace": false
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "listing_type": "Rent",
+          "title": "3 bed house · Dundrum D14",
+          "is_cross_marketplace": false
+        }
+      ]
+    }
+  ]
+}

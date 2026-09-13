@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
@@ -13,6 +14,7 @@ import '../../models/listing_creation_field_keys.dart';
 import '../../models/listing_creation_form_models.dart';
 import '../../models/move_in_timing.dart';
 import '../../models/marketplace_space.dart';
+import '../../models/seeker_onboarding_enums.dart';
 import '../../models/neighborhood_amenity_tag.dart';
 import '../../services/neighborhood_amenities_service.dart';
 import '../../services/nominatim_forward.dart';
@@ -27,6 +29,7 @@ import '../../utils/city_area_match.dart';
 import '../../utils/listing_data.dart';
 import '../../utils/listing_smart_copy_generator.dart';
 import '../../utils/listing_strength_calculator.dart';
+import '../../utils/onboarding_language_inference.dart';
 import '../../utils/thousands_separator_formatter.dart';
 import '../../utils/profile_data.dart';
 import '../../utils/proximity_chip_keys.dart';
@@ -40,6 +43,7 @@ import '../../utils/irish_address_format.dart';
 import '../../utils/listing_area_resolution.dart';
 import '../gamified_form_wizard.dart';
 import '../listing_media_picker.dart';
+import '../onboarding/seeker/seeker_language_selection_section.dart';
 import '../shadcn_select.dart';
 import 'listing_creation_primitives.dart';
 import 'location_pin_field.dart';
@@ -71,12 +75,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   static const _dublinCenterLon = -6.26031;
   static const _standardMaxContentWidth = 720.0;
   static const _locationStepMaxContentWidth = 1140.0;
-  static const _stepCount = 3;
   static const demoEircodeHint = 'D02 X285';
 
   final _step1Key = GlobalKey<FormState>();
   final _step2Key = GlobalKey<FormState>();
   final _step3Key = GlobalKey<FormState>();
+  final _step4Key = GlobalKey<FormState>();
   final _descriptionFieldKey = GlobalKey();
   late final PageController _pageController;
 
@@ -84,73 +88,436 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   bool _optionalEnhancementsExpanded = false;
   bool _photoTipsExpanded = false;
   int _expandedRoomIndex = 0;
+  final Map<int, bool> _roomWasComplete = {};
+  /// Remounts room text fields after Copy Room 1 (initialValue keys).
+  int _roomFieldEpoch = 0;
+  /// Rooms step: show inline missing-fields banner after Continue tap.
+  bool _roomsStepContinueAttempted = false;
+  /// Page 3 multi-room listing wizard — which room's photos/title/description.
+  int _listingWizardRoomIndex = 0;
 
-  // Agreement
-  ListingAgreementType _agreementType = ListingAgreementType.longTerm;
+  // Agreement / tenure (shared TenurePreference tokens)
+  TenurePreference? _agreementType;
   DateTime? _availableFrom;
-  LandlordAvailabilityFlexibility _availabilityFlexibility =
-      LandlordAvailabilityFlexibility.exactDate;
+  LandlordAvailabilityFlexibility? _availabilityFlexibility;
   final _subletDurationController = TextEditingController();
   SubletDurationUnit _subletDurationUnit = SubletDurationUnit.years;
 
+  // Host identity (Independent Place — collected on listing, not host profile)
+  final _hostNameController = TextEditingController();
+
   // Category
   late String _type;
-  ListingPropertySubType _propertySubType = ListingPropertySubType.apartment;
-  bool _isFurnished = true;
+  ListingPropertySubType? _propertySubType;
+  bool? _isFurnished;
+  ListingPetsPolicy? _petsPolicy;
+  final Set<ListingParkingFeature> _parkingFeatures = {};
+  /// Shared Spaces Page 1 only — Parking Available / Not Available.
+  bool? _sharedParkingAvailable;
+  /// Independent Places Page 1 — Level 1 parking radio (default: no parking).
+  bool _ipParkingAvailable = false;
 
   // Financials
   final _titleController = TextEditingController();
   final _rentController = TextEditingController();
+  final _depositController = TextEditingController();
   String? _berRating;
 
   // Independent layout
-  int _bedrooms = 1;
-  int _bathrooms = 1;
+  int _bedrooms = 0;
+  int _bathrooms = 0;
 
   // Media
   List<String> _images = [];
   String? _video;
 
   // Shared dynamics
+  int _totalRoomsInProperty = 1;
   int _roomsToShare = 1;
   final List<SharedRoomSlot> _sharedRoomSlots = [SharedRoomSlot()];
   int _housemateCount = 1;
   FlatmateCohort? _householdCohort = FlatmateCohort.mixedCohort;
-  FlatmateCohort? _flatmateCohort = FlatmateCohort.mixedCohort;
   final Set<String> _householdLanguages = {};
+  String _householdPrimaryLanguage = '';
+  final Set<String> _householdSecondaryLanguages = {};
+  final Set<SharedHouseRule> _houseRules = {};
   bool _isOwnerOccupier = false;
 
-  SharedRoomArchitecture? get _primaryRoomArchitecture =>
-      _sharedRoomSlots.isEmpty ? null : _sharedRoomSlots.first.architecture;
+  /// Multi-room inventory: room profile collected per room (not household).
+  bool get _isMultiRoomInventory => _isShare && _roomsToShare > 1;
+
+  /// Shared Spaces: 4 steps. Independent Places: 3 steps.
+  int get _stepCount => _isShare ? 4 : 3;
+
+  /// Shared Spaces: location is step 4 (index 3). Entire Place: location is step 2.
+  bool get _isLocationWizardStep =>
+      _isShare ? _currentStep == 3 : _currentStep == 1;
+
+  List<String> get _wizardStepLabels => _isShare
+      ? const ['Property', 'Rooms', 'Household', 'Location']
+      : const ['Property', 'Location', 'Listing'];
+
+  SharedRoomSlot? get _primaryRoomSlot =>
+      _sharedRoomSlots.isEmpty ? null : _sharedRoomSlots.first;
 
   bool get _hasSharedBedRoom =>
       _sharedRoomSlots.any((s) => s.isSharedBed);
 
   static const _cohortSegmentLabels = {
-    FlatmateCohort.workingProfessionals: 'Working Professionals',
+    FlatmateCohort.workingProfessionals: 'Professionals',
     FlatmateCohort.students: 'Students',
     FlatmateCohort.mixedCohort: 'Mixed',
-    FlatmateCohort.families: 'Families',
   };
 
   static final _cohortEmojis = {
-    for (final c in FlatmateCohort.values) c: c.emoji,
+    FlatmateCohort.workingProfessionals: '💼',
+    FlatmateCohort.students: '🎓',
+    FlatmateCohort.mixedCohort: '🔀',
   };
 
-  void _setRoomsToShare(int count) {
-    final next = count.clamp(1, 6);
+  List<String> get _suggestedHouseholdLanguages =>
+      OnboardingLanguageInference.suggestedLanguagesFor(
+        _householdPrimaryLanguage,
+      );
+
+  void _setTotalRoomsInProperty(int count) {
+    final next = count.clamp(1, ListingCreationFormConstants.sharedSpacesMaxRooms);
     setState(() {
-      _roomsToShare = next;
-      while (_sharedRoomSlots.length < next) {
-        _sharedRoomSlots.add(SharedRoomSlot());
-      }
-      while (_sharedRoomSlots.length > next) {
-        _sharedRoomSlots.removeLast();
-      }
-      if (_expandedRoomIndex >= next) {
-        _expandedRoomIndex = next - 1;
+      _totalRoomsInProperty = next;
+      if (_roomsToShare > next) {
+        _applyRoomsToShare(next);
       }
     });
+  }
+
+  void _setRoomsToShare(int count) {
+    final capped = count.clamp(
+      1,
+      _totalRoomsInProperty.clamp(
+        1,
+        ListingCreationFormConstants.sharedSpacesMaxRooms,
+      ),
+    );
+    setState(() => _applyRoomsToShare(capped));
+  }
+
+  void _applyRoomsToShare(int next) {
+    _roomsToShare = next;
+    while (_sharedRoomSlots.length < next) {
+      _sharedRoomSlots.add(
+        SharedRoomSlot(
+          roomProfile: FlatmateCohort.mixedCohort,
+        ),
+      );
+    }
+    while (_sharedRoomSlots.length > next) {
+      _sharedRoomSlots.removeLast();
+    }
+    for (final slot in _sharedRoomSlots) {
+      // Mixed is a terminal default — no further profile action required.
+      slot.roomProfile ??= FlatmateCohort.mixedCohort;
+    }
+    _roomWasComplete.removeWhere((i, _) => i >= next);
+    if (_expandedRoomIndex >= next) {
+      _expandedRoomIndex = next - 1;
+    }
+    if (_listingWizardRoomIndex >= next) {
+      _listingWizardRoomIndex = (next - 1).clamp(0, next - 1);
+    }
+  }
+
+  bool _isRoomSlotComplete(SharedRoomSlot slot) {
+    return _validateSharedRoomInventory(slot, index: 0) == null;
+  }
+
+  /// Collapse readiness — subset of card fields (not costs). Distinct from
+  /// Continue validation so typing rent never mid-collapses the card.
+  bool _isRoomCardReadyToCollapse(SharedRoomSlot slot) {
+    final rentText = stripThousandsFormatting(slot.monthlyRent.trim());
+    if (rentText.isEmpty || !RegExp(r'^\d+$').hasMatch(rentText)) {
+      return false;
+    }
+    if ((int.tryParse(rentText) ?? 0) <= 0) return false;
+    final agreement = TenurePreference.fromStorage(slot.agreementTypeToken);
+    if (agreement == null || agreement == TenurePreference.flexible) {
+      return false;
+    }
+    if (agreement == TenurePreference.temporary &&
+        slot.temporaryDurationValue.trim().isEmpty) {
+      return false;
+    }
+    if (slot.availableFrom == null) return false;
+    final flex = LandlordAvailabilityFlexibility.parse(
+      slot.availabilityFlexibilityToken,
+    );
+    if (slot.availabilityFlexibilityToken == null ||
+        slot.availabilityFlexibilityToken!.isEmpty ||
+        !LandlordAvailabilityFlexibility.sharedSpacesValues.contains(flex)) {
+      return false;
+    }
+    // Suitable for always has a default; Shared Room needs current occupant.
+    if (slot.isSharedBed && slot.currentOccupant == null) return false;
+    if (slot.roomProfile == null) return false;
+    return true;
+  }
+
+  void _tryCollapseRoomCard(int index) {
+    final slot = _sharedRoomSlots[index];
+    final ready = _isRoomCardReadyToCollapse(slot);
+    final wasReady = _roomWasComplete[index] ?? false;
+    _roomWasComplete[index] = ready;
+    if (ready && !wasReady && _expandedRoomIndex == index) {
+      var nextIncomplete = -1;
+      for (var i = 0; i < _sharedRoomSlots.length; i++) {
+        if (i == index) continue;
+        if (!_isRoomSlotComplete(_sharedRoomSlots[i])) {
+          nextIncomplete = i;
+          break;
+        }
+      }
+      _expandedRoomIndex = nextIncomplete;
+    }
+  }
+
+  /// Chip/date changes may collapse immediately when the card becomes ready.
+  void _afterRoomChoiceChanged(int index) {
+    _tryCollapseRoomCard(index);
+  }
+
+  /// Text fields update state only — collapse on focus leave.
+  void _afterRoomTextChanged(int index) {
+    final ready = _isRoomCardReadyToCollapse(_sharedRoomSlots[index]);
+    if (!ready) _roomWasComplete[index] = false;
+  }
+
+  bool get _shouldShowOccupancyWarning {
+    if (!_housematesInteractedWith) return false;
+    final capacity = _totalRoomsInProperty - _roomsToShare;
+    return _housemateCount > capacity;
+  }
+
+  /// Visual in-page progress only — does not gate navigation alone.
+  double _sharedInPageProgress() {
+    if (!_isShare) return 0;
+    if (_currentStep == 0) {
+      var score = 0.0;
+      if (_propertySubType != null) score += 0.35;
+      if (_petsPolicy == ListingPetsPolicy.allowed ||
+          _petsPolicy == ListingPetsPolicy.notAllowed) {
+        score += 0.35;
+      }
+      if (_sharedParkingAvailable != null) score += 0.1;
+      if (_totalRoomsInProperty >= 1) score += 0.1;
+      if (_roomsToShare >= 1) score += 0.1;
+      return score.clamp(0.0, 1.0);
+    }
+    if (_currentStep == 1) {
+      if (_sharedRoomSlots.isEmpty) return 0.1;
+      final complete =
+          _sharedRoomSlots.where(_isRoomSlotComplete).length;
+      return (complete / _sharedRoomSlots.length).clamp(0.0, 1.0);
+    }
+    if (_currentStep == 2) {
+      var score = 0.0;
+      if (_smokingPolicy != null) score += 0.4;
+      score += 0.1; // languages optional-ish
+      if (_isMultiRoomInventory) {
+        final withPhotos =
+            _sharedRoomSlots.where((s) => s.images.isNotEmpty).length;
+        if (_sharedRoomSlots.isNotEmpty) {
+          score += 0.5 * (withPhotos / _sharedRoomSlots.length);
+        }
+      } else if (_images.isNotEmpty) {
+        score += 0.5;
+      }
+      return score.clamp(0.0, 1.0);
+    }
+    // Location step — coarse signal from resolvable pin.
+    return _hasResolvableLocation() ? 0.7 : 0.15;
+  }
+
+  bool get _sharedCurrentStepReady {
+    if (!_isShare) return true;
+    return switch (_currentStep) {
+      0 => _isSharedPropertyStepReady(),
+      1 => _isSharedRoomsStepReady(),
+      2 => _isSharedHouseholdListingReady(),
+      3 => _validateStep2() == null,
+      _ => true,
+    };
+  }
+
+  bool _isSharedPropertyStepReady() {
+    if (_propertySubType == null) return false;
+    if (_roomsToShare < 1 || _roomsToShare > _totalRoomsInProperty) {
+      return false;
+    }
+    return _sharedPetsParkingReady;
+  }
+
+  bool _isSharedRoomsStepReady() {
+    if (_sharedRoomSlots.isEmpty) return false;
+    return _sharedRoomSlots.every(_isRoomSlotComplete);
+  }
+
+  /// Shared Spaces Page 1 — pets required; parking is informational only.
+  bool get _sharedPetsParkingReady {
+    if (!_isShare) return true;
+    return _petsPolicy == ListingPetsPolicy.allowed ||
+        _petsPolicy == ListingPetsPolicy.notAllowed;
+  }
+
+  bool _isSharedHouseholdListingReady() {
+    if (_smokingPolicy == null) return false;
+    final minPhotos =
+        ListingCreationFormConstants.sharedSpacesMinPhotoCount;
+    if (_isMultiRoomInventory) {
+      for (final slot in _sharedRoomSlots) {
+        if (slot.images.length < minPhotos) return false;
+      }
+      return true;
+    }
+    if (_images.length < minPhotos) return false;
+    return true;
+  }
+
+  String _plainListingDescription(String raw) =>
+      ListingSmartCopyGenerator.stripMarkdown(raw);
+
+  void _copyRoom1ToAllRooms() {
+    if (_sharedRoomSlots.length < 2) return;
+    final source = _sharedRoomSlots.first;
+    setState(() {
+      _roomFieldEpoch++;
+      for (var i = 1; i < _sharedRoomSlots.length; i++) {
+        final slot = _sharedRoomSlots[i];
+        slot.roomKind = source.roomKind;
+        slot.bathroomType = source.bathroomType;
+        slot.roomProfile = source.roomProfile;
+        slot.requiredOccupant = source.requiredOccupant;
+        slot.tenantGender = source.tenantGender;
+        slot.occupantType = source.occupantType;
+        slot.electricityCost = source.electricityCost;
+        slot.binsCost = source.binsCost;
+        slot.internetCost = source.internetCost;
+        slot.electricityIncluded = source.electricityIncluded;
+        slot.binsIncluded = source.binsIncluded;
+        slot.internetIncluded = source.internetIncluded;
+        slot.agreementTypeToken = source.agreementTypeToken;
+        slot.temporaryDurationValue = source.temporaryDurationValue;
+        slot.temporaryDurationUnit = source.temporaryDurationUnit;
+        slot.availabilityFlexibilityToken =
+            source.availabilityFlexibilityToken;
+        // Do not copy: monthlyRent, availableFrom, currentOccupant.
+        _roomWasComplete[i] = false;
+      }
+      // Keep first incomplete room expanded so landlord can fill rent/date.
+      var expandAt = -1;
+      for (var i = 0; i < _sharedRoomSlots.length; i++) {
+        if (!_isRoomSlotComplete(_sharedRoomSlots[i])) {
+          expandAt = i;
+          break;
+        }
+      }
+      _expandedRoomIndex = expandAt;
+    });
+    _message(
+      'Copied Room 1 settings to all rooms. Add rent and available-from for each.',
+    );
+  }
+
+  List<String> _sharedRoomMissingRequiredKeys(SharedRoomSlot slot) {
+    final missing = <String>[];
+    final rentText = stripThousandsFormatting(slot.monthlyRent.trim());
+    if (rentText.isEmpty ||
+        !RegExp(r'^\d+$').hasMatch(rentText) ||
+        (int.tryParse(rentText) ?? 0) <= 0) {
+      missing.add('rent');
+    }
+    final agreement = TenurePreference.fromStorage(slot.agreementTypeToken);
+    if (agreement == null ||
+        agreement == TenurePreference.flexible ||
+        (agreement == TenurePreference.temporary &&
+            slot.temporaryDurationValue.trim().isEmpty)) {
+      missing.add('lease');
+    }
+    if (slot.availableFrom == null) {
+      missing.add('availableFrom');
+    }
+    final flex = LandlordAvailabilityFlexibility.parse(
+      slot.availabilityFlexibilityToken,
+    );
+    if (slot.availabilityFlexibilityToken == null ||
+        slot.availabilityFlexibilityToken!.isEmpty ||
+        !LandlordAvailabilityFlexibility.sharedSpacesValues.contains(flex)) {
+      missing.add('flexibility');
+    }
+    return missing;
+  }
+
+  int _sharedRoomMissingRequiredCount(SharedRoomSlot slot) =>
+      _sharedRoomMissingRequiredKeys(slot).length;
+
+  bool _sharedRoomFieldRequired(SharedRoomSlot slot, String key) =>
+      _roomsStepContinueAttempted &&
+      _sharedRoomMissingRequiredKeys(slot).contains(key);
+
+  Widget _sharedRequiredFieldWrap({
+    required bool showError,
+    required Widget child,
+  }) {
+    if (!showError) return child;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE53935), width: 1.5),
+          ),
+          child: child,
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Required',
+          style: TextStyle(
+            fontSize: 11,
+            fontStyle: FontStyle.italic,
+            color: Color(0xFFE53935),
+            height: 1.2,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _syncHouseholdLanguagesFromSeekerUi() {
+    _householdLanguages
+      ..clear()
+      ..add('English');
+    if (_householdPrimaryLanguage.trim().isNotEmpty &&
+        _householdPrimaryLanguage.toLowerCase() != 'english') {
+      _householdLanguages.add(_householdPrimaryLanguage.trim());
+    }
+    _householdLanguages.addAll(_householdSecondaryLanguages);
+  }
+
+  void _hydrateHouseholdLanguages(Iterable<String> langs) {
+    _householdLanguages
+      ..clear()
+      ..addAll(langs);
+    _householdPrimaryLanguage = '';
+    _householdSecondaryLanguages.clear();
+    for (final lang in langs) {
+      final trimmed = lang.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.toLowerCase() == 'english') continue;
+      if (_householdPrimaryLanguage.isEmpty) {
+        _householdPrimaryLanguage = trimmed;
+      } else {
+        _householdSecondaryLanguages.add(trimmed);
+      }
+    }
   }
 
   // Shared monthly costs (per person)
@@ -173,12 +540,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   bool _sharedCostsShowErrors = false;
   bool _rentShowError = false;
   String? _rentErrorText;
+  bool _depositShowError = false;
+  String? _depositErrorText;
   bool _locationShowErrors = false;
   bool _titleShowError = false;
   String? _autoDraftedTitle;
   String? _autoDraftedDescription;
   final _sharedCostsSectionKey = GlobalKey();
   final _rentSectionKey = GlobalKey();
+  final _depositSectionKey = GlobalKey();
   final _locationPanelKey = GlobalKey();
   final _titleFieldKey = GlobalKey();
   double? _resolvedLatitude;
@@ -213,21 +583,28 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   bool _amenitiesEnrichmentInFlight = false;
   bool _showMoreLocalAmenities = false;
 
-  bool _secureBikeStorage = false;
-
   // Lifestyle
   bool _smokingAllowed = false;
-  bool _petsAllowed = false;
+  ListingSmokingPolicy? _smokingPolicy = ListingSmokingPolicy.noSmoking;
   bool _vegetarianKitchen = false;
   bool _wfhFriendly = false;
+  bool _descriptionEditorExpanded = false;
+  bool _titleEditorExpanded = false;
+  bool _housematesInteractedWith = false;
+
+  /// Listing Accountability Phase 1 — required before Publish / Save.
+  bool _listingAuthorizationConfirmed = false;
 
   // Description
   final _descriptionController = TextEditingController();
   bool _locationPrefillLocked = false;
   bool _categoryPrefillLocked = false;
-  bool _sharedProfilePrefillLocked = false;
   bool _rulesPrefillLocked = false;
   bool _furnishingPrefillLocked = false;
+
+  /// Committed listing type drives the field set. Pending selection only
+  /// highlights chips until Continue (Shared room must not navigate immediately).
+  String? _pendingListingType;
 
   List<String> get _enabledPropertyTypes => MarketConfig.current.enabledTowers;
 
@@ -236,19 +613,27 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
   bool get _isShare => _activeSpace == MarketplaceSpace.sharedSpace;
 
+  bool get _listingTypeChipIsShare {
+    final token = _pendingListingType ?? _type;
+    return MarketplaceSpace.fromTowerPropertyType(token) ==
+        MarketplaceSpace.sharedSpace;
+  }
+
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
     _type = _enabledPropertyTypes.first;
+    _seedHostNameFromProfile();
     if (widget.initialListing != null) {
       _hydrateFromListing(widget.initialListing!);
-      _hydrateInheritedPrefill(widget.initialListing!);
+      // Profile inheritance banners/locks: Shared Living prefill only.
+      if (_shouldApplyProfileInheritance(widget.initialListing!)) {
+        _hydrateInheritedPrefill(widget.initialListing!);
+      }
       _finalizeProfileDraftLocationSeed();
-    } else {
-      _locationController.text = MarketConfig.current.defaultProfileLocation;
-      _seedHouseholdLanguagesFromProfile();
     }
+    // Independent Place blank create: no location/language/profile defaults.
     if (_proximityDraft.transportLine.isNotEmpty) {
       _proximityResolved = true;
     }
@@ -276,6 +661,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         raw.containsKey('prefill_household_languages');
   }
 
+  /// Shared Living profile drafts only — never Independent Place inheritance.
+  bool _shouldApplyProfileInheritance(Map<String, dynamic> raw) {
+    final mode = ProfileData.text(raw['prefill_listing_mode']).toLowerCase();
+    return mode == 'shared_space';
+  }
+
   void _finalizeProfileDraftLocationSeed() {
     if (!_isProfileDraft(widget.initialListing)) return;
     _addressSearchController.clear();
@@ -286,16 +677,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     }
   }
 
-  void _seedHouseholdLanguagesFromProfile() {
+  void _seedHostNameFromProfile() {
     final session = AuthScreen.currentUserSession;
     if (session == null) return;
-    final langs = ProfileData.languageList(session['spoken_languages']);
-    if (langs.isEmpty) {
-      final mother = ProfileData.text(session['mother_tongue']);
-      if (mother.isNotEmpty) langs.add(mother);
-    }
-    if (langs.isNotEmpty) {
-      _householdLanguages.addAll(langs);
+    final name = ProfileData.text(session['full_name']);
+    if (name.isNotEmpty) {
+      _hostNameController.text = name;
     }
   }
 
@@ -303,8 +690,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   void dispose() {
     _pageController.dispose();
     _subletDurationController.dispose();
+    _hostNameController.dispose();
     _titleController.dispose();
     _rentController.dispose();
+    _depositController.dispose();
     _electricityCostController.dispose();
     _binsCostController.dispose();
     _internetCostController.dispose();
@@ -333,6 +722,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     _rentController.text = formatThousandsForInput(
       _stripRentForInput(ListingData.price(item)),
     );
+    final storedDeposit = ListingData.text(item['security_deposit']);
+    if (storedDeposit.isNotEmpty) {
+      _depositController.text = formatThousandsForInput(
+        _stripRentForInput(storedDeposit),
+      );
+    }
     _locationController.text = ListingData.location(item);
     _eircodeController.text = ProfileData.text(
       item[ListingCreationFieldKeys.eircode] ?? item['eircode'],
@@ -366,9 +761,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     _images = List<String>.from(ListingData.imageDataUris(item));
     _video = ListingData.videoDataUri(item);
 
-    final agreement = ProfileData.text(item['agreement_type']);
-    if (agreement == 'temporary') {
-      _agreementType = ListingAgreementType.temporary;
+    final agreement = TenurePreference.fromListing(item);
+    if (agreement != null) {
+      // Independent Place listings no longer offer Flexible → Long-Term.
+      _agreementType = (!_isShare && agreement == TenurePreference.flexible)
+          ? TenurePreference.longTerm
+          : agreement;
     }
 
     final availableRaw = item['available_from'];
@@ -376,6 +774,13 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       _availableFrom = DateTime.tryParse(availableRaw);
     }
     _availabilityFlexibility = LandlordAvailabilityFlexibility.fromListing(item);
+    // Independent Place: legacy Fixed / Exact Date → Flexible.
+    if (!_isShare) {
+      _availabilityFlexibility =
+          LandlordAvailabilityFlexibility.migrateIndependentPlace(
+        _availabilityFlexibility!,
+      );
+    }
 
     _subletDurationController.text =
         ProfileData.text(item['sublet_duration_value']);
@@ -404,7 +809,25 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     _bedrooms = _parseBedCount(ListingData.bedrooms(item), fallback: 1);
     _bathrooms = _parseBedCount(ListingData.bathrooms(item), fallback: 1);
-    _secureBikeStorage = ListingData.hasBikeStorage(item);
+    _parkingFeatures
+      ..clear()
+      ..addAll(ListingParkingFeature.parseFeatures(item));
+    if (_parkingFeatures.isEmpty && ListingData.hasBikeStorage(item)) {
+      _parkingFeatures.add(ListingParkingFeature.bikeParking);
+    }
+    if (_isShare) {
+      final explicitAvailable = item[ListingCreationFieldKeys.parkingAvailable];
+      if (explicitAvailable is bool) {
+        _sharedParkingAvailable = explicitAvailable;
+      } else {
+        _sharedParkingAvailable = _parkingFeatures.isNotEmpty;
+      }
+      if (_sharedParkingAvailable == false) {
+        _parkingFeatures.clear();
+      }
+    } else {
+      _ipParkingAvailable = _parkingFeatures.isNotEmpty;
+    }
 
     final archRaw = ProfileData.text(item['shared_room_architecture']);
     final sharedRoomsRaw = item['shared_rooms'];
@@ -416,7 +839,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
               .whereType<Map>()
               .map((e) => SharedRoomSlot.fromJson(Map<String, dynamic>.from(e))),
         );
-      _roomsToShare = _sharedRoomSlots.length.clamp(1, 6);
+      _roomsToShare = _sharedRoomSlots.length.clamp(
+        1,
+        ListingCreationFormConstants.sharedSpacesMaxRooms,
+      );
     } else {
       final legacyArch = _parseRoomArchitecture(archRaw) ??
           _roomArchitectureFromLegacy(item);
@@ -433,7 +859,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                   TargetTenantPreference.noPreference,
             ),
           );
-        _roomsToShare = (item['rooms_to_share'] as num?)?.toInt().clamp(1, 6) ?? 1;
+        _roomsToShare = (item['rooms_to_share'] as num?)
+                ?.toInt()
+                .clamp(1, ListingCreationFormConstants.sharedSpacesMaxRooms) ??
+            1;
         while (_sharedRoomSlots.length < _roomsToShare) {
           _sharedRoomSlots.add(SharedRoomSlot());
         }
@@ -458,11 +887,37 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     }
 
     final cohortRaw = ProfileData.text(item['flatmate_cohort']);
-    _flatmateCohort = _parseFlatmateCohort(cohortRaw);
+    final parsedCohort = _parseFlatmateCohort(cohortRaw);
+    if (parsedCohort != null &&
+        FlatmateCohort.sharedSpacesValues.contains(parsedCohort)) {
+      _householdCohort = parsedCohort;
+    }
 
-    _householdLanguages
-      ..clear()
-      ..addAll(ProfileData.languageList(item['languages_spoken']));
+    _hydrateHouseholdLanguages(ProfileData.languageList(item['languages_spoken']));
+
+    final houseRulesRaw = item['house_rules'] ?? item['house_rule_selections'];
+    _houseRules.clear();
+    if (houseRulesRaw is List) {
+      for (final entry in houseRulesRaw) {
+        final rule = SharedHouseRule.fromStorage(entry?.toString());
+        if (rule != null) _houseRules.add(rule);
+      }
+    }
+
+    final totalRooms = item['total_rooms_in_property'] ?? item['total_rooms'];
+    if (totalRooms is num) {
+      _totalRoomsInProperty = totalRooms
+          .toInt()
+          .clamp(1, ListingCreationFormConstants.sharedSpacesMaxRooms);
+    } else {
+      _totalRoomsInProperty = _roomsToShare.clamp(
+        1,
+        ListingCreationFormConstants.sharedSpacesMaxRooms,
+      );
+    }
+    if (_roomsToShare > _totalRoomsInProperty) {
+      _totalRoomsInProperty = _roomsToShare;
+    }
 
     _electricityCostController.text =
         ProfileData.text(item['monthly_electricity_cost']);
@@ -486,11 +941,31 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           : null,
     );
     _proximityEditing = _proximityDraft.manualEdit;
+    _hydrateProximitySnapshotFromDraft();
     _syncProximityControllers();
     _loadCustomProximityRows();
 
     _smokingAllowed = ListingData.smokingAllowed(item);
-    _petsAllowed = !_lifestyleFlags(item).contains('no_pets');
+    _smokingPolicy = ListingSmokingPolicy.fromStorage(
+          ProfileData.text(item[ListingSmokingPolicy.listingKey]),
+        ) ??
+        (_smokingAllowed
+            ? ListingSmokingPolicy.smokingAllowed
+            : ListingSmokingPolicy.noSmoking);
+    _petsPolicy = ListingPetsPolicy.fromStorage(
+          ProfileData.text(item[ListingCreationFieldKeys.petsPolicy]),
+        ) ??
+        (!_lifestyleFlags(item).contains('no_pets') &&
+                item['pets_allowed'] != false
+            ? ListingPetsPolicy.allowed
+            : ListingPetsPolicy.notAllowed);
+    if (_isShare && _petsPolicy == ListingPetsPolicy.caseByCase) {
+      _petsPolicy = null;
+    }
+    final hostFromListing = ListingData.hostName(item);
+    if (hostFromListing.isNotEmpty && hostFromListing != 'Guest host') {
+      _hostNameController.text = hostFromListing;
+    }
     _vegetarianKitchen =
         _lifestyleFlags(item).contains('vegetarian_household');
     final schedule = ListingData.scheduleType(item);
@@ -517,19 +992,21 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       raw['prefill_household_languages'],
     );
     if (prefillLanguages.isNotEmpty) {
-      _householdLanguages
-        ..clear()
-        ..addAll(prefillLanguages);
-      _sharedProfilePrefillLocked = true;
+      _hydrateHouseholdLanguages(prefillLanguages);
     }
 
     final rules = ProfileData.languageList(raw['prefill_house_rules']);
     if (rules.isNotEmpty) {
       _rulesPrefillLocked = true;
       _smokingAllowed = rules.contains('Smoking allowed');
-      _petsAllowed = rules.contains('Pets welcome');
+      _smokingPolicy = _smokingAllowed
+          ? ListingSmokingPolicy.smokingAllowed
+          : ListingSmokingPolicy.noSmoking;
+      _petsPolicy = rules.contains('Pets welcome')
+          ? ListingPetsPolicy.allowed
+          : ListingPetsPolicy.notAllowed;
       _vegetarianKitchen = rules.contains('Veg kitchen');
-      _wfhFriendly = rules.contains('WFH friendly');
+      // WFH removed from Shared Spaces onboarding — ignore legacy prefill.
     }
 
     final household = raw['prefill_household_makeup'];
@@ -538,14 +1015,13 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       final occupants = householdMap['group_size'] ?? householdMap['current_occupants'];
       if (occupants is int && occupants > 0) {
         _housemateCount = occupants.clamp(1, 12);
-        _sharedProfilePrefillLocked = true;
       }
       final occupantType = ProfileData.text(householdMap['occupant_type']).toLowerCase();
       if (occupantType.contains('student')) {
-        _flatmateCohort = FlatmateCohort.students;
+        _householdCohort = FlatmateCohort.students;
       } else if (occupantType.contains('professional') ||
           occupantType.contains('working')) {
-        _flatmateCohort = FlatmateCohort.workingProfessionals;
+        _householdCohort = FlatmateCohort.workingProfessionals;
       }
     }
 
@@ -622,10 +1098,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     if (_hideExactAddress) {
       return _publicLocationPreviewLabel();
     }
+    // Property Area is the matching source of truth. Optional street text is
+    // stored separately as property_location_identifier — never block publish
+    // on a partial street value like "9".
+    final area = _locationController.text.trim();
+    if (area.isNotEmpty) return area;
+    final public = _publicLocationPreviewLabel();
+    if (public.isNotEmpty) return public;
     final street = _locationIdentifierController.text.trim();
-    if (street.isNotEmpty) return street;
-    final gpsLabel = _locationController.text.trim();
-    if (gpsLabel.isNotEmpty) return gpsLabel;
+    if (street.length >= 2) return street;
     return _selectedAddress?.displayLabel ?? '';
   }
 
@@ -830,6 +1311,11 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     final cellKey = ProximityResolutionCache.keyFor(lat, lon);
     final cachedGeocode = ProximityResolutionCache.getGeocode(cellKey);
     if (cachedGeocode != null) {
+      _logLocationPerf('reverse_geocode_end', {
+        'ms': 0,
+        'cacheHit': true,
+        'fromGps': fromGps,
+      });
       if (!mounted || generation != _proximityGeneration) return;
       setState(
         () => _applyResolvedAddressSuggestion(cachedGeocode, fromGps: fromGps),
@@ -837,19 +1323,35 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       return;
     }
 
+    _logLocationPerf('reverse_geocode_start', {'fromGps': fromGps});
+    final swGeo = Stopwatch()..start();
     final suggestion = await EircodeLookupService.resolveFromCoordinates(
       lat,
       lon,
     );
+    swGeo.stop();
     if (!mounted || generation != _proximityGeneration) return;
     if (suggestion != null) {
       ProximityResolutionCache.putGeocode(cellKey, suggestion);
+      _logLocationPerf('reverse_geocode_end', {
+        'ms': swGeo.elapsedMilliseconds,
+        'cacheHit': false,
+        'source': 'eircode_lookup',
+        'fromGps': fromGps,
+      });
       setState(
         () => _applyResolvedAddressSuggestion(suggestion, fromGps: fromGps),
       );
       return;
     }
     final address = await NominatimForward.reverseGeocode(lat, lon);
+    _logLocationPerf('reverse_geocode_end', {
+      'ms': swGeo.elapsedMilliseconds,
+      'cacheHit': false,
+      'source': 'nominatim_forward_fallback',
+      'ok': address != null,
+      'fromGps': fromGps,
+    });
     if (!mounted || generation != _proximityGeneration) return;
     setState(() {
       final cleaned = address != null
@@ -888,17 +1390,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       return SharedRoomArchitecture.privateSharedBath;
     }
     return null;
-  }
-
-  TargetTenantPreference? _tenantPrefFromLegacy(Map<String, dynamic> item) {
-    final bachelor = ProfileData.text(item['bachelorPreference']).toLowerCase();
-    if (bachelor.contains('girl') || bachelor.contains('female')) {
-      return TargetTenantPreference.femaleOnly;
-    }
-    if (bachelor.contains('boy') || bachelor.contains('male')) {
-      return TargetTenantPreference.maleOnly;
-    }
-    return TargetTenantPreference.noPreference;
   }
 
   Set<String> _lifestyleFlags(Map<String, dynamic> item) {
@@ -986,6 +1477,22 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             : '';
   }
 
+  /// Restores ephemeral discovery fields from the persisted proximity draft.
+  void _hydrateProximitySnapshotFromDraft() {
+    _profileGroceries = List<NearbyGroceryOption>.from(_proximityDraft.groceries);
+    _extraProximityTransit =
+        List<NearbyExtraTransit>.from(_proximityDraft.extraTransit);
+    _neighborhoodAmenityTags =
+        List<NeighborhoodAmenityTag>.from(_proximityDraft.lifestyleTags);
+    _collegeSchool = _proximityDraft.collegeSchool;
+    _collegeWalkMin = _proximityDraft.collegeWalkMin > 0
+        ? _proximityDraft.collegeWalkMin
+        : null;
+    _gpClinic = _proximityDraft.gpClinic;
+    _gpWalkMin =
+        _proximityDraft.gpWalkMin > 0 ? _proximityDraft.gpWalkMin : null;
+  }
+
   void _applyProximityFromControllers() {
     _proximityDraft.transportLine = _transportLineController.text.trim();
     _proximityDraft.transportWalkMin =
@@ -1003,12 +1510,76 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         .map((row) => row.toPoint())
         .where((p) => p.name.isNotEmpty)
         .toList();
+    _proximityDraft.groceries =
+        List<NearbyGroceryOption>.from(_profileGroceries);
+    _proximityDraft.extraTransit =
+        List<NearbyExtraTransit>.from(_extraProximityTransit);
+    _proximityDraft.lifestyleTags =
+        List<NeighborhoodAmenityTag>.from(_neighborhoodAmenityTags);
+    _proximityDraft.collegeSchool = _collegeSchool.trim();
+    _proximityDraft.collegeWalkMin = _collegeWalkMin ?? 0;
+    _proximityDraft.gpClinic = _gpClinic.trim();
+    _proximityDraft.gpWalkMin = _gpWalkMin ?? 0;
   }
 
   void _onStepActivated(int step) {
+    if (_isShare) {
+      // Generate listing copy when entering Household + Listing (step 3).
+      if (step == 2) {
+        if (_isMultiRoomInventory) {
+          _listingWizardRoomIndex =
+              _listingWizardRoomIndex.clamp(0, _sharedRoomSlots.length - 1);
+        }
+        _generateSmartListingCopy();
+        if (_isMultiRoomInventory) {
+          _syncListingWizardFromSlot(_listingWizardRoomIndex);
+        }
+      }
+      return;
+    }
     if (step != 2) return;
     _applyProximityFromControllers();
     _generateSmartListingCopy();
+  }
+
+  void _persistListingWizardToSlot(int index) {
+    if (!_isShare || !_isMultiRoomInventory) return;
+    if (index < 0 || index >= _sharedRoomSlots.length) return;
+    final slot = _sharedRoomSlots[index];
+    slot.title = _titleController.text.trim();
+    slot.description = _descriptionController.text.trim();
+  }
+
+  void _syncListingWizardFromSlot(int index) {
+    if (!_isShare || index < 0 || index >= _sharedRoomSlots.length) return;
+    final slot = _sharedRoomSlots[index];
+    _titleController.text = slot.title;
+    _descriptionController.text = slot.description;
+    _autoDraftedTitle = slot.title.isEmpty ? null : slot.title;
+    _autoDraftedDescription =
+        slot.description.isEmpty ? null : slot.description;
+  }
+
+  void _goListingWizardRoom(int nextIndex) {
+    if (!_isMultiRoomInventory || _sharedRoomSlots.isEmpty) return;
+    final clamped = nextIndex.clamp(0, _sharedRoomSlots.length - 1);
+    setState(() {
+      _persistListingWizardToSlot(_listingWizardRoomIndex);
+      _listingWizardRoomIndex = clamped;
+      _syncListingWizardFromSlot(_listingWizardRoomIndex);
+      _titleEditorExpanded = false;
+      _descriptionEditorExpanded = false;
+    });
+  }
+
+  String _listingWizardRoomSummary(SharedRoomSlot slot) {
+    final rentDigits = slot.monthlyRent.replaceAll(RegExp(r'[^\d]'), '');
+    final bits = <String>[
+      slot.roomKind.label,
+      slot.bathroomType.label,
+      if (rentDigits.isNotEmpty) '€$rentDigits',
+    ];
+    return bits.join(' · ');
   }
 
   String _smartCopyAreaName() {
@@ -1041,7 +1612,11 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       _descriptionController.text == _autoDraftedDescription;
 
   String _smartCopyPropertyTypeLabel() =>
-      _propertySubType == ListingPropertySubType.house ? 'House' : 'Apartment';
+      _propertySubType == ListingPropertySubType.house
+          ? 'House'
+          : _propertySubType == ListingPropertySubType.apartment
+              ? 'Apartment'
+              : '';
 
   int _parsedMonthlyRent() {
     final digits = _rentController.text.replaceAll(RegExp(r'[^\d]'), '');
@@ -1054,13 +1629,17 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   }
 
   void _generateSmartListingCopy() {
+    if (_isShare) {
+      _generateSharedSmartCopy();
+      return;
+    }
     final generated = ListingSmartCopyGenerator.generate(
       ListingSmartCopyInput(
-        isSharedLiving: _isShare,
+        isSharedLiving: false,
         areaName: _smartCopyAreaName(),
         postalDistrict: _smartCopyPostalDistrict(),
         propertyType: _smartCopyPropertyTypeLabel(),
-        isFurnished: _isFurnished,
+        isFurnished: _isFurnished ?? false,
         bedrooms: _bedrooms,
         bathrooms: _bathrooms,
         monthlyRent: _parsedMonthlyRent(),
@@ -1068,7 +1647,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         transitWalkTime: _formatWalkTimeLabel(_proximityDraft.transportWalkMin),
         closestShop: _proximityDraft.groceryBrand,
         shopWalkTime: _formatWalkTimeLabel(_proximityDraft.groceryWalkMin),
-        roomArchitecture: _primaryRoomArchitecture,
         existingTitle: _titleController.text,
         existingDescription: _descriptionController.text,
       ),
@@ -1090,6 +1668,107 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     if (changed) setState(() {});
   }
 
+  void _generateSharedSmartCopy() {
+    _syncHouseholdLanguagesFromSeekerUi();
+    if (_sharedRoomSlots.isEmpty) return;
+
+    if (_isMultiRoomInventory) {
+      var changed = false;
+      for (final slot in _sharedRoomSlots) {
+        final rentDigits = slot.monthlyRent.replaceAll(RegExp(r'[^\d]'), '');
+        final generated = ListingSmartCopyGenerator.generate(
+          _sharedSmartCopyInputFor(
+            slot: slot,
+            monthlyRent: int.tryParse(rentDigits) ?? 0,
+            existingTitle: slot.title,
+            existingDescription: slot.description,
+          ),
+        );
+        if ((slot.title.trim().isEmpty) &&
+            generated.title != null &&
+            generated.title!.trim().isNotEmpty) {
+          slot.title = generated.title!.trim();
+          changed = true;
+        }
+        if ((slot.description.trim().isEmpty) &&
+            generated.description != null &&
+            generated.description!.trim().isNotEmpty) {
+          slot.description =
+              _plainListingDescription(generated.description!);
+          changed = true;
+        }
+      }
+      _syncListingWizardFromSlot(_listingWizardRoomIndex);
+      if (changed) setState(() {});
+      return;
+    }
+
+    final primary = _primaryRoomSlot;
+    if (primary == null) return;
+
+    final rentDigits = primary.monthlyRent.replaceAll(RegExp(r'[^\d]'), '');
+    final generated = ListingSmartCopyGenerator.generate(
+      _sharedSmartCopyInputFor(
+        slot: primary,
+        monthlyRent: int.tryParse(rentDigits) ?? 0,
+        existingTitle: _titleController.text,
+        existingDescription: _descriptionController.text,
+      ),
+    );
+    var changed = false;
+    if (generated.title != null && generated.title!.trim().isNotEmpty) {
+      _autoDraftedTitle = generated.title;
+      _titleController.text = generated.title!;
+      changed = true;
+    }
+    if (generated.description != null &&
+        generated.description!.trim().isNotEmpty) {
+      final plain = _plainListingDescription(generated.description!);
+      _autoDraftedDescription = plain;
+      _descriptionController.text = plain;
+      changed = true;
+    }
+    if (changed) setState(() {});
+  }
+
+  ListingSmartCopyInput _sharedSmartCopyInputFor({
+    required SharedRoomSlot slot,
+    required int monthlyRent,
+    required String existingTitle,
+    required String existingDescription,
+  }) {
+    return ListingSmartCopyInput(
+      isSharedLiving: true,
+      areaName: _smartCopyAreaName(),
+      postalDistrict: _smartCopyPostalDistrict(),
+      propertyType: _smartCopyPropertyTypeLabel(),
+      isFurnished: false,
+      bedrooms: _totalRoomsInProperty,
+      bathrooms: 1,
+      monthlyRent: monthlyRent,
+      closestTransit: _proximityDraft.transportLine,
+      transitWalkTime: _formatWalkTimeLabel(_proximityDraft.transportWalkMin),
+      closestShop: _proximityDraft.groceryBrand,
+      shopWalkTime: _formatWalkTimeLabel(_proximityDraft.groceryWalkMin),
+      roomArchitecture: slot.architecture,
+      roomKind: slot.roomKind,
+      bathroomType: slot.bathroomType,
+      householdProfile: _householdCohort,
+      roomProfile: slot.roomProfile ??
+          (_roomsToShare == 1 ? _householdCohort : null),
+      petsPolicyLabel: _petsPolicy?.label,
+      smokingPolicyLabel: _smokingPolicy?.label,
+      parkingLabels: _parkingFeatures.map((f) => f.label).toList(),
+      languages: _householdLanguages.toList(),
+      houseRules: _houseRules.map((r) => r.label).toList(),
+      requiredOccupantLabel: slot.requiredOccupant.label,
+      occupantTypeLabel: slot.occupantType.label,
+      currentOccupantLabel: slot.isSharedBed ? slot.currentOccupant?.label : null,
+      existingTitle: existingTitle,
+      existingDescription: existingDescription,
+    );
+  }
+
   String? _validateRent() {
     final text = stripThousandsFormatting(_rentController.text.trim());
     if (text.isEmpty) return 'Enter monthly rent';
@@ -1099,14 +1778,25 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     return null;
   }
 
+  String? _validateDeposit() {
+    final text = stripThousandsFormatting(_depositController.text.trim());
+    if (text.isEmpty) return 'Enter deposit required';
+    if (!RegExp(r'^\d+$').hasMatch(text)) {
+      return 'Enter a valid deposit amount';
+    }
+    return null;
+  }
+
   String? _validateStep2() {
     if (!_hasResolvableLocation()) {
       return 'Drop a pin on the map or use current location.';
     }
-    if (_locationIdentifierController.text.trim().length < 3) {
-      return 'Confirm the resolved address — edit it if the pin is slightly off.';
+    // Property address (street) is optional — pin + Property Area are sources of truth.
+    if (_listingAreaKey == null && _locationController.text.trim().length < 2) {
+      return 'Confirm the property area used for seeker matching.';
     }
-    if (_locationController.text.trim().length < 2) {
+    if (_listingAreaKey == null &&
+        MarketConfig.current.profileUseAreaPicker) {
       return 'Confirm the property area used for seeker matching.';
     }
     return null;
@@ -1114,26 +1804,19 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
   /// Returns the first validation error for a wizard step, or null when valid.
   String? validateStep(int step) {
+    if (_isShare) {
+      return switch (step) {
+        0 => _validateSharedPropertyStep(),
+        1 => _validateSharedRoomsStep(),
+        2 => _validateSharedHouseholdListingStep(),
+        3 => _validateLocationStep(),
+        _ => null,
+      };
+    }
     switch (step) {
       case 0:
-        if (_isShare) {
-          final costError = _validateSharedCosts();
-          if (costError != null) {
-            setState(() => _sharedCostsShowErrors = true);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              final ctx = _sharedCostsSectionKey.currentContext;
-              if (ctx != null) {
-                Scrollable.ensureVisible(
-                  ctx,
-                  duration: const Duration(milliseconds: 320),
-                  curve: Curves.easeInOut,
-                  alignment: 0.2,
-                );
-              }
-            });
-            return costError;
-          }
-          setState(() => _sharedCostsShowErrors = false);
+        if (_hostNameController.text.trim().isEmpty) {
+          return 'Enter the host name shown on this listing.';
         }
         final rentError = _validateRent();
         if (rentError != null) {
@@ -1147,29 +1830,48 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           _rentShowError = false;
           _rentErrorText = null;
         });
+        final depositError = _validateDeposit();
+        if (depositError != null) {
+          setState(() {
+            _depositShowError = true;
+            _depositErrorText = depositError;
+          });
+          return depositError;
+        }
+        setState(() {
+          _depositShowError = false;
+          _depositErrorText = null;
+        });
+        if (_propertySubType == null) {
+          return 'Select whether this is a house or apartment.';
+        }
+        if (_isFurnished == null) {
+          return 'Select a furnishing option.';
+        }
+        if (_agreementType == null) {
+          return 'Select a lease type.';
+        }
         if (_availableFrom == null) {
-          return _agreementType == ListingAgreementType.temporary
-              ? 'Pick an available-from date for temporary stays.'
-              : 'Pick an available-from date for this long-term listing.';
+          return 'Pick an available-from date for this listing.';
+        }
+        if (_availabilityFlexibility == null) {
+          return 'Select availability flexibility.';
+        }
+        if (!LandlordAvailabilityFlexibility.independentPlaceValues
+            .contains(_availabilityFlexibility)) {
+          return 'Select availability flexibility.';
         }
         if (_subletDurationController.text.trim().isEmpty) {
-          return _agreementType == ListingAgreementType.temporary
-              ? 'Enter an estimated sublet duration.'
-              : 'Enter the lease duration in years.';
+          return _agreementType == TenurePreference.longTerm
+              ? 'Enter the lease duration in years.'
+              : 'Enter an estimated stay duration.';
         }
-        if (!_isShare) {
-          if (_bedrooms < 1) return 'Enter the number of bedrooms.';
-          if (_bathrooms < 1) return 'Enter the number of bathrooms.';
-        }
+        if (_bedrooms < 1) return 'Enter the number of bedrooms.';
+        if (_bathrooms < 1) return 'Enter the number of bathrooms.';
+        if (_petsPolicy == null) return 'Select a pets policy.';
         return null;
       case 1:
-        final locationError = _validateStep2();
-        if (locationError != null) {
-          setState(() => _locationShowErrors = true);
-          return locationError;
-        }
-        setState(() => _locationShowErrors = false);
-        return null;
+        return _validateLocationStep();
       case 2:
         final title = _titleController.text.trim();
         if (title.length < 3) {
@@ -1179,17 +1881,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         setState(() => _titleShowError = false);
         if (_images.length < ListingCreationFormConstants.minPhotoCount) {
           return 'Add at least ${ListingCreationFormConstants.minPhotoCount} photos before publishing.';
-        }
-        if (_isShare) {
-          if (_sharedRoomSlots.isEmpty) {
-            return 'Add at least one room to share.';
-          }
-          if (_householdCohort == null) {
-            return 'Select who lives in the household.';
-          }
-          if (_hasSharedBedRoom && _flatmateCohort == null) {
-            return 'Select the shared room cohort profile.';
-          }
         }
         final description = _descriptionController.text.trim();
         if (description.isNotEmpty && description.length < 10) {
@@ -1201,6 +1892,129 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     }
   }
 
+  String? _validateLocationStep() {
+    final locationError = _validateStep2();
+    if (locationError != null) {
+      setState(() => _locationShowErrors = true);
+      return locationError;
+    }
+    setState(() => _locationShowErrors = false);
+    return null;
+  }
+
+  String? _validateSharedPropertyStep() {
+    if (_hostNameController.text.trim().isEmpty) {
+      _seedHostNameFromProfile();
+    }
+    if (_propertySubType == null) {
+      return 'Select whether this is a house or apartment.';
+    }
+    if (_totalRoomsInProperty < 1 ||
+        _totalRoomsInProperty >
+            ListingCreationFormConstants.sharedSpacesMaxRooms) {
+      return 'Select how many rooms are in the property.';
+    }
+    if (_roomsToShare < 1 || _roomsToShare > _totalRoomsInProperty) {
+      return 'Rooms available cannot exceed total rooms in the property.';
+    }
+    if (_petsPolicy != ListingPetsPolicy.allowed &&
+        _petsPolicy != ListingPetsPolicy.notAllowed) {
+      return 'Select whether pets are allowed.';
+    }
+    return null;
+  }
+
+  String? _validateSharedRoomsStep() {
+    if (_sharedRoomSlots.isEmpty) {
+      return 'Add at least one room to share.';
+    }
+    for (var i = 0; i < _sharedRoomSlots.length; i++) {
+      final error = _validateSharedRoomInventory(
+        _sharedRoomSlots[i],
+        index: i,
+      );
+      if (error != null) return error;
+    }
+    return null;
+  }
+
+  String? _validateSharedRoomInventory(SharedRoomSlot slot, {required int index}) {
+    final label = 'Room ${index + 1}';
+    final rentText = stripThousandsFormatting(slot.monthlyRent.trim());
+    if (rentText.isEmpty || !RegExp(r'^\d+$').hasMatch(rentText)) {
+      return '$label: enter monthly rent.';
+    }
+    if ((int.tryParse(rentText) ?? 0) <= 0) {
+      return '$label: monthly rent must be greater than 0.';
+    }
+    if (!_isSlotCostResolved(slot.electricityCost, slot.electricityIncluded) ||
+        !_isSlotCostResolved(slot.binsCost, slot.binsIncluded) ||
+        !_isSlotCostResolved(slot.internetCost, slot.internetIncluded)) {
+      return '$label: enter shared costs or mark each as included.';
+    }
+    final agreement = TenurePreference.fromStorage(slot.agreementTypeToken);
+    if (agreement == null || agreement == TenurePreference.flexible) {
+      return '$label: select lease type.';
+    }
+    if (agreement == TenurePreference.temporary &&
+        slot.temporaryDurationValue.trim().isEmpty) {
+      return '$label: enter temporary duration.';
+    }
+    if (slot.availableFrom == null) {
+      return '$label: pick available-from date.';
+    }
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    if (slot.availableFrom!.isBefore(startOfToday)) {
+      return '$label: available-from cannot be in the past.';
+    }
+    final flex = LandlordAvailabilityFlexibility.parse(
+      slot.availabilityFlexibilityToken,
+    );
+    if (slot.availabilityFlexibilityToken == null ||
+        slot.availabilityFlexibilityToken!.isEmpty ||
+        !LandlordAvailabilityFlexibility.sharedSpacesValues.contains(flex)) {
+      return '$label: select availability flexibility.';
+    }
+    if (_isShare && slot.roomProfile == null) {
+      return '$label: select room profile.';
+    }
+    if (slot.isSharedBed && slot.currentOccupant == null) {
+      return '$label: select current occupant.';
+    }
+    return null;
+  }
+
+  bool _isSlotCostResolved(String cost, bool included) {
+    if (included) return true;
+    final raw = cost.trim();
+    if (raw.isEmpty) return false;
+    return int.tryParse(raw.replaceAll(RegExp(r'[^\d]'), '')) != null;
+  }
+
+  String? _validateSharedHouseholdListingStep() {
+    _syncHouseholdLanguagesFromSeekerUi();
+    if (_smokingPolicy == null) {
+      return 'Select a smoking policy.';
+    }
+    final minPhotos =
+        ListingCreationFormConstants.sharedSpacesMinPhotoCount;
+    if (_isMultiRoomInventory) {
+      _persistListingWizardToSlot(_listingWizardRoomIndex);
+      for (var i = 0; i < _sharedRoomSlots.length; i++) {
+        if (_sharedRoomSlots[i].images.length < minPhotos) {
+          return 'Add at least $minPhotos photo for Room ${i + 1}.';
+        }
+      }
+      return null;
+    }
+    if (_images.length < minPhotos) {
+      return 'Add at least $minPhotos photo before publishing.';
+    }
+    // Occupancy soft warning is UI-only via `_shouldShowOccupancyWarning`.
+    return null;
+  }
+
   /// Returns the first validation error, or null when the form is valid.
   String? validate() {
     for (var step = 0; step < _stepCount; step++) {
@@ -1210,12 +2024,20 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     final baseErrors = ListingData.validateListingForm(
       title: _titleController.text,
-      price: stripThousandsFormatting(_rentController.text.trim()),
+      price: _isShare
+          ? stripThousandsFormatting(
+              (_primaryRoomSlot?.monthlyRent ?? '').trim(),
+            )
+          : stripThousandsFormatting(_rentController.text.trim()),
       location: _effectiveLocationLabel(),
       type: _type,
       description: _descriptionController.text,
     );
     if (baseErrors.isNotEmpty) return baseErrors.values.first;
+
+    if (!_listingAuthorizationConfirmed) {
+      return 'Confirm you are authorised to advertise this listing before publishing.';
+    }
 
     return null;
   }
@@ -1228,6 +2050,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     final title = _titleController.text.trim();
     final price = _formattedPrice();
+    final deposit = _formattedDeposit();
     final location = _effectiveLocationLabel();
     final description = _descriptionController.text.trim();
     final coords = await _resolveListingCoordinates(location);
@@ -1237,44 +2060,86 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       longitude: coords.lon,
     );
 
+    final agreementType = _agreementType ?? TenurePreference.longTerm;
+    final propertySubType =
+        _propertySubType ?? ListingPropertySubType.apartment;
+    final isFurnished = _isFurnished ?? false;
+    final petsPolicy = _petsPolicy ?? ListingPetsPolicy.notAllowed;
+    final parkingFeatures = Set<ListingParkingFeature>.from(_parkingFeatures);
+    if (_isShare && _sharedParkingAvailable == false) {
+      parkingFeatures.clear();
+    }
+    final primaryParking = parkingFeatures.isEmpty
+        ? null
+        : parkingFeatures.first;
+    final parkingAvailable = _isShare
+        ? (_sharedParkingAvailable ?? parkingFeatures.isNotEmpty)
+        : parkingFeatures.isNotEmpty;
+
     final lifestyleFlags = <String>{};
-    if (!_smokingAllowed) lifestyleFlags.add('no_smoking');
-    if (!_petsAllowed) lifestyleFlags.add('no_pets');
+    if (_isShare) {
+      final smoking =
+          _smokingPolicy ?? ListingSmokingPolicy.noSmoking;
+      if (smoking == ListingSmokingPolicy.noSmoking) {
+        lifestyleFlags.add('no_smoking');
+      }
+      if (smoking == ListingSmokingPolicy.outdoorOnly) {
+        lifestyleFlags.add('outdoor_smoking_only');
+      }
+    } else if (!_smokingAllowed) {
+      lifestyleFlags.add('no_smoking');
+    }
+    if (petsPolicy == ListingPetsPolicy.notAllowed) {
+      lifestyleFlags.add('no_pets');
+    }
+    if (petsPolicy == ListingPetsPolicy.caseByCase) {
+      lifestyleFlags.add('pet_approval_required');
+    }
     if (_vegetarianKitchen) lifestyleFlags.add('vegetarian_household');
     if (_isShare && !_vegetarianKitchen) lifestyleFlags.add('non_veg_allowed');
 
-    final roomMapping = _mapRoomArchitecture(_primaryRoomArchitecture);
-
-    final primarySlot =
-        _sharedRoomSlots.isNotEmpty ? _sharedRoomSlots.first : null;
+    final hostName = _hostNameController.text.trim().isEmpty
+        ? (ListingData.text(hostFields['hostName']).isEmpty
+            ? 'Guest host'
+            : ListingData.text(hostFields['hostName']))
+        : _hostNameController.text.trim();
 
     final payload = <String, dynamic>{
       'title': title,
       'price': price,
+      if (!_isShare && deposit.isNotEmpty)
+        ListingCreationFieldKeys.securityDeposit: deposit,
       'location': location,
       'type': _type,
       'listing_type': _type,
       'description': description,
       'market': MarketConfig.current.id.name,
       ListingCreationFieldKeys.marketplaceCategory: _activeSpace.storageToken,
-      'hostName': ListingData.text(hostFields['hostName']).isEmpty
-          ? 'Guest host'
-          : ListingData.text(hostFields['hostName']),
+      if (_listingAuthorizationConfirmed)
+        ListingCreationFieldKeys.listingAuthorizationConfirmed: true,
+      ..._publishedAtPayloadFields(),
+      ListingCreationFieldKeys.hostName: hostName,
       'hostCity': _resolvedHostCityForMatching(hostFields),
       if (_listingAreaKey != null) 'listing_area_key': _listingAreaKey,
       'hostLanguage': ProfileData.text(hostFields['hostLanguage']),
       'hostMotherTongue': ProfileData.text(hostFields['hostMotherTongue']),
       'hostFoodPreference': ProfileData.text(hostFields['hostFoodPreference']),
-      'agreement_type':
-          _agreementType == ListingAgreementType.temporary ? 'temporary' : 'long_term',
-      'property_sub_type': _propertySubType == ListingPropertySubType.house
-          ? 'house'
-          : 'apartment',
-      'property_category': _propertySubType == ListingPropertySubType.house
-          ? 'House'
-          : 'Apartment',
+      TenurePreference.listingKey: agreementType.storageToken,
+      'property_sub_type':
+          propertySubType == ListingPropertySubType.house ? 'house' : 'apartment',
+      'property_category':
+          propertySubType == ListingPropertySubType.house ? 'House' : 'Apartment',
       'ber_rating': _berRating,
-      'furnishing': _isFurnished ? 'Furnished' : 'Unfurnished',
+      if (!_isShare) 'furnishing': isFurnished ? 'Furnished' : 'Unfurnished',
+      ListingCreationFieldKeys.petsPolicy: petsPolicy.storageToken,
+      'pets_allowed': petsPolicy == ListingPetsPolicy.allowed,
+      ListingCreationFieldKeys.parkingFeatures:
+          parkingFeatures.map((f) => f.storageToken).toList(),
+      ListingCreationFieldKeys.parkingType:
+          primaryParking?.storageToken ?? 'not_available',
+      ListingCreationFieldKeys.parkingAvailable: parkingAvailable,
+      ListingCreationFieldKeys.secureBikeStorage:
+          parkingFeatures.contains(ListingParkingFeature.bikeParking),
       ListingCreationFieldKeys.eircode: EircodeGeocodingService.normalize(
         _eircodeController.text,
       ),
@@ -1288,9 +2153,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             .map((t) => t.displayLabel)
             .toList(),
       if (proximityData != null) 'proximity_data': proximityData,
-      'smoking_allowed': _smokingAllowed,
-      if (_isShare) 'schedule_type': _wfhFriendly ? 'Flexible' : 'Day shift',
-      if (_isShare) 'wfh_friendly': _wfhFriendly,
+      'smoking_allowed': _isShare
+          ? (_smokingPolicy ?? ListingSmokingPolicy.noSmoking)
+              .allowsIndoorSmoking
+          : _smokingAllowed,
+      if (_isShare)
+        ListingSmokingPolicy.listingKey:
+            (_smokingPolicy ?? ListingSmokingPolicy.noSmoking).storageToken,
+      if (!_isShare) 'schedule_type': _wfhFriendly ? 'Flexible' : 'Day shift',
+      if (!_isShare) 'wfh_friendly': _wfhFriendly,
       if (lifestyleFlags.isNotEmpty) 'lifestyle_flags': lifestyleFlags.toList(),
       if (_images.isNotEmpty) 'images': _images,
       if (_video != null) 'video': _video,
@@ -1303,21 +2174,23 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         'spoken_languages':
             ProfileData.languageList(profile['spoken_languages']),
       'is_owner_occupier': _isOwnerOccupier,
-      ListingCreationFieldKeys.secureBikeStorage: _secureBikeStorage,
       'description_is_edited': !_isAutoDraftedDescription(),
       'description_auto_drafted': _isAutoDraftedDescription(),
       'listing_strength_score':
           ListingStrengthCalculator.fromListing(_listingPreviewSnapshot()).scorePercent,
     };
 
-    if (_availableFrom != null &&
+    if (!_isShare &&
+        _availableFrom != null &&
         _subletDurationController.text.trim().isNotEmpty) {
       payload['available_from'] = _availableFrom!.toIso8601String();
       payload[ListingCreationFieldKeys.availabilityFlexibility] =
-          _availabilityFlexibility.storageToken;
+          LandlordAvailabilityFlexibility.migrateIndependentPlace(
+            _availabilityFlexibility!,
+          ).storageToken;
       payload['sublet_duration_value'] = _subletDurationController.text.trim();
       payload['sublet_duration_unit'] =
-          _agreementType == ListingAgreementType.longTerm
+          agreementType == TenurePreference.longTerm
               ? SubletDurationUnit.years.name
               : _subletDurationUnit.name;
     }
@@ -1326,52 +2199,153 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       payload['bedrooms'] = '$_bedrooms bed';
       payload['bathrooms'] = '$_bathrooms';
     } else {
+      _syncHouseholdLanguagesFromSeekerUi();
+      _prepareSharedRoomsForPayload();
+      final primary = _primaryRoomSlot;
+      final effectiveHouseholdCohort = _roomsToShare == 1
+          ? _householdCohort
+          : (primary?.roomProfile ?? _householdCohort);
+      final roomMapping = _mapRoomArchitecture(primary?.architecture);
+      final matchingProfile = primary?.roomProfile ?? effectiveHouseholdCohort;
+
+      // Listing-level mirrors of primary room for backward-compatible consumers.
+      if (primary != null) {
+        final rentDigits =
+            primary.monthlyRent.replaceAll(RegExp(r'[^\d]'), '');
+        if (rentDigits.isNotEmpty) {
+          payload['price'] = '€$rentDigits/month';
+        }
+        final agreement =
+            TenurePreference.fromStorage(primary.agreementTypeToken);
+        if (agreement != null) {
+          payload[TenurePreference.listingKey] = agreement.storageToken;
+        }
+        if (primary.availableFrom != null) {
+          payload['available_from'] = primary.availableFrom!.toIso8601String();
+        }
+        if (primary.availabilityFlexibilityToken != null) {
+          payload[ListingCreationFieldKeys.availabilityFlexibility] =
+              primary.availabilityFlexibilityToken;
+        }
+        if (primary.temporaryDurationValue.trim().isNotEmpty) {
+          payload['sublet_duration_value'] =
+              primary.temporaryDurationValue.trim();
+          payload['sublet_duration_unit'] = primary.temporaryDurationUnit.name;
+        }
+        payload['monthly_electricity_cost'] = primary.electricityIncluded
+            ? '0'
+            : primary.electricityCost.trim();
+        payload['monthly_bins_cost'] =
+            primary.binsIncluded ? '0' : primary.binsCost.trim();
+        payload['monthly_internet_cost'] =
+            primary.internetIncluded ? '0' : primary.internetCost.trim();
+        payload['electricity_included'] = primary.electricityIncluded;
+        payload['bins_included'] = primary.binsIncluded;
+        payload['internet_included'] = primary.internetIncluded;
+      }
+
       payload.addAll({
+        'total_rooms_in_property': _totalRoomsInProperty,
         'rooms_to_share': _roomsToShare,
-        'shared_rooms': _sharedRoomSlots
-            .map((s) {
-              s.tenantsInRoom = _housemateCount;
-              return s.toJson();
-            })
-            .toList(),
-        if (_primaryRoomArchitecture != null)
-          'shared_room_architecture': _primaryRoomArchitecture!.storageValue,
+        'room_inventory_mode': 'per_room',
+        'shared_rooms': _sharedRoomSlots.map((s) => s.toJson()).toList(),
+        if (primary?.architecture != null)
+          'shared_room_architecture': primary!.architecture.storageValue,
         'current_occupants': _housemateCount,
         if (_hasSharedBedRoom)
           'shared_bed_occupants': _sharedRoomSlots
               .firstWhere((s) => s.isSharedBed)
               .bedOccupants,
-        if (_householdCohort != null)
-          'household_cohort': _householdCohort!.storageValue,
-        if (_flatmateCohort != null)
-          'flatmate_cohort': _flatmateCohort!.storageValue,
-        if (primarySlot != null)
-          'target_tenant_preference': primarySlot.tenantGender.storageValue,
+        if (effectiveHouseholdCohort != null)
+          'household_cohort': effectiveHouseholdCohort.storageValue,
+        if (matchingProfile != null)
+          'flatmate_cohort': matchingProfile.storageValue,
+        if (matchingProfile != null)
+          'cohort_type': matchingProfile == FlatmateCohort.students
+              ? 'student_only'
+              : matchingProfile == FlatmateCohort.workingProfessionals
+                  ? 'professionals_only'
+                  : 'open_mixed',
+        if (primary != null) ...{
+          'room_type_matching': primary.roomKind.storageValue,
+          'bathroom_type': primary.bathroomType.storageValue,
+          'required_occupant': primary.requiredOccupant.storageValue,
+          'occupant_type': primary.occupantType.storageValue,
+          'target_tenant_preference':
+              primary.requiredOccupant.asTargetTenantPreference.storageValue,
+          if (primary.currentOccupant != null)
+            'current_occupant': primary.currentOccupant!.storageValue,
+          if (primary.roomProfile != null)
+            'room_profile': primary.roomProfile!.storageValue,
+        },
         'languages_spoken': _householdLanguages.toList(),
-        'monthly_electricity_cost': _costValue(
-          _electricityCostController,
-          _electricityIncluded,
-        ),
-        'monthly_bins_cost': _costValue(_binsCostController, _binsIncluded),
-        'monthly_internet_cost':
-            _costValue(_internetCostController, _internetIncluded),
-        'electricity_included': _electricityIncluded,
-        'bins_included': _binsIncluded,
-        'internet_included': _internetIncluded,
+        'house_rule_selections':
+            _houseRules.map((r) => r.storageValue).toList(),
         if (roomMapping != null) ...roomMapping,
-        if (_flatmateCohort != null)
-          'preferred_tenant_occupant': _flatmateCohort!.label,
-        if (_flatmateCohort == FlatmateCohort.students)
+        if (matchingProfile != null)
+          'preferred_tenant_occupant': matchingProfile.label,
+        if (matchingProfile == FlatmateCohort.students)
           'occupantType': 'Students',
-        if (_vegetarianKitchen) 'preferred_tenant_food': 'veg',
-        if (primarySlot?.tenantGender == TargetTenantPreference.femaleOnly)
+        if (matchingProfile == FlatmateCohort.workingProfessionals)
+          'occupantType': 'Working Professionals',
+        if (primary?.requiredOccupant == RoomRequiredOccupant.female)
           'bachelorPreference': 'Girls only',
-        if (primarySlot?.tenantGender == TargetTenantPreference.maleOnly)
+        if (primary?.requiredOccupant == RoomRequiredOccupant.male)
           'bachelorPreference': 'Boys only',
+        if (petsPolicy == ListingPetsPolicy.caseByCase)
+          'pets_display_note': 'Pet approval required',
       });
     }
 
   return _applyAddressPrivacy(payload);
+  }
+
+  /// First publish stamps [published_at]; edits preserve existing; legacy omits.
+  Map<String, dynamic> _publishedAtPayloadFields() {
+    final prior = ListingData.text(
+      widget.initialListing?[ListingCreationFieldKeys.publishedAt],
+    );
+    if (prior.isNotEmpty) {
+      return {ListingCreationFieldKeys.publishedAt: prior};
+    }
+    final isExistingListing = widget.initialListing != null &&
+        !_isProfileDraft(widget.initialListing) &&
+        ListingData.id(widget.initialListing!).isNotEmpty;
+    if (isExistingListing) return const {};
+    return {
+      ListingCreationFieldKeys.publishedAt:
+          DateTime.now().toUtc().toIso8601String(),
+    };
+  }
+
+  /// Sync listing media/copy into every room; keep room-level inventory fields.
+  void _prepareSharedRoomsForPayload() {
+    if (_isMultiRoomInventory) {
+      _persistListingWizardToSlot(_listingWizardRoomIndex);
+    }
+    for (final slot in _sharedRoomSlots) {
+      slot.tenantsInRoom = _housemateCount;
+      slot.tenantGender = slot.requiredOccupant.asTargetTenantPreference;
+      if (_roomsToShare == 1 && slot.roomProfile == null) {
+        slot.roomProfile = _householdCohort;
+      }
+      if (_roomsToShare == 1) {
+        slot.images = List<String>.from(_images);
+        slot.title = _titleController.text.trim();
+        slot.description = _descriptionController.text.trim();
+      }
+    }
+    // Listing-level title/images mirror room 1 for backward-compatible payload.
+    if (_isMultiRoomInventory && _sharedRoomSlots.isNotEmpty) {
+      final primary = _sharedRoomSlots.first;
+      _images = List<String>.from(primary.images);
+      if (primary.title.trim().isNotEmpty) {
+        _titleController.text = primary.title;
+      }
+      if (primary.description.trim().isNotEmpty) {
+        _descriptionController.text = primary.description;
+      }
+    }
   }
 
   Map<String, dynamic> _applyAddressPrivacy(Map<String, dynamic> payload) {
@@ -1419,11 +2393,6 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     }
   }
 
-  String _costValue(TextEditingController controller, bool included) {
-    if (included) return '0';
-    return controller.text.trim();
-  }
-
   bool _isSharedCostResolved(TextEditingController controller, bool included) {
     if (included) return true;
     final raw = controller.text.trim();
@@ -1431,41 +2400,60 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     return int.tryParse(raw.replaceAll(RegExp(r'[^\d]'), '')) != null;
   }
 
-  String? _validateSharedCosts() {
-    if (!_isShare) return null;
-    final resolved = [
-      _isSharedCostResolved(_electricityCostController, _electricityIncluded),
-      _isSharedCostResolved(_binsCostController, _binsIncluded),
-      _isSharedCostResolved(_internetCostController, _internetIncluded),
-    ];
-    if (resolved.every((v) => v)) return null;
-    return 'Enter monthly shared costs or mark each as included in rent.';
-  }
-
   Map<String, dynamic> _listingPreviewSnapshot() {
     return {
       'title': _titleController.text.trim(),
       'price': _formattedPrice(),
+      if (!_isShare && _formattedDeposit().isNotEmpty)
+        ListingCreationFieldKeys.securityDeposit: _formattedDeposit(),
       'location': _effectiveLocationLabel(),
       'description': _descriptionController.text.trim(),
       'description_is_edited': !_isAutoDraftedDescription(),
       'description_auto_drafted': _isAutoDraftedDescription(),
-      ListingCreationFieldKeys.secureBikeStorage: _secureBikeStorage,
+      ListingCreationFieldKeys.secureBikeStorage:
+          _parkingFeatures.contains(ListingParkingFeature.bikeParking),
+      if (_parkingFeatures.isNotEmpty)
+        ListingCreationFieldKeys.parkingFeatures:
+            _parkingFeatures.map((f) => f.storageToken).toList(),
+      ListingCreationFieldKeys.parkingType: _parkingFeatures.isEmpty
+          ? 'not_available'
+          : _parkingFeatures.first.storageToken,
+      ListingCreationFieldKeys.parkingAvailable: _parkingFeatures.isNotEmpty,
+      if (_petsPolicy != null)
+        ListingCreationFieldKeys.petsPolicy: _petsPolicy!.storageToken,
+      'pets_allowed': _petsPolicy == ListingPetsPolicy.allowed,
       'ber_rating': _berRating,
       'images': _images,
-      'rtb_registered': false,
-      'parking_available': false,
-      'furnishing': _isFurnished ? 'Furnished' : 'Unfurnished',
+      if (_isFurnished != null)
+        'furnishing': _isFurnished! ? 'Furnished' : 'Unfurnished',
+      if (_agreementType != null)
+        TenurePreference.listingKey: _agreementType!.storageToken,
+      ListingCreationFieldKeys.hostName: _hostNameController.text.trim(),
     };
   }
 
   String _formattedPrice() {
+    if (_isShare) {
+      final digits =
+          (_primaryRoomSlot?.monthlyRent ?? '').replaceAll(RegExp(r'[^\d]'), '');
+      if (digits.isEmpty) return '';
+      return '€$digits/month';
+    }
     final raw = _rentController.text.trim();
     if (raw.isEmpty) return raw;
     final numeric = raw.replaceAll(RegExp(r'[^\d]'), '');
     if (numeric.isEmpty) return raw;
     if (raw.contains('/')) return raw;
     return '€$numeric/month';
+  }
+
+  /// Independent Places deposit — euro integer string, e.g. `€1850`.
+  String _formattedDeposit() {
+    final raw = _depositController.text.trim();
+    if (raw.isEmpty) return '';
+    final numeric = raw.replaceAll(RegExp(r'[^\d]'), '');
+    if (numeric.isEmpty) return '';
+    return '€$numeric';
   }
 
   bool _isWithinDublinBounds(double lat, double lon) =>
@@ -1681,9 +2669,18 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     _proximityDraft.groceryBrand = '';
     _proximityDraft.groceryWalkMin = 0;
     _proximityDraft.primarySchool = '';
+    _proximityDraft.primarySchoolWalkMin = 0;
     _proximityDraft.secondarySchool = '';
+    _proximityDraft.secondarySchoolWalkMin = 0;
+    _proximityDraft.collegeSchool = '';
+    _proximityDraft.collegeWalkMin = 0;
     _proximityDraft.crecheName = '';
     _proximityDraft.crecheWalkMin = 0;
+    _proximityDraft.gpClinic = '';
+    _proximityDraft.gpWalkMin = 0;
+    _proximityDraft.groceries = [];
+    _proximityDraft.extraTransit = [];
+    _proximityDraft.lifestyleTags = [];
     _extraProximityTransit = [];
     _profileGroceries = [];
     _collegeSchool = '';
@@ -1722,10 +2719,14 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     if (resolved.primarySchool != null) {
       _primarySchoolController.text = resolved.primarySchool!;
       _proximityDraft.primarySchool = resolved.primarySchool!;
+      _proximityDraft.primarySchoolWalkMin =
+          resolved.primarySchoolWalkMin ?? 0;
     }
     if (resolved.secondarySchool != null) {
       _secondarySchoolController.text = resolved.secondarySchool!;
       _proximityDraft.secondarySchool = resolved.secondarySchool!;
+      _proximityDraft.secondarySchoolWalkMin =
+          resolved.secondarySchoolWalkMin ?? 0;
     }
     if (resolved.crecheName != null) {
       _crecheNameController.text = resolved.crecheName!;
@@ -1738,6 +2739,8 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       _extraProximityTransit = List<NearbyExtraTransit>.from(
         resolved.extraTransit,
       );
+      _proximityDraft.extraTransit =
+          List<NearbyExtraTransit>.from(resolved.extraTransit);
     }
     _profileGroceries = List<NearbyGroceryOption>.from(resolved.groceries);
     if (_profileGroceries.isEmpty && resolved.supermarketName != null) {
@@ -1748,13 +2751,19 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         ),
       ];
     }
+    _proximityDraft.groceries =
+        List<NearbyGroceryOption>.from(_profileGroceries);
     if (resolved.collegeSchool != null) {
       _collegeSchool = resolved.collegeSchool!;
       _collegeWalkMin = resolved.collegeWalkMin;
+      _proximityDraft.collegeSchool = resolved.collegeSchool!;
+      _proximityDraft.collegeWalkMin = resolved.collegeWalkMin ?? 0;
     }
     if (resolved.gpClinic != null) {
       _gpClinic = resolved.gpClinic!;
       _gpWalkMin = resolved.gpWalkMin;
+      _proximityDraft.gpClinic = resolved.gpClinic!;
+      _proximityDraft.gpWalkMin = resolved.gpWalkMin ?? 0;
     }
   }
 
@@ -1853,9 +2862,23 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     if (_proximityEditing || widget.saving) return;
     final activeGen = generation ?? ++_proximityGeneration;
     final cellKey = ProximityResolutionCache.keyFor(lat, lon);
+    _logLocationPerf('proximity_generation_start', {
+      'fromGps': usedGpsCoords,
+      'cellKey': cellKey,
+    });
 
     final cached = ProximityResolutionCache.getProximity(cellKey);
     if (cached != null) {
+      _logLocationPerf('poi_lookup_end', {
+        'ms': 0,
+        'cacheHit': true,
+        'fromGps': usedGpsCoords,
+      });
+      _logLocationPerf('proximity_generation_end', {
+        'ms': 0,
+        'cacheHit': true,
+        'fromGps': usedGpsCoords,
+      });
       if (showInitialLoading) {
         setState(() {
           _proximityResolving = true;
@@ -1890,6 +2913,8 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       });
     }
 
+    final swPoi = Stopwatch()..start();
+    _logLocationPerf('poi_lookup_start', {'fromGps': usedGpsCoords});
     final overpassFuture = OverpassAmenitiesService.fetchNearby(
       latitude: lat,
       longitude: lon,
@@ -1919,6 +2944,13 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         catalogLifestyle,
         structuredFallback?.lifestyleTags ?? const [],
       );
+
+      _logLocationPerf('poi_lookup_end', {
+        'ms': swPoi.elapsedMilliseconds,
+        'cacheHit': false,
+        'phase': 'preloaded_catalog',
+        'fromGps': usedGpsCoords,
+      });
 
       setState(() {
         _resolvedLatitude = lat;
@@ -1982,6 +3014,11 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           transitPayload: transitPayload,
         ),
       );
+      _logLocationPerf('proximity_generation_end', {
+        'ms': swPoi.elapsedMilliseconds,
+        'cacheHit': false,
+        'fromGps': usedGpsCoords,
+      });
     } catch (_) {
       if (!mounted || activeGen != _proximityGeneration) return;
       setState(() {
@@ -1992,6 +3029,11 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         _neighborhoodAmenitiesLoading = false;
         _proximityResolving = false;
         _proximityResolved = true;
+      });
+      _logLocationPerf('proximity_generation_end', {
+        'ms': swPoi.elapsedMilliseconds,
+        'error': true,
+        'fromGps': usedGpsCoords,
       });
     }
   }
@@ -2059,6 +3101,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       widget.onExit?.call();
       return;
     }
+    // Leaving Rooms step clears Continue validation chrome until next attempt.
+    if (_isShare && _currentStep == 1) {
+      _roomsStepContinueAttempted = false;
+    }
     _goToWizardStep(_currentStep - 1);
   }
 
@@ -2085,25 +3131,9 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     _onStepActivated(step);
   }
 
-  void _handleNext() {
-    if (widget.saving) return;
-    final error = validateStep(_currentStep);
-    if (error != null) {
-      _message(error);
-      return;
-    }
-    if (_currentStep >= _stepCount - 1) return;
-    final nextStep = _currentStep + 1;
-    _pageController.nextPage(
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeInOutCubic,
-    );
-    setState(() => _currentStep = nextStep);
-    _onStepActivated(nextStep);
-  }
-
   void _handlePublish() {
     if (widget.saving) return;
+    if (!_listingAuthorizationConfirmed) return;
     for (var step = 0; step < _stepCount; step++) {
       final error = validateStep(step);
       if (error != null) {
@@ -2129,7 +3159,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       final GlobalKey? scrollKey = switch (step) {
         0 => _sharedCostsShowErrors
             ? _sharedCostsSectionKey
-            : _rentSectionKey,
+            : (_depositShowError ? _depositSectionKey : _rentSectionKey),
         1 => _locationPanelKey,
         2 => _titleShowError ? _titleFieldKey : null,
         _ => null,
@@ -2149,6 +3179,14 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
   Future<void> _useCurrentLocation() async {
     if (_fetchingLocation || widget.saving) return;
+    final swTotal = Stopwatch()..start();
+    _logLocationPerf('location_acquisition_start', {});
+    // TEMP DEBUG
+    void gpsLog(String phase, [Map<String, Object?> data = const {}]) {
+      if (!kDebugMode) return;
+      debugPrint('[GPS] $phase $data');
+    }
+
     setState(() {
       _fetchingLocation = true;
       _locationPrefillLocked = false;
@@ -2156,6 +3194,9 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      gpsLog('permissions', {
+        'serviceEnabled': serviceEnabled,
+      });
       if (!serviceEnabled) {
         await _handleLocationFailure(
           'Location services are off. Enter your Eircode or search for your address instead.',
@@ -2164,8 +3205,14 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       }
 
       var permission = await Geolocator.checkPermission();
+      gpsLog('permissions', {
+        'checkPermission': permission.name,
+      });
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+        gpsLog('permissions', {
+          'requestPermission': permission.name,
+        });
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -2175,7 +3222,21 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         return;
       }
 
+      final swGps = Stopwatch()..start();
       final resolved = await FastLocationService.resolveForUserAction();
+      swGps.stop();
+      _logLocationPerf('location_acquisition_end', {
+        'ms': swGps.elapsedMilliseconds,
+        'source': resolved?.source.name,
+        'ok': resolved != null,
+      });
+      gpsLog('resolveForUserAction_result', {
+        'ms': swGps.elapsedMilliseconds,
+        'ok': resolved != null,
+        'source': resolved?.source.name,
+        'lat': resolved?.latitude,
+        'lon': resolved?.longitude,
+      });
       if (resolved == null) {
         await _handleLocationFailure(
           'Could not read your location. Enter your Eircode or search for your address instead.',
@@ -2207,12 +3268,27 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         position.longitude,
         fromGps: true,
       );
-    } catch (_) {
+      _logLocationPerf('current_location_pipeline_kicked', {
+        'totalMs': swTotal.elapsedMilliseconds,
+      });
+    } catch (e, st) {
+      gpsLog('exception', {
+        'phase': '_useCurrentLocation',
+        'error': e.toString(),
+        'type': e.runtimeType.toString(),
+        'stack': st.toString(),
+        'totalMs': swTotal.elapsedMilliseconds,
+      });
       if (mounted) setState(() => _fetchingLocation = false);
       await _handleLocationFailure(
         'Could not read GPS. Enter your Eircode or search for your address instead.',
       );
     }
+  }
+
+  void _logLocationPerf(String message, Map<String, Object?> data) {
+    if (!kDebugMode) return;
+    debugPrint('[LocationPerf] $message $data');
   }
 
   Future<void> _handleLocationFailure(String message) async {
@@ -2239,7 +3315,90 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   }
 
   void _selectSpace(MarketplaceSpace space) {
-    setState(() => _type = space.towerPropertyType);
+    // Both listing types commit `_type` immediately so `_isShare` / Page 1
+    // content switch in place (no step navigation on chip tap).
+    setState(() {
+      if (space == MarketplaceSpace.sharedSpace) {
+        _pendingListingType = null;
+        _type = space.towerPropertyType;
+        _seedHostNameFromProfile();
+        _petsPolicy ??= ListingPetsPolicy.notAllowed;
+        _sharedParkingAvailable ??= false;
+        if (_sharedRoomSlots.isEmpty) {
+          _applyRoomsToShare(1);
+        }
+        _expandedRoomIndex = 0;
+        if (_currentStep >= _stepCount) _currentStep = 0;
+      } else {
+        // Commit IP immediately so `_isShare` flips false and Page 1 IP
+        // fields render. Pending-only left `_type` on Shared → blank page.
+        _pendingListingType = null;
+        _type = space.towerPropertyType;
+        if (_currentStep >= _stepCount) _currentStep = 0;
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients) return;
+      final page = _currentStep.clamp(0, _stepCount - 1);
+      if (_pageController.page?.round() != page) {
+        _pageController.jumpToPage(page);
+      }
+    });
+  }
+
+  bool _commitPendingListingTypeIfNeeded() {
+    final pending = _pendingListingType;
+    if (pending == null || pending == _type) return false;
+    final switchingToShare =
+        MarketplaceSpace.fromTowerPropertyType(pending) ==
+            MarketplaceSpace.sharedSpace;
+    setState(() {
+      _type = pending;
+      _pendingListingType = null;
+      if (switchingToShare) {
+        _seedHostNameFromProfile();
+        if (_sharedRoomSlots.isEmpty) {
+          _applyRoomsToShare(1);
+        } else {
+          _applyRoomsToShare(_roomsToShare.clamp(1, _totalRoomsInProperty));
+        }
+        _expandedRoomIndex = 0;
+      }
+    });
+    return switchingToShare;
+  }
+
+  void _handleNext() {
+    if (widget.saving) return;
+    // Pending Entire Place (or rare pending Shared) commits on Continue.
+    if (_currentStep == 0 && _commitPendingListingTypeIfNeeded()) {
+      // Switched into Shared Spaces — stay on Property step (fields already inline).
+      return;
+    }
+    // Rooms step: keep Continue tappable when incomplete — show inline banner.
+    if (_isShare && _currentStep == 1 && !_isSharedRoomsStepReady()) {
+      setState(() => _roomsStepContinueAttempted = true);
+      return;
+    }
+    if (_isShare && _currentStep == 2 && _isMultiRoomInventory) {
+      _persistListingWizardToSlot(_listingWizardRoomIndex);
+    }
+    final error = validateStep(_currentStep);
+    if (error != null) {
+      _message(error);
+      return;
+    }
+    if (_currentStep >= _stepCount - 1) return;
+    final nextStep = _currentStep + 1;
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOutCubic,
+    );
+    setState(() {
+      _currentStep = nextStep;
+      _roomsStepContinueAttempted = false;
+    });
+    _onStepActivated(nextStep);
   }
 
   Future<void> _pickAvailableFrom() async {
@@ -2253,40 +3412,11 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     if (picked != null) setState(() => _availableFrom = picked);
   }
 
-  Future<void> _promptAddLanguage() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add language'),
-        content: TextField(
-          controller: controller,
-          decoration: listingInputDecoration(label: 'Language'),
-          textCapitalization: TextCapitalization.words,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (result == null || result.isEmpty) return;
-    setState(() => _householdLanguages.add(result));
-  }
-
   void _message(String text) => widget.onMessage?.call(text);
 
   @override
   Widget build(BuildContext context) {
-    final maxContentWidth = _currentStep == 1
+    final maxContentWidth = _isLocationWizardStep
         ? _locationStepMaxContentWidth
         : _standardMaxContentWidth;
     return Column(
@@ -2301,16 +3431,36 @@ class ListingCreationFormState extends State<ListingCreationForm> {
               child: GamifiedFormProgress(
                 current: _currentStep,
                 total: _stepCount,
+                stepLabels: _wizardStepLabels,
                 onStepTap: widget.saving ? null : _goToWizardStep,
               ),
             ),
           ),
         ),
+        if (_isShare)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxContentWidth),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: _sharedInPageProgress(),
+                    minHeight: 3,
+                    backgroundColor: const Color(0xFFE5E7EB),
+                    color: AppColors.accent,
+                  ),
+                ),
+              ),
+            ),
+          ),
         Expanded(
           child: Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxContentWidth),
               child: PageView(
+                key: ValueKey('wizard-pages-$_stepCount'),
                 controller: _pageController,
                 physics: const NeverScrollableScrollPhysics(),
                 onPageChanged: (index) {
@@ -2327,11 +3477,41 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                   _stepScroll(
                     Form(key: _step3Key, child: _step3Content()),
                   ),
+                  if (_isShare)
+                    _stepScroll(
+                      Form(key: _step4Key, child: _step4Content()),
+                    ),
                 ],
               ),
             ),
           ),
         ),
+        if (_currentStep == _stepCount - 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: CheckboxListTile(
+                  value: _listingAuthorizationConfirmed,
+                  onChanged: widget.saving
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _listingAuthorizationConfirmed = value ?? false;
+                          });
+                        },
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(
+                    ListingData.listingAuthorizationDeclaration,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ),
+            ),
+          ),
         GamifiedFormNavBar(
           floating: true,
           showBack: true,
@@ -2342,7 +3522,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
               ? 'Save changes'
               : 'Publish Listing 🚀',
           isSubmitting: widget.saving,
-          enabled: !widget.saving,
+          // Rooms step stays tappable when incomplete so Continue can show
+          // field-level required hints (no toast/modal).
+          enabled: !widget.saving &&
+              (!_isShare ||
+                  _sharedCurrentStepReady ||
+                  _currentStep == 1),
+          submitEnabled: !widget.saving &&
+              (!_isShare || _sharedCurrentStepReady) &&
+              _listingAuthorizationConfirmed,
           onBack: _handleBack,
           onNext: _handleNext,
           onSubmit: _handlePublish,
@@ -2364,6 +3552,64 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   }
 
   Widget _step1Content() {
+    if (_isShare) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const GamifiedFormPageHeader(
+            title: '🏠 Your Property',
+            subtitle: "List what's available — we'll handle the rest.",
+          ),
+          const SizedBox(height: listingSectionSpacing),
+          _hostNameSection(),
+          const SizedBox(height: listingFieldSpacing),
+          _listingTypeSection(),
+          // Shared room chip selects inline — fields render below, no navigation.
+          if (_listingTypeChipIsShare) ...[
+            const SizedBox(height: 12),
+            _propertyTypeSection(),
+            const SizedBox(height: 12),
+            _sharedPage1PetsParkingSection(),
+            const SizedBox(height: 16),
+            ListingCompactCounter(
+              label: 'Total rooms in property',
+              value: _totalRoomsInProperty,
+              min: 1,
+              max: ListingCreationFormConstants.sharedSpacesMaxRooms,
+              compact: true,
+              onDecrement: widget.saving || _totalRoomsInProperty <= 1
+                  ? () {}
+                  : () => _setTotalRoomsInProperty(_totalRoomsInProperty - 1),
+              onIncrement: widget.saving ||
+                      _totalRoomsInProperty >=
+                          ListingCreationFormConstants.sharedSpacesMaxRooms
+                  ? () {}
+                  : () =>
+                      _setTotalRoomsInProperty(_totalRoomsInProperty + 1),
+            ),
+            const SizedBox(height: 12),
+            ListingCompactCounter(
+              label: 'Rooms available',
+              value: _roomsToShare,
+              min: 1,
+              max: _totalRoomsInProperty.clamp(
+                1,
+                ListingCreationFormConstants.sharedSpacesMaxRooms,
+              ),
+              compact: true,
+              onDecrement: widget.saving || _roomsToShare <= 1
+                  ? () {}
+                  : () => _setRoomsToShare(_roomsToShare - 1),
+              onIncrement: widget.saving ||
+                      _roomsToShare >= _totalRoomsInProperty
+                  ? () {}
+                  : () => _setRoomsToShare(_roomsToShare + 1),
+            ),
+          ],
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2372,15 +3618,17 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           subtitle: 'Set the basics — rent, type, and furnishing.',
         ),
         const SizedBox(height: listingSectionSpacing),
+        _hostNameSection(),
+        const SizedBox(height: listingFieldSpacing),
         _listingTypeSection(),
         const SizedBox(height: listingFieldSpacing),
         _propertyTypeSection(),
-        if (!_isShare) ...[
-          const SizedBox(height: listingFieldSpacing),
-          _bedroomsBathroomsSection(),
-        ],
+        const SizedBox(height: listingFieldSpacing),
+        _bedroomsBathroomsSection(),
         const SizedBox(height: listingFieldSpacing),
         _monthlyRentSection(),
+        const SizedBox(height: listingFieldSpacing),
+        _depositRequiredSection(),
         const SizedBox(height: listingFieldSpacing),
         _furnishingSection(),
         const SizedBox(height: listingFieldSpacing),
@@ -2393,7 +3641,8 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     );
   }
 
-  Widget _step2Content() {
+  /// Location page body — reused as-is for sequencing only.
+  Widget _locationPageBody() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2408,28 +3657,84 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     );
   }
 
+  Widget _sharedRoomsStepContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const GamifiedFormPageHeader(
+          title: '🛏️ Rooms',
+          subtitle: 'One card per available room.',
+        ),
+        const SizedBox(height: listingSectionSpacing),
+        const ListingSectionHeader(
+          title: '🛏️ Room Inventory',
+          subtitle: 'Configure each room you are offering.',
+          required: true,
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final anyExpanded = _expandedRoomIndex >= 0;
+            final twoCol = constraints.maxWidth >= 720 &&
+                _sharedRoomSlots.length > 1 &&
+                !anyExpanded;
+            if (!twoCol) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < _sharedRoomSlots.length; i++) ...[
+                    _sharedRoomInventoryCard(i),
+                    if (i < _sharedRoomSlots.length - 1)
+                      const SizedBox(height: 8),
+                  ],
+                ],
+              );
+            }
+            return Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                for (var i = 0; i < _sharedRoomSlots.length; i++)
+                  SizedBox(
+                    width: (constraints.maxWidth - 12) / 2,
+                    child: _sharedRoomInventoryCard(i),
+                  ),
+              ],
+            );
+          },
+        ),
+        if (_isMultiRoomInventory)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: widget.saving ? null : _copyRoom1ToAllRooms,
+              icon: const Icon(Icons.copy_all_outlined, size: 18),
+              label: const Text('Copy Room 1 to all rooms'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _step2Content() {
+    if (_isShare) {
+      return _sharedRoomsStepContent();
+    }
+    return _locationPageBody();
+  }
+
   Widget _step3Content() {
     if (_isShare) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const GamifiedFormPageHeader(
-            title: '✨ Listing',
-            subtitle:
-                'Introduce your household, show the room, and help seekers understand the fit.',
+            title: '🏡 Household & listing',
+            subtitle: 'Context once — then publish-ready copy.',
           ),
           const SizedBox(height: listingSectionSpacing),
-          _householdProfileSection(),
+          _sharedHouseholdSection(),
           const SizedBox(height: listingSectionSpacing),
-          _roomConfigurationSection(),
-          const SizedBox(height: listingSectionSpacing),
-          _mediaSection(),
-          const SizedBox(height: listingSectionSpacing),
-          _titleSection(),
-          const SizedBox(height: listingFieldSpacing),
-          _descriptionSection(),
-          const SizedBox(height: listingSectionSpacing),
-          _optionalEnhancementsSection(),
+          _sharedListingContentSection(),
         ],
       );
     }
@@ -2454,27 +3759,35 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     );
   }
 
+  Widget _step4Content() {
+    // Shared Spaces step 4 — existing location body only.
+    return _locationPageBody();
+  }
+
   Widget _tenureSection() {
+    final leaseOptions = _isShare
+        ? TenurePreference.values
+        : TenurePreference.independentPlaceListingValues;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ListingSectionHeader(title: 'Tenure & duration'),
-        ListingDaftRadioChoiceList<ListingAgreementType>(
+        const ListingSectionHeader(title: 'Lease type'),
+        ListingDaftRadioChoiceList<TenurePreference>(
           enabled: !widget.saving,
           selected: _agreementType,
           onChanged: (v) => setState(() {
             _agreementType = v;
-            if (v == ListingAgreementType.longTerm) {
+            if (v == TenurePreference.longTerm) {
               _subletDurationUnit = SubletDurationUnit.years;
             }
           }),
-          options: const {
-            ListingAgreementType.longTerm: 'Long term',
-            ListingAgreementType.temporary: 'Temporary',
+          options: {
+            for (final t in leaseOptions) t: t.label,
           },
-          emojis: const {
-            ListingAgreementType.longTerm: '📅',
-            ListingAgreementType.temporary: '⏳',
+          emojis: {
+            TenurePreference.temporary: '⏳',
+            TenurePreference.longTerm: '📅',
+            if (_isShare) TenurePreference.flexible: '🔄',
           },
         ),
         AnimatedSize(
@@ -2494,7 +3807,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (final flex in LandlordAvailabilityFlexibility.values)
+                      for (final flex in (_isShare
+                          ? LandlordAvailabilityFlexibility.values
+                          : LandlordAvailabilityFlexibility
+                              .independentPlaceValues))
                         ListingOutlineChoiceTile(
                           label: flex.label,
                           selected: _availabilityFlexibility == flex,
@@ -2547,7 +3863,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
     final unit = ListingLabeledField(
       label: 'Unit',
-      child: _agreementType == ListingAgreementType.longTerm
+      child: _agreementType == TenurePreference.longTerm
           ? const _DurationUnitDropdown(
               value: SubletDurationUnit.years,
               enabled: false,
@@ -2592,75 +3908,865 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
   static void _noopDurationUnit(SubletDurationUnit _) {}
 
-  String _roomArchDisplayLabel(SharedRoomArchitecture arch) =>
-      '${arch.tileEmoji} ${arch.tileLabel}';
-
-  String _roomArchSummary(SharedRoomArchitecture arch) => arch.tileLabel;
-
-  Widget _roomTypeSelector(SharedRoomSlot slot) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 360;
-        final options = SharedRoomArchitecture.values;
-
-        Widget tile(SharedRoomArchitecture arch, {bool fullWidth = false}) {
-          final child = ListingOutlineChoiceTile(
-            label: _roomArchDisplayLabel(arch),
-            selected: slot.architecture == arch,
+  Widget _hostNameSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ListingSectionHeader(
+          title: 'Host name',
+          subtitle: 'Shown on your public listing.',
+          required: true,
+        ),
+        ListingLabeledField(
+          label: 'Full name',
+          child: TextFormField(
+            controller: _hostNameController,
             enabled: !widget.saving,
-            height: listingFieldHeight,
-            textAlign: TextAlign.center,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            onTap: () => setState(() => slot.architecture = arch),
-          );
-          return fullWidth ? child : Expanded(child: child);
-        }
-
-        if (!narrow) {
-          return Row(
-            children: [
-              for (var i = 0; i < options.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                tile(options[i]),
-              ],
-            ],
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                tile(SharedRoomArchitecture.privateSharedBath),
-                const SizedBox(width: 8),
-                tile(SharedRoomArchitecture.privateEnsuite),
-              ],
-            ),
-            const SizedBox(height: 8),
-            tile(SharedRoomArchitecture.sharedBed, fullWidth: true),
-          ],
-        );
-      },
+            textInputAction: TextInputAction.next,
+            style: listingFieldValueStyle,
+            decoration: listingInlineInputDecoration(hint: 'As on your ID'),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _sharedRoomAccordion(int index) {
-    final slot = _sharedRoomSlots[index];
-    final expanded = _expandedRoomIndex == index;
+  Widget _sharedHouseholdSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ListingSectionHeader(
+          title: '🗣️ Languages',
+          subtitle: 'Helps match compatible housemates.',
+        ),
+        SeekerLanguageSelectionSection(
+          key: ValueKey(
+            'landlord-lang-$_householdPrimaryLanguage-'
+            '${_suggestedHouseholdLanguages.join('|')}-'
+            '${_householdSecondaryLanguages.join('|')}',
+          ),
+          additionalPrimaryLabel: 'Additional Languages',
+          primaryLanguage: _householdPrimaryLanguage,
+          onPrimaryLanguageChanged: (lang) => setState(() {
+            _householdPrimaryLanguage = lang;
+            _householdSecondaryLanguages.removeWhere(
+              (s) => s.toLowerCase() == lang.toLowerCase(),
+            );
+            _syncHouseholdLanguagesFromSeekerUi();
+          }),
+          suggestedLanguages: List<String>.from(_suggestedHouseholdLanguages),
+          selectedSecondaryLanguages: _householdSecondaryLanguages,
+          onToggleSecondaryLanguage: (lang) => setState(() {
+            if (_householdSecondaryLanguages.any(
+              (s) => s.toLowerCase() == lang.toLowerCase(),
+            )) {
+              _householdSecondaryLanguages.removeWhere(
+                (s) => s.toLowerCase() == lang.toLowerCase(),
+              );
+            } else {
+              _householdSecondaryLanguages.add(lang);
+            }
+            _syncHouseholdLanguagesFromSeekerUi();
+          }),
+          onAddSecondaryLanguage: (lang) => setState(() {
+            _householdSecondaryLanguages.add(lang);
+            _syncHouseholdLanguagesFromSeekerUi();
+          }),
+        ),
+        const SizedBox(height: listingSectionSpacing),
+        const ListingSectionHeader(
+          title: '🏠 Current housemates',
+          subtitle: 'Tell us about who lives here.',
+        ),
+        ListingCompactCounter(
+          label: 'Current housemates',
+          value: _housemateCount,
+          min: 0,
+          max: 12,
+          compact: true,
+          onDecrement: widget.saving
+              ? () {}
+              : () => setState(() {
+                    _housematesInteractedWith = true;
+                    _housemateCount = (_housemateCount - 1).clamp(0, 12);
+                  }),
+          onIncrement: widget.saving
+              ? () {}
+              : () => setState(() {
+                    _housematesInteractedWith = true;
+                    _housemateCount = (_housemateCount + 1).clamp(0, 12);
+                  }),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _shouldShowOccupancyWarning
+              ? 'Please verify occupancy details.'
+              : 'Informational only — not used for matching.',
+          style: listingOptionHintStyle.copyWith(
+            color: _shouldShowOccupancyWarning
+                ? const Color(0xFFB45309)
+                : null,
+          ),
+        ),
+        const SizedBox(height: listingSectionSpacing),
+        const ListingSectionHeader(
+          title: '🚭 Smoking Policy',
+          subtitle: 'Sets expectations for all tenants.',
+          required: true,
+        ),
+        _sharedChoiceRow<ListingSmokingPolicy>(
+          selected: _smokingPolicy,
+          onChanged: (v) => setState(() {
+            _smokingPolicy = v;
+            _smokingAllowed = v.allowsIndoorSmoking;
+          }),
+          options: const {
+            ListingSmokingPolicy.noSmoking: 'No Smoking',
+            ListingSmokingPolicy.outdoorOnly: 'Outdoor Only',
+            ListingSmokingPolicy.smokingAllowed: 'Smoking Allowed',
+          },
+          emojis: const {
+            ListingSmokingPolicy.noSmoking: '🚫',
+            ListingSmokingPolicy.outdoorOnly: '🌿',
+            ListingSmokingPolicy.smokingAllowed: '🚬',
+          },
+        ),
+        const SizedBox(height: listingSectionSpacing),
+        const ListingSectionHeader(
+          title: '📋 House Rules',
+          subtitle: 'Optional but helpful for self-selection.',
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final rule in SharedHouseRule.values)
+                if (rule != SharedHouseRule.keepSharedAreasClean) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: widget.saving
+                            ? null
+                            : () => setState(() {
+                                  if (_houseRules.contains(rule)) {
+                                    _houseRules.remove(rule);
+                                  } else {
+                                    _houseRules.add(rule);
+                                  }
+                                }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _houseRules.contains(rule)
+                                  ? _sharedChipBorderOn
+                                  : _sharedChipBorderOff,
+                              width: _houseRules.contains(rule) ? 2 : 1,
+                            ),
+                          ),
+                          child: Text(
+                            rule.label,
+                            style: TextStyle(
+                              color: _houseRules.contains(rule)
+                                  ? _sharedChipLabelOn
+                                  : _sharedChipLabelOff,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
-    return Container(
-      margin: EdgeInsets.only(top: index == 0 ? 0 : 8),
-      decoration: BoxDecoration(
+  /// Shared Spaces Page 1 only — pets + parking (+ conditional parking type).
+  Widget _sharedPage1PetsParkingSection() {
+    if (!_isShare) return const SizedBox.shrink();
+    final subtype = _propertySubType;
+    final parkingTypes = subtype == null
+        ? const <(ListingParkingFeature, String)>[]
+        : _sharedParkingTypeEntriesFor(subtype);
+    final petsOn = _petsPolicy == ListingPetsPolicy.allowed;
+    final parkingOn = _sharedParkingAvailable == true;
+
+    Widget petsParkingBox({
+      required String label,
+      required VoidCallback onTap,
+    }) {
+      return Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: expanded
-              ? listingChoiceBorderSelected
-              : listingChoiceBorderUnselected,
+        child: InkWell(
+          onTap: widget.saving ? null : onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: double.infinity,
+            height: listingFieldHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _sharedChipBorderOn, width: 1.5),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: listingFieldValueStyle.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _sharedChipLabelOn,
+                    ),
+                  ),
+                ),
+                const Text(
+                  '↺',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Color(0xFF999999),
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: petsParkingBox(
+                label: petsOn ? '🐾 Pets allowed' : '🚫 No pets',
+                onTap: () => setState(() {
+                  _petsPolicy = petsOn
+                      ? ListingPetsPolicy.notAllowed
+                      : ListingPetsPolicy.allowed;
+                }),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: petsParkingBox(
+                label: parkingOn ? '🚗 Parking available' : '🚫 No parking',
+                onTap: () => setState(() {
+                  final next = !parkingOn;
+                  _sharedParkingAvailable = next;
+                  if (!next) _parkingFeatures.clear();
+                }),
+              ),
+            ),
+          ],
+        ),
+        if (parkingOn) ...[
+          const SizedBox(height: 10),
+          if (subtype == null)
+            Text(
+              'Select a property type first.',
+              style: listingFormHelperStyle,
+            )
+          else
+            Row(
+              children: [
+                for (var i = 0; i < parkingTypes.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: _sharedParkingTypeChip(
+                      label: parkingTypes[i].$2,
+                      selected:
+                          _parkingFeatures.contains(parkingTypes[i].$1),
+                      onTap: () => setState(() {
+                        final feature = parkingTypes[i].$1;
+                        if (_parkingFeatures.contains(feature)) {
+                          _parkingFeatures.remove(feature);
+                        } else {
+                          _parkingFeatures.add(feature);
+                        }
+                      }),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+        ],
+      ],
+    );
+  }
+
+  List<ListingParkingFeature> _sharedParkingTypeOptionsFor(
+    ListingPropertySubType subtype,
+  ) {
+    return _sharedParkingTypeEntriesFor(subtype).map((e) => e.$1).toList();
+  }
+
+  List<(ListingParkingFeature, String)> _sharedParkingTypeEntriesFor(
+    ListingPropertySubType subtype,
+  ) {
+    return switch (subtype) {
+      ListingPropertySubType.apartment => const [
+          (ListingParkingFeature.bikeParking, '🚲 Secure Bike'),
+          (ListingParkingFeature.residentCar, '🚗 Car Parking'),
+        ],
+      ListingPropertySubType.house => const [
+          (ListingParkingFeature.driveway, '🏠 Private Driveway'),
+          (ListingParkingFeature.onStreet, '🛣️ Street Parking'),
+        ],
+    };
+  }
+
+  // Shared Spaces chip chrome — black border only, no checkmark, no fill.
+  static const Color _sharedChipBorderOn = Color(0xFF1A1A1A);
+  static const Color _sharedChipBorderOff = Color(0xFFE0E0E0);
+  static const Color _sharedChipLabelOn = Color(0xFF374151);
+  static const Color _sharedChipLabelOff = Color(0xFF6B7280);
+
+  Widget _sharedChoiceBrick({
+    required String label,
+    String? emoji,
+    required bool selected,
+    required VoidCallback onTap,
+    double fontSize = 13,
+    TextAlign textAlign = TextAlign.left,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: widget.saving ? null : onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: listingFieldHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? _sharedChipBorderOn : _sharedChipBorderOff,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (emoji != null && emoji.isNotEmpty) ...[
+                Text(emoji, style: const TextStyle(fontSize: 16, height: 1)),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  label,
+                  textAlign: textAlign,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: listingFieldValueStyle.copyWith(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? _sharedChipLabelOn : _sharedChipLabelOff,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      child: Column(
+    );
+  }
+
+  Widget _sharedChoiceRow<T extends Object>({
+    required Map<T, String> options,
+    Map<T, String> emojis = const {},
+    required T? selected,
+    required ValueChanged<T> onChanged,
+    double fontSize = 13,
+  }) {
+    final entries = options.entries.toList();
+    return Row(
+      children: [
+        for (var i = 0; i < entries.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: _sharedChoiceBrick(
+              label: entries[i].value,
+              emoji: emojis[entries[i].key],
+              selected: entries[i].key == selected,
+              fontSize: fontSize,
+              onTap: () => onChanged(entries[i].key),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _sharedParkingTypeChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return _sharedChoiceBrick(
+      label: label,
+      selected: selected,
+      textAlign: TextAlign.center,
+      onTap: onTap,
+    );
+  }
+
+  Widget _sharedListingContentSection() {
+    if (!_isMultiRoomInventory) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const ListingSectionHeader(
+            title: '📸 Your Listings',
+            subtitle: 'Add photos and details for each room.',
+            required: true,
+          ),
+          ListingMediaPicker(
+            images: _images,
+            video: _video,
+            enabled: !widget.saving,
+            minPhotosRequired: 0,
+            previewHeight: 100,
+            useDropzoneStyle: true,
+            showRequirementLabel: false,
+            showVideoControls: false,
+            requirementHint: 'Min 1 · Recommended 3+ · Max 5',
+            onMessage: _message,
+            onImagesChanged: (next) => setState(() => _images = next),
+            onVideoChanged: (v) => setState(() => _video = v),
+          ),
+          const SizedBox(height: listingFieldSpacing),
+          _sharedEditableTitleSection(),
+          const SizedBox(height: listingFieldSpacing),
+          _sharedCollapsedDescriptionSection(),
+        ],
+      );
+    }
+
+    final roomCount = _sharedRoomSlots.length;
+    final index = _listingWizardRoomIndex.clamp(0, roomCount - 1);
+    final slot = _sharedRoomSlots[index];
+    final summary = _listingWizardRoomSummary(slot);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ListingSectionHeader(
+          title: '📸 Your Listings',
+          subtitle: 'Add photos and details for each room.',
+          required: true,
+        ),
+        Text(
+          '📸 Room ${index + 1} of $roomCount',
+          style: listingFieldLabelStyle.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF111827),
+          ),
+        ),
+        if (summary.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            summary,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF9CA3AF),
+              height: 1.3,
+            ),
+          ),
+        ],
+        const SizedBox(height: listingFieldSpacing),
+        ListingMediaPicker(
+          key: ValueKey('listing-photos-$index'),
+          images: slot.images,
+          video: null,
+          enabled: !widget.saving,
+          minPhotosRequired: 0,
+          previewHeight: 100,
+          useDropzoneStyle: true,
+          showRequirementLabel: false,
+          showVideoControls: false,
+          requirementHint: 'Min 1 · Recommended 3+ · Max 5',
+          onMessage: _message,
+          onImagesChanged: (next) => setState(() {
+            slot.images = List<String>.from(next);
+          }),
+          onVideoChanged: (_) {},
+        ),
+        const SizedBox(height: listingFieldSpacing),
+        _sharedEditableTitleSection(),
+        const SizedBox(height: listingFieldSpacing),
+        _sharedCollapsedDescriptionSection(),
+        const SizedBox(height: listingFieldSpacing),
+        Row(
+          children: [
+            OutlinedButton(
+              onPressed: widget.saving || index <= 0
+                  ? null
+                  : () => _goListingWizardRoom(index - 1),
+              child: const Text('← Previous room'),
+            ),
+            const Spacer(),
+            if (index < roomCount - 1)
+              FilledButton(
+                onPressed: widget.saving
+                    ? null
+                    : () => _goListingWizardRoom(index + 1),
+                child: const Text('Next room →'),
+              )
+            else
+              Text(
+                'All rooms covered',
+                style: listingOptionHintStyle.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _sharedEditableTitleSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Title', style: listingFieldLabelStyle),
+            ),
+            InkWell(
+              onTap: widget.saving
+                  ? null
+                  : () => setState(
+                        () => _titleEditorExpanded = !_titleEditorExpanded,
+                      ),
+              child: const ListingAutoDraftBadge(visible: true),
+            ),
+          ],
+        ),
+        const SizedBox(height: listingLabelSpacing),
+        if (!_titleEditorExpanded)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Text(
+              _titleController.text.trim().isEmpty
+                  ? 'Auto-generated title'
+                  : _titleController.text.trim(),
+              style: listingFieldValueStyle.copyWith(
+                color: _titleController.text.trim().isEmpty
+                    ? const Color(0xFF9CA3AF)
+                    : null,
+              ),
+            ),
+          )
+        else
+          TextFormField(
+            controller: _titleController,
+            enabled: !widget.saving,
+            style: listingFieldValueStyle,
+            decoration: listingInlineInputDecoration(
+              hint: 'Bright private room in Dublin household',
+            ),
+            onChanged: (_) => setState(() {
+              if (_titleShowError) _titleShowError = false;
+              if (_isMultiRoomInventory) {
+                _persistListingWizardToSlot(_listingWizardRoomIndex);
+              }
+            }),
+          ),
+        if (_titleShowError)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Enter a title (at least 3 characters).',
+              style: listingOptionHintStyle.copyWith(
+                color: const Color(0xFFEF4444),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _sharedCollapsedDescriptionSection() {
+    final preview = _plainListingDescription(_descriptionController.text);
+    final previewLine = preview.isEmpty
+        ? 'Auto-generated from your answers.'
+        : (preview.length > 160 ? '${preview.substring(0, 160)}…' : preview);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('Description', style: listingFieldLabelStyle),
+            ),
+            InkWell(
+              onTap: widget.saving
+                  ? null
+                  : () => setState(
+                        () => _descriptionEditorExpanded =
+                            !_descriptionEditorExpanded,
+                      ),
+              child: const ListingAutoDraftBadge(visible: true),
+            ),
+          ],
+        ),
+        const SizedBox(height: listingLabelSpacing),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: !_descriptionEditorExpanded
+              ? Text(previewLine, style: listingOptionHintStyle)
+              : TextFormField(
+                  controller: _descriptionController,
+                  enabled: !widget.saving,
+                  maxLines: 8,
+                  style: listingFieldValueStyle,
+                  decoration: listingInlineInputDecoration(
+                    hint: 'Edit your listing description',
+                  ),
+                  onChanged: (_) => setState(() {
+                    if (_isMultiRoomInventory) {
+                      _persistListingWizardToSlot(_listingWizardRoomIndex);
+                    }
+                  }),
+                ),
+        ),
+      ],
+    );
+  }
+  LandlordAvailabilityFlexibility? _flexibilityForToken(String? token) {
+    if (token == null || token.isEmpty) return null;
+    for (final flex
+        in LandlordAvailabilityFlexibility.sharedSpacesValues) {
+      if (flex.storageToken == token) return flex;
+    }
+    return null;
+  }
+
+  static const double _roomLabelGap = 6;
+  static const double _roomFieldGap = 12;
+
+  Widget _roomCoreFields(
+    SharedRoomSlot slot, {
+    required int index,
+    required bool showRoomProfile,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Room type', style: listingFieldLabelStyle),
+        const SizedBox(height: _roomLabelGap),
+        _sharedChoiceRow<SharedRoomKind>(
+          selected: slot.roomKind,
+          onChanged: (v) => setState(() {
+            slot.roomKind = v;
+            _afterRoomChoiceChanged(index);
+          }),
+          options: const {
+            SharedRoomKind.privateRoom: 'Private Room',
+            SharedRoomKind.sharedRoom: 'Shared Room',
+          },
+          emojis: const {
+            SharedRoomKind.privateRoom: '🚪',
+            SharedRoomKind.sharedRoom: '🤝',
+          },
+        ),
+        const SizedBox(height: _roomFieldGap),
+        _roomOccupantMatchingFields(slot, index: index),
+        const SizedBox(height: _roomFieldGap),
+        Text('Bathroom', style: listingFieldLabelStyle),
+        const SizedBox(height: _roomLabelGap),
+        _sharedChoiceRow<SharedBathroomType>(
+          selected: slot.bathroomType,
+          onChanged: (v) => setState(() {
+            slot.bathroomType = v;
+            _afterRoomChoiceChanged(index);
+          }),
+          options: const {
+            SharedBathroomType.privateEnsuite: 'Private Ensuite',
+            SharedBathroomType.sharedBathroom: 'Shared Bathroom',
+          },
+          emojis: const {
+            SharedBathroomType.privateEnsuite: '🛁',
+            SharedBathroomType.sharedBathroom: '🚿',
+          },
+        ),
+        if (showRoomProfile) ...[
+          const SizedBox(height: _roomFieldGap),
+          Text('Who suits this room?', style: listingFieldLabelStyle),
+          const SizedBox(height: _roomLabelGap),
+          _sharedChoiceRow<FlatmateCohort>(
+            selected: slot.roomProfile ?? FlatmateCohort.mixedCohort,
+            onChanged: (v) => setState(() {
+              slot.roomProfile = v;
+              _afterRoomChoiceChanged(index);
+            }),
+            emojis: _cohortEmojis,
+            options: {
+              for (final c in FlatmateCohort.sharedSpacesValues)
+                c: _cohortSegmentLabels[c] ?? c.label,
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _roomOccupantMatchingFields(SharedRoomSlot slot, {required int index}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (slot.isSharedBed) ...[
+          Text('Current occupant', style: listingFieldLabelStyle),
+          const SizedBox(height: _roomLabelGap),
+          _sharedChoiceRow<RoomOccupantGender>(
+            selected: slot.currentOccupant,
+            onChanged: (v) => setState(() {
+              slot.currentOccupant = v;
+              _afterRoomChoiceChanged(index);
+            }),
+            options: const {
+              RoomOccupantGender.male: 'Male',
+              RoomOccupantGender.female: 'Female',
+            },
+            emojis: const {
+              RoomOccupantGender.male: '♂️',
+              RoomOccupantGender.female: '♀️',
+            },
+          ),
+          const SizedBox(height: _roomFieldGap),
+        ],
+        Text('Suitable for', style: listingFieldLabelStyle),
+        const SizedBox(height: _roomLabelGap),
+        _sharedChoiceRow<RoomRequiredOccupant>(
+          selected: slot.requiredOccupant,
+          onChanged: (v) => setState(() {
+            slot.requiredOccupant = v;
+            slot.tenantGender = v.asTargetTenantPreference;
+            _afterRoomChoiceChanged(index);
+          }),
+          options: const {
+            RoomRequiredOccupant.male: 'Male',
+            RoomRequiredOccupant.female: 'Female',
+            RoomRequiredOccupant.noPreference: 'No Preference',
+          },
+          emojis: const {
+            RoomRequiredOccupant.male: '♂️',
+            RoomRequiredOccupant.female: '♀️',
+            RoomRequiredOccupant.noPreference: '◎',
+          },
+        ),
+        const SizedBox(height: _roomFieldGap),
+        Text('Occupant type', style: listingFieldLabelStyle),
+        const SizedBox(height: _roomLabelGap),
+        _sharedChoiceRow<RoomOccupantType>(
+          selected: slot.occupantType,
+          onChanged: (v) => setState(() {
+            slot.occupantType = v;
+            _afterRoomChoiceChanged(index);
+          }),
+          options: const {
+            // Display-only shorten — enum value unchanged.
+            RoomOccupantType.workingProfessional: 'Professional',
+            RoomOccupantType.student: 'Student',
+            RoomOccupantType.noPreference: 'No Preference',
+          },
+          emojis: const {
+            RoomOccupantType.workingProfessional: '💼',
+            RoomOccupantType.student: '🎓',
+            RoomOccupantType.noPreference: '◎',
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _sharedRoomInventoryCard(int index) {
+    final slot = _sharedRoomSlots[index];
+    // Keep Mixed as a real terminal selection (not only a visual default).
+    slot.roomProfile ??= FlatmateCohort.mixedCohort;
+    final collapseReady = _isRoomCardReadyToCollapse(slot);
+    final roomComplete = _isRoomSlotComplete(slot);
+    final missingRequiredCount = _sharedRoomMissingRequiredCount(slot);
+    final showRoomValidation =
+        _roomsStepContinueAttempted && missingRequiredCount > 0;
+    final expanded = _expandedRoomIndex == index;
+    final agreement = TenurePreference.fromStorage(slot.agreementTypeToken);
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    final rentDigits = slot.monthlyRent.replaceAll(RegExp(r'[^\d]'), '');
+    final summaryBits = <String>[
+      slot.roomKind.label,
+      slot.bathroomType.label,
+      if (rentDigits.isNotEmpty) '€$rentDigits',
+    ];
+    final summaryLine = summaryBits.isEmpty
+        ? 'Tap to configure'
+        : 'Room ${index + 1} · ${summaryBits.join(' · ')}';
+    final outlineColor = expanded
+        ? listingChoiceBorderSelected
+        : listingChoiceBorderUnselected;
+
+    return ClipRRect(
+      // Stable key — do not include roomKind or the header remounts on Shared Room.
+      key: ValueKey('room-card-$index-$_roomFieldEpoch'),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          // Non-uniform left accent cannot use borderRadius on same BoxDecoration.
+          border: Border(
+            left: BorderSide(
+              color: roomComplete ? outlineColor : const Color(0xFFE53935),
+              width: roomComplete ? 1 : 3,
+            ),
+            top: BorderSide(color: outlineColor),
+            right: BorderSide(color: outlineColor),
+            bottom: BorderSide(color: outlineColor),
+          ),
+        ),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Material(
@@ -2668,45 +4774,93 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             child: InkWell(
               onTap: widget.saving
                   ? null
-                  : () => setState(
-                        () => _expandedRoomIndex = expanded ? -1 : index,
-                      ),
+                  : () => setState(() {
+                        // Incomplete rooms stay expanded until required fields filled.
+                        if (expanded && !roomComplete) return;
+                        _expandedRoomIndex = expanded ? -1 : index;
+                      }),
               borderRadius: BorderRadius.vertical(
                 top: const Radius.circular(10),
                 bottom: expanded ? Radius.zero : const Radius.circular(10),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   children: [
                     Icon(
                       expanded
                           ? Icons.expand_more_rounded
-                          : Icons.chevron_right_rounded,
+                          : (collapseReady
+                              ? Icons.check_circle
+                              : Icons.chevron_right_rounded),
                       size: 18,
-                      color: const Color(0xFF6B7280),
+                      color: collapseReady && !expanded
+                          ? const Color(0xFF059669)
+                          : const Color(0xFF6B7280),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Room ${index + 1}',
-                      style: listingFieldLabelStyle.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF111827),
-                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: expanded
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Room ${index + 1}',
+                                  style: listingFieldLabelStyle.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF111827),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  summaryBits.isEmpty
+                                      ? 'Tap to configure'
+                                      : summaryBits.join(' · '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: listingSubLabelStyle.copyWith(
+                                    color: const Color(0xFF6B7280),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text(
+                              summaryLine,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: listingFieldLabelStyle.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF111827),
+                              ),
+                            ),
                     ),
-                    if (!expanded) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _roomArchSummary(slot.architecture),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: listingSubLabelStyle.copyWith(
-                            color: const Color(0xFF6B7280),
-                          ),
-                        ),
-                      ),
-                    ],
+                    if (!expanded)
+                      showRoomValidation
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFE53935),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$missingRequiredCount to complete',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFFE53935),
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const Text('✏️', style: TextStyle(fontSize: 14)),
                   ],
                 ),
               ),
@@ -2718,218 +4872,309 @@ class ListingCreationFormState extends State<ListingCreationForm> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Room type', style: listingFieldLabelStyle),
-                  const SizedBox(height: listingLabelSpacing),
-                  _roomTypeSelector(slot),
-                  const SizedBox(height: listingFieldSpacing),
-                  Text('Tenant composition', style: listingFieldLabelStyle),
-                  const SizedBox(height: listingLabelSpacing),
-                  ListingDaftRadioChoiceList<TargetTenantPreference>(
-                    enabled: !widget.saving,
-                    selected: slot.tenantGender,
-                    horizontal: true,
-                    onChanged: (v) => setState(() => slot.tenantGender = v),
-                    options: const {
-                      TargetTenantPreference.femaleOnly: 'Female',
-                      TargetTenantPreference.maleOnly: 'Male',
-                      TargetTenantPreference.mixed: 'Mixed',
-                    },
-                    emojis: const {
-                      TargetTenantPreference.femaleOnly: '👩',
-                      TargetTenantPreference.maleOnly: '👨',
-                      TargetTenantPreference.mixed: '👥',
-                    },
+                  _roomCoreFields(
+                    slot,
+                    index: index,
+                    showRoomProfile: true,
                   ),
-                  if (slot.isSharedBed) ...[
-                    const SizedBox(height: listingFieldSpacing),
-                    ListingCompactCounter(
-                      label: 'Sharing this room',
-                      value: slot.bedOccupants,
-                      min: 2,
-                      max: 6,
-                      compact: true,
-                      onDecrement: widget.saving
-                          ? () {}
-                          : () => setState(
-                                () => slot.bedOccupants =
-                                    (slot.bedOccupants - 1).clamp(2, 6),
-                              ),
-                      onIncrement: widget.saving
-                          ? () {}
-                          : () => setState(
-                                () => slot.bedOccupants =
-                                    (slot.bedOccupants + 1).clamp(2, 6),
-                              ),
+                  const SizedBox(height: _roomFieldGap),
+                  Text('Monthly rent (€)', style: listingFieldLabelStyle),
+                  const SizedBox(height: _roomLabelGap),
+                  _sharedRequiredFieldWrap(
+                    showError: _sharedRoomFieldRequired(slot, 'rent'),
+                    child: Focus(
+                      onFocusChange: (hasFocus) {
+                        if (!hasFocus) {
+                          setState(() => _tryCollapseRoomCard(index));
+                        }
+                      },
+                      child: TextFormField(
+                        key: ValueKey('rent-$index-$_roomFieldEpoch'),
+                        initialValue: slot.monthlyRent,
+                        enabled: !widget.saving,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        style: listingFieldValueStyle,
+                        decoration:
+                            listingInlineInputDecoration(hint: 'e.g. 850'),
+                        onChanged: (v) => setState(() {
+                          slot.monthlyRent = v;
+                          _afterRoomTextChanged(index);
+                        }),
+                      ),
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'How many people will share this room — including the new tenant.',
-                      style: listingOptionHintStyle,
+                  ),
+                  const SizedBox(height: _roomFieldGap),
+                  Text(
+                    'Shared costs — monthly contribution per tenant',
+                    style: listingFieldLabelStyle,
+                  ),
+                  const SizedBox(height: _roomLabelGap),
+                  _slotCostRow(slot, index: index),
+                  const SizedBox(height: _roomFieldGap),
+                  Text('Lease type', style: listingFieldLabelStyle),
+                  const SizedBox(height: _roomLabelGap),
+                  _sharedRequiredFieldWrap(
+                    showError: _sharedRoomFieldRequired(slot, 'lease'),
+                    child: _sharedChoiceRow<TenurePreference>(
+                      selected: agreement == TenurePreference.flexible
+                          ? null
+                          : agreement,
+                      onChanged: (v) => setState(() {
+                        slot.agreementTypeToken = v.storageToken;
+                        if (v == TenurePreference.temporary) {
+                          slot.temporaryDurationUnit =
+                              SubletDurationUnit.months;
+                        }
+                        _afterRoomChoiceChanged(index);
+                      }),
+                      options: const {
+                        TenurePreference.longTerm: 'Long-Term',
+                        TenurePreference.temporary: 'Temporary',
+                      },
+                      emojis: const {
+                        TenurePreference.longTerm: '📅',
+                        TenurePreference.temporary: '⏳',
+                      },
+                    ),
+                  ),
+                  if (agreement == TenurePreference.temporary) ...[
+                    const SizedBox(height: _roomFieldGap),
+                    Text('Duration (months)', style: listingFieldLabelStyle),
+                    const SizedBox(height: _roomLabelGap),
+                    Focus(
+                      onFocusChange: (hasFocus) {
+                        if (!hasFocus) {
+                          setState(() => _tryCollapseRoomCard(index));
+                        }
+                      },
+                      child: TextFormField(
+                        key: ValueKey('temp-duration-$index-$_roomFieldEpoch'),
+                        initialValue: slot.temporaryDurationValue,
+                        enabled: !widget.saving,
+                        keyboardType: TextInputType.number,
+                        style: listingFieldValueStyle,
+                        decoration:
+                            listingInlineInputDecoration(hint: 'e.g. 3'),
+                        onChanged: (v) => setState(() {
+                          slot.temporaryDurationValue = v;
+                          slot.temporaryDurationUnit =
+                              SubletDurationUnit.months;
+                          _afterRoomTextChanged(index);
+                        }),
+                      ),
                     ),
                   ],
+                  const SizedBox(height: _roomFieldGap),
+                  ListingLabeledField(
+                    label: 'Available from',
+                    child: _sharedRequiredFieldWrap(
+                      showError:
+                          _sharedRoomFieldRequired(slot, 'availableFrom'),
+                      child: ListingDateInputField(
+                        externalLabel: true,
+                        value: slot.availableFrom,
+                        enabled: !widget.saving,
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: slot.availableFrom != null &&
+                                    !slot.availableFrom!
+                                        .isBefore(startOfToday)
+                                ? slot.availableFrom!
+                                : startOfToday,
+                            firstDate: startOfToday,
+                            lastDate: startOfToday
+                                .add(const Duration(days: 365 * 3)),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              slot.availableFrom = picked;
+                              _afterRoomChoiceChanged(index);
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: _roomFieldGap),
+                  Text(
+                    'Availability flexibility',
+                    style: listingFieldLabelStyle,
+                  ),
+                  const SizedBox(height: _roomLabelGap),
+                  _sharedRequiredFieldWrap(
+                    showError: _sharedRoomFieldRequired(slot, 'flexibility'),
+                    child: _sharedChoiceRow<LandlordAvailabilityFlexibility>(
+                      selected: _flexibilityForToken(
+                        slot.availabilityFlexibilityToken,
+                      ),
+                      onChanged: (v) => setState(() {
+                        slot.availabilityFlexibilityToken = v.storageToken;
+                        _afterRoomChoiceChanged(index);
+                      }),
+                      options: const {
+                        LandlordAvailabilityFlexibility.plus1Month:
+                            'Within 1 Month',
+                        LandlordAvailabilityFlexibility.flexible: 'Flexible',
+                      },
+                      emojis: const {
+                        LandlordAvailabilityFlexibility.plus1Month: '📆',
+                        LandlordAvailabilityFlexibility.flexible: '🗓️',
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
         ],
       ),
+      ),
     );
   }
 
-  Widget _householdProfileSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const ListingSectionHeader(
-          title: '👥 Household profile',
-          subtitle: 'Who lives here?',
-          required: true,
-        ),
-        if (_sharedProfilePrefillLocked)
-          _inheritedSummaryCard(
-            title: 'Household profile inherited',
-            subtitle:
-                'Using your onboarding host profile as the starting point for this listing.',
-            lines: [
-              'Total housemates in house: $_housemateCount',
-              if (_householdLanguages.isNotEmpty)
-                'Languages: ${_householdLanguages.join(', ')}',
-              'Owner occupier: ${_isOwnerOccupier ? 'Yes' : 'No'}',
-            ],
-            actionLabel: 'Edit household',
-            onAction: () => setState(() => _sharedProfilePrefillLocked = false),
-          )
-        else ...[
-          ListingWrapSegmentedControl<FlatmateCohort>(
-            enabled: !widget.saving,
-            selected: _householdCohort ?? FlatmateCohort.mixedCohort,
-            onChanged: (v) => setState(() => _householdCohort = v),
-            emojis: _cohortEmojis,
-            segments: {
-              for (final c in FlatmateCohort.values)
-                c: _cohortSegmentLabels[c] ?? c.label,
-            },
+  Widget _slotCostRow(SharedRoomSlot slot, {required int index}) {
+    Widget costCol({
+      required String label,
+      required String value,
+      required bool included,
+      required ValueChanged<String> onValue,
+      required ValueChanged<bool> onIncluded,
+    }) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: listingSectionTitleStyle.copyWith(fontSize: 11),
           ),
-          const SizedBox(height: listingFieldSpacing),
-          ListingCompactCounter(
-            label: 'Total housemates in house',
-            value: _housemateCount,
-            min: 1,
-            max: 12,
-            compact: true,
-            onDecrement: widget.saving
-                ? () {}
-                : () => setState(
-                      () => _housemateCount = (_housemateCount - 1).clamp(1, 12),
-                    ),
-            onIncrement: widget.saving
-                ? () {}
-                : () => setState(
-                      () => _housemateCount = (_housemateCount + 1).clamp(1, 12),
-                    ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Everyone currently living in the property — set once for the whole household.',
-            style: listingOptionHintStyle,
-          ),
-          const SizedBox(height: listingFieldSpacing),
-          Text('Household languages spoken', style: listingFieldLabelStyle),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final lang in _householdLanguages)
-                Chip(
-                  label: Text(lang),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: widget.saving
-                      ? null
-                      : () => setState(() => _householdLanguages.remove(lang)),
-                ),
-              ActionChip(
-                avatar: const Icon(Icons.add, size: 18),
-                label: const Text('Add language'),
-                onPressed: widget.saving ? null : _promptAddLanguage,
+          const SizedBox(height: 4),
+          SizedBox(
+            height: listingFieldHeight,
+            child: TextFormField(
+              key: ValueKey('cost-$index-$label-$included-$_roomFieldEpoch'),
+              initialValue: included ? '' : value,
+              enabled: !widget.saving && !included,
+              keyboardType: TextInputType.number,
+              style: listingFieldValueStyle.copyWith(
+                color: included ? const Color(0xFF9CA3AF) : null,
               ),
-              if (_householdLanguages.isEmpty)
-                ActionChip(
-                  avatar: const Icon(Icons.person_outline, size: 18),
-                  label: const Text('From my profile'),
-                  onPressed: widget.saving
-                      ? null
-                      : () {
-                          final session = AuthScreen.currentUserSession;
-                          final langs = <String>[
-                            if (session != null)
-                              ...ProfileData.languageList(
-                                session['spoken_languages'],
-                              ),
-                          ];
-                          if (langs.isEmpty &&
-                              session != null &&
-                              ProfileData.text(session['mother_tongue']).isNotEmpty) {
-                            langs.add(ProfileData.text(session['mother_tongue']));
-                          }
-                          if (langs.isEmpty) {
-                            _message('No profile languages found to import.');
-                            return;
-                          }
-                          setState(() => _householdLanguages.addAll(langs));
-                        },
+              decoration: listingInlineInputDecoration(
+                hint: included ? 'Included' : '0',
+              ).copyWith(
+                prefixText: included ? null : '€ ',
+                prefixStyle: listingFieldValueStyle.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF374151),
                 ),
+              ),
+              onChanged: onValue,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              SizedBox(
+                height: 24,
+                width: 24,
+                child: Checkbox(
+                  value: included,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: widget.saving
+                      ? null
+                      : (v) => onIncluded(v ?? false),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Flexible(
+                child: Text(
+                  'Included in rent',
+                  style: listingOptionHintStyle,
+                ),
+              ),
             ],
           ),
         ],
-      ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack = constraints.maxWidth < 520;
+        final cols = [
+          costCol(
+            label: '⚡ Gas & Elec',
+            value: slot.electricityCost,
+            included: slot.electricityIncluded,
+            onValue: (v) => setState(() {
+              slot.electricityCost = v;
+              _afterRoomTextChanged(index);
+            }),
+            onIncluded: (v) => setState(() {
+              slot.electricityIncluded = v;
+              if (v) slot.electricityCost = '0';
+              _afterRoomChoiceChanged(index);
+            }),
+          ),
+          costCol(
+            label: '🌐 Internet',
+            value: slot.internetCost,
+            included: slot.internetIncluded,
+            onValue: (v) => setState(() {
+              slot.internetCost = v;
+              _afterRoomTextChanged(index);
+            }),
+            onIncluded: (v) => setState(() {
+              slot.internetIncluded = v;
+              if (v) slot.internetCost = '0';
+              _afterRoomChoiceChanged(index);
+            }),
+          ),
+          costCol(
+            label: '🗑️ Bins',
+            value: slot.binsCost,
+            included: slot.binsIncluded,
+            onValue: (v) => setState(() {
+              slot.binsCost = v;
+              _afterRoomTextChanged(index);
+            }),
+            onIncluded: (v) => setState(() {
+              slot.binsIncluded = v;
+              if (v) slot.binsCost = '0';
+              _afterRoomChoiceChanged(index);
+            }),
+          ),
+        ];
+        if (stack) {
+          return Column(
+            children: [
+              for (var i = 0; i < cols.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                cols[i],
+              ],
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: cols[0]),
+            const SizedBox(width: 8),
+            Expanded(child: cols[1]),
+            const SizedBox(width: 8),
+            Expanded(child: cols[2]),
+          ],
+        );
+      },
     );
   }
 
-  Widget _roomConfigurationSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const ListingSectionHeader(
-          title: '🏠 Room configuration',
-          subtitle: 'Set the layout and who each room suits.',
-        ),
-        ListingCompactCounter(
-          label: 'Rooms to share',
-          value: _roomsToShare,
-          min: 1,
-          max: 6,
-          compact: true,
-          onDecrement:
-              widget.saving ? () {} : () => _setRoomsToShare(_roomsToShare - 1),
-          onIncrement:
-              widget.saving ? () {} : () => _setRoomsToShare(_roomsToShare + 1),
-        ),
-        const SizedBox(height: listingFieldSpacing),
-        for (var i = 0; i < _sharedRoomSlots.length; i++)
-          _sharedRoomAccordion(i),
-        if (_hasSharedBedRoom) ...[
-          const SizedBox(height: listingFieldSpacing),
-          Text('Shared room cohort profile', style: listingFieldLabelStyle),
-          const SizedBox(height: 6),
-          const Text(
-            'Only applies to rooms with a shared room in shared occupancy.',
-            style: listingOptionHintStyle,
-          ),
-          const SizedBox(height: listingLabelSpacing),
-          ListingWrapSegmentedControl<FlatmateCohort>(
-            enabled: !widget.saving,
-            selected: _flatmateCohort ?? FlatmateCohort.mixedCohort,
-            onChanged: (v) => setState(() => _flatmateCohort = v),
-            emojis: _cohortEmojis,
-            segments: {
-              for (final c in FlatmateCohort.values)
-                c: _cohortSegmentLabels[c] ?? c.label,
-            },
-          ),
-        ],
-      ],
-    );
-  }
+  // Legacy display helpers no longer used by Shared Spaces room cards.
 
   Widget _listingTypeSection() {
     return Column(
@@ -2949,10 +5194,27 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             actionLabel: 'Edit category',
             onAction: () => setState(() => _categoryPrefillLocked = false),
           )
+        else if (_isShare)
+          _sharedChoiceRow<bool>(
+            selected: _listingTypeChipIsShare,
+            onChanged: (isShare) => _selectSpace(
+              isShare
+                  ? MarketplaceSpace.sharedSpace
+                  : MarketplaceSpace.fullRental,
+            ),
+            options: {
+              false: MarketplaceSpace.fullRental.option2Title,
+              true: 'Shared room',
+            },
+            emojis: const {
+              false: '🏡',
+              true: '🛏️',
+            },
+          )
         else
           ListingDaftRadioChoiceList<bool>(
             enabled: !widget.saving,
-            selected: _isShare,
+            selected: _listingTypeChipIsShare,
             onChanged: (isShare) => _selectSpace(
               isShare
                   ? MarketplaceSpace.sharedSpace
@@ -2976,24 +5238,40 @@ class ListingCreationFormState extends State<ListingCreationForm> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const ListingSectionHeader(title: 'Property type'),
-        ListingDaftRadioChoiceList<ListingPropertySubType>(
-          enabled: !widget.saving,
-          selected: _propertySubType,
-          onChanged: (v) => setState(() {
-            _propertySubType = v;
-            if (v == ListingPropertySubType.house) {
-              _secureBikeStorage = false;
-            }
-          }),
-          options: const {
-            ListingPropertySubType.apartment: 'Apartment',
-            ListingPropertySubType.house: 'House',
-          },
-          emojis: const {
-            ListingPropertySubType.apartment: '🏢',
-            ListingPropertySubType.house: '🏡',
-          },
-        ),
+        if (_isShare)
+          _sharedChoiceRow<ListingPropertySubType>(
+            selected: _propertySubType,
+            onChanged: (v) => setState(() {
+              _propertySubType = v;
+              final allowed = _sharedParkingTypeOptionsFor(v);
+              _parkingFeatures.removeWhere((f) => !allowed.contains(f));
+            }),
+            options: const {
+              ListingPropertySubType.apartment: 'Apartment',
+              ListingPropertySubType.house: 'House',
+            },
+            emojis: const {
+              ListingPropertySubType.apartment: '🏢',
+              ListingPropertySubType.house: '🏡',
+            },
+          )
+        else
+          _sharedChoiceRow<ListingPropertySubType>(
+            selected: _propertySubType,
+            onChanged: (v) => setState(() {
+              _propertySubType = v;
+              final allowed = ListingParkingFeature.optionsFor(v);
+              _parkingFeatures.removeWhere((f) => !allowed.contains(f));
+            }),
+            options: const {
+              ListingPropertySubType.apartment: 'Apartment',
+              ListingPropertySubType.house: 'House',
+            },
+            emojis: const {
+              ListingPropertySubType.apartment: '🏢',
+              ListingPropertySubType.house: '🏡',
+            },
+          ),
       ],
     );
   }
@@ -3005,18 +5283,18 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           child: ListingCompactCounter(
             label: 'Bedrooms',
             value: _bedrooms,
-            min: 1,
+            min: 0,
             max: 6,
             compact: true,
             onDecrement: widget.saving
                 ? () {}
                 : () => setState(
-                      () => _bedrooms = (_bedrooms - 1).clamp(1, 6),
+                      () => _bedrooms = (_bedrooms - 1).clamp(0, 6),
                     ),
             onIncrement: widget.saving
                 ? () {}
                 : () => setState(
-                      () => _bedrooms = (_bedrooms + 1).clamp(1, 6),
+                      () => _bedrooms = (_bedrooms + 1).clamp(0, 6),
                     ),
           ),
         ),
@@ -3025,18 +5303,18 @@ class ListingCreationFormState extends State<ListingCreationForm> {
           child: ListingCompactCounter(
             label: 'Bathrooms',
             value: _bathrooms,
-            min: 1,
+            min: 0,
             max: 4,
             compact: true,
             onDecrement: widget.saving
                 ? () {}
                 : () => setState(
-                      () => _bathrooms = (_bathrooms - 1).clamp(1, 4),
+                      () => _bathrooms = (_bathrooms - 1).clamp(0, 4),
                     ),
             onIncrement: widget.saving
                 ? () {}
                 : () => setState(
-                      () => _bathrooms = (_bathrooms + 1).clamp(1, 4),
+                      () => _bathrooms = (_bathrooms + 1).clamp(0, 4),
                     ),
           ),
         ),
@@ -3055,7 +5333,7 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             subtitle:
                 'Your onboarding listing defaults already set this preference.',
             lines: [
-              'Furnishing: ${_isFurnished ? 'Furnished' : 'Unfurnished'}',
+              'Furnishing: ${_isFurnished == true ? 'Furnished' : 'Unfurnished'}',
             ],
             actionLabel: 'Edit furnishing',
             onAction: () => setState(() => _furnishingPrefillLocked = false),
@@ -3117,6 +5395,39 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     );
   }
 
+  Widget _depositRequiredSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const ListingSectionHeader(
+          title: 'Deposit required',
+          required: true,
+        ),
+        ListingPremiumRentField(
+          key: _depositSectionKey,
+          controller: _depositController,
+          enabled: !widget.saving,
+          showLabel: false,
+          showError: _depositShowError,
+          errorText: _depositErrorText,
+          onChanged: (_) {
+            if (_depositShowError) {
+              setState(() {
+                _depositShowError = false;
+                _depositErrorText = null;
+              });
+            }
+          },
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const Text(
+          'Security deposit amount tenants must pay before move-in.',
+          style: listingFormHelperStyle,
+        ),
+      ],
+    );
+  }
+
   Widget _berRatingSection() {
     return ListingBerRatingField(
       value: _berRating,
@@ -3127,33 +5438,244 @@ class ListingCreationFormState extends State<ListingCreationForm> {
   }
 
   Widget _propertyHighlightsSection() {
+    // Independent Places only — Shared Spaces has its own pets/parking section.
+    final petsOn = _petsPolicy == ListingPetsPolicy.allowed;
+
+    Widget ipToggleBox({
+      required String label,
+      required bool selected,
+      required VoidCallback onTap,
+      bool alwaysEmphasizedBorder = false,
+    }) {
+      final borderOn = alwaysEmphasizedBorder || selected;
+      return Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: widget.saving ? null : onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: double.infinity,
+            height: listingFieldHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: borderOn
+                    ? const Color(0xFF1A1A1A)
+                    : const Color(0xFFE0E0E0),
+                width: borderOn ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: listingFieldValueStyle.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: borderOn
+                          ? const Color(0xFF374151)
+                          : const Color(0xFF6B7280),
+                    ),
+                  ),
+                ),
+                const Text(
+                  '↺',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Color(0xFF999999),
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget ipParkingTypeChip({
+      required String label,
+      required bool selected,
+      required VoidCallback onTap,
+    }) {
+      return Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: widget.saving ? null : onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: listingFieldHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFF1A1A1A)
+                    : const Color(0xFFE0E0E0),
+                width: selected ? 2 : 1,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: listingFieldValueStyle.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected
+                    ? const Color(0xFF374151)
+                    : const Color(0xFF6B7280),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    void toggleParkingFeature(ListingParkingFeature feature) {
+      setState(() {
+        if (_parkingFeatures.contains(feature)) {
+          _parkingFeatures.remove(feature);
+        } else {
+          _parkingFeatures.add(feature);
+        }
+      });
+    }
+
+    Widget parkingLevel2(ListingPropertySubType subtype) {
+      if (subtype == ListingPropertySubType.apartment) {
+        return Row(
+          children: [
+            Expanded(
+              child: ipParkingTypeChip(
+                label: '🚲 Secure Bike Parking',
+                selected: _parkingFeatures
+                    .contains(ListingParkingFeature.bikeParking),
+                onTap: () =>
+                    toggleParkingFeature(ListingParkingFeature.bikeParking),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ipParkingTypeChip(
+                label: '🚗 Car Parking',
+                selected: _parkingFeatures
+                    .contains(ListingParkingFeature.residentCar),
+                onTap: () =>
+                    toggleParkingFeature(ListingParkingFeature.residentCar),
+              ),
+            ),
+          ],
+        );
+      }
+      // House: 2-col grid — driveway/street, then garage left-aligned.
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: ipParkingTypeChip(
+                  label: '🏠 Private Driveway',
+                  selected: _parkingFeatures
+                      .contains(ListingParkingFeature.driveway),
+                  onTap: () =>
+                      toggleParkingFeature(ListingParkingFeature.driveway),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ipParkingTypeChip(
+                  label: '🛣️ Street Parking',
+                  selected: _parkingFeatures
+                      .contains(ListingParkingFeature.onStreet),
+                  onTap: () =>
+                      toggleParkingFeature(ListingParkingFeature.onStreet),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ipParkingTypeChip(
+                  label: '🏗️ Garage',
+                  selected:
+                      _parkingFeatures.contains(ListingParkingFeature.garage),
+                  onTap: () =>
+                      toggleParkingFeature(ListingParkingFeature.garage),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(child: SizedBox.shrink()),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Read live — do not close over a stale local for Level 2 gating.
+    final propertyType = _propertySubType;
+    final parkingAvailable = _ipParkingAvailable;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const ListingSectionHeader(
-          title: 'Property highlights',
-          subtitle: 'Optional features shown on your public listing preview.',
+          title: 'Pets & parking',
+          subtitle: 'Shown on your public listing.',
         ),
-        if (_propertySubType == ListingPropertySubType.apartment)
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _secureBikeStorage,
-            onChanged: widget.saving
-                ? null
-                : (value) => setState(() => _secureBikeStorage = value ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
-            title: const Text(
-              'Secure Bike Parking Available',
-              style: listingFieldValueStyle,
+        Row(
+          children: [
+            Expanded(
+              child: ipToggleBox(
+                label: petsOn ? '🐾 Pets allowed' : '🚫 No pets',
+                selected: true,
+                alwaysEmphasizedBorder: true,
+                onTap: () => setState(() {
+                  _petsPolicy = petsOn
+                      ? ListingPetsPolicy.notAllowed
+                      : ListingPetsPolicy.allowed;
+                }),
+              ),
             ),
-            subtitle: const Text(
-              'Shown when your building offers secure bicycle storage.',
+            const SizedBox(width: 8),
+            Expanded(
+              child: ipToggleBox(
+                label: parkingAvailable
+                    ? '🚗 Parking available'
+                    : '🚫 No parking',
+                selected: true,
+                alwaysEmphasizedBorder: true,
+                onTap: () => setState(() {
+                  final next = !parkingAvailable;
+                  _ipParkingAvailable = next;
+                  if (!next) _parkingFeatures.clear();
+                }),
+              ),
+            ),
+          ],
+        ),
+        if (parkingAvailable) ...[
+          const SizedBox(height: 8),
+          if (propertyType == null)
+            Text(
+              'Select a property type first.',
               style: listingFormHelperStyle,
-            ),
-            activeColor: const Color(0xFF4B5563),
-            checkColor: Colors.white,
-            side: const BorderSide(color: Color(0xFF9CA3AF), width: 1.2),
-          ),
+            )
+          else
+            parkingLevel2(propertyType),
+        ],
       ],
     );
   }
@@ -3530,19 +6052,15 @@ class ListingCreationFormState extends State<ListingCreationForm> {
 
   Widget _resolvedAddressPanel() {
     final previewLabel = _publicLocationPreviewLabel();
-    final addressInvalid = _locationShowErrors &&
-        _locationIdentifierController.text.trim().length < 3;
     // Material (not Container/DecoratedBox fill) so CheckboxListTile ink stays visible.
     return Material(
       key: _locationPanelKey,
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: addressInvalid
-              ? const Color(0xFFEF4444)
-              : const Color(0xFFE5E7EB),
-          width: addressInvalid ? 1.5 : 1,
+        side: const BorderSide(
+          color: Color(0xFFE5E7EB),
+          width: 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -3551,10 +6069,10 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          listingFieldLabel('Resolved address', required: true),
+          listingFieldLabel('Property Address (Optional)'),
           const SizedBox(height: 6),
           const Text(
-            'Street or building name for your listing. Seeker area matching uses Property area below.',
+            'Street or building name for your records. Matching and neighbourhood information are based on your map pin and Property Area.',
             style: listingOptionHintStyle,
           ),
           const SizedBox(height: 10),
@@ -3565,29 +6083,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             maxLines: 2,
             style: listingFieldValueStyle,
             decoration: listingInlineInputDecoration(
-              hint: 'Street or building address',
-            ).copyWith(
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: addressInvalid
-                      ? const Color(0xFFEF4444)
-                      : listingDaftBorderColor,
-                  width: addressInvalid ? 1.5 : listingDaftBorderWidth,
-                ),
-              ),
+              hint: 'Street or building name',
             ),
             onChanged: (_) => setState(() {
               if (_locationShowErrors) _locationShowErrors = false;
             }),
           ),
-          if (addressInvalid) ...[
-            const SizedBox(height: 4),
-            const Text(
-              'Required — confirm or edit the resolved address.',
-              style: TextStyle(fontSize: 11, color: Color(0xFFEF4444)),
-            ),
-          ],
           const SizedBox(height: 12),
           if (MarketConfig.current.profileUseAreaPicker) ...[
             // Options: dublin_districts via MarketConfig.areaOptions (full labels).
@@ -3654,7 +6155,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
             value: _hideExactAddress,
             onChanged: widget.saving
                 ? null
-                : (v) => setState(() => _hideExactAddress = v ?? false),
+                : (v) => setState(() {
+                      _hideExactAddress = v ?? false;
+                      if (_hideExactAddress && _locationShowErrors) {
+                        _locationShowErrors = false;
+                      }
+                    }),
             controlAffinity: ListTileControlAffinity.leading,
             title: const Text(
               "I don't want to display the exact address",
@@ -4002,7 +6508,12 @@ class ListingCreationFormState extends State<ListingCreationForm> {
         ),
         ListingRuleChip(
           emoji: '🚫',
-          label: _petsAllowed ? 'Pets welcome' : 'No pets',
+          label: switch (_petsPolicy) {
+            ListingPetsPolicy.allowed => 'Pets welcome',
+            ListingPetsPolicy.notAllowed => 'No pets',
+            ListingPetsPolicy.caseByCase => 'Pets case-by-case',
+            null => 'Pets not set',
+          },
           active: true,
           expand: true,
         ),
@@ -4090,10 +6601,14 @@ class ListingCreationFormState extends State<ListingCreationForm> {
               child: ListingCompactRuleTile(
                 offLabel: 'Pets welcome',
                 onLabel: 'No pets',
-                active: !_petsAllowed,
+                active: _petsPolicy == ListingPetsPolicy.notAllowed,
                 enabled: !widget.saving,
                 emoji: '🚫',
-                onChanged: (v) => setState(() => _petsAllowed = !v),
+                onChanged: (v) => setState(() {
+                  _petsPolicy = v
+                      ? ListingPetsPolicy.notAllowed
+                      : ListingPetsPolicy.allowed;
+                }),
               ),
             ),
           ],

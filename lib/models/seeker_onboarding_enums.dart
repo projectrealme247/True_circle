@@ -65,7 +65,7 @@ enum DublinLocationContext {
   }
 }
 
-/// Irish guarantor pivot on seeker onboarding screen 3.
+/// Guarantor pivot on seeker onboarding screen 3.
 enum GuarantorStatus {
   yes('yes'),
   no('no'),
@@ -84,16 +84,6 @@ enum GuarantorStatus {
       _ => session['has_guarantor'] == true ? yes : null,
     };
   }
-}
-
-/// Family Destination IA — what primarily drives weekday location.
-///
-/// UI structure only; no recommendation logic yet.
-enum FamilyLocationDriver {
-  workplace,
-  schoolArea,
-  both,
-  customLocation,
 }
 
 /// Discrete commute-time options for seeker destination screen.
@@ -141,6 +131,148 @@ enum MoveInBucket {
       'next_month' => nextMonth,
       'within_3_months' || 'within_1_3_months' => within3Months,
       'flexible' => flexible,
+      _ => null,
+    };
+  }
+}
+
+/// Shared stay-duration values for seekers (tenure_preference) and
+/// Independent Place listings (agreement_type). Single source of truth.
+///
+/// Independent Place (seeker + listing) only offers [temporary] and [longTerm].
+/// [flexible] is legacy: still parsed for Shared Living listings; IP seekers
+/// migrate `flexible` → [longTerm] via [fromSession] / [migrateIndependentPlace].
+enum TenurePreference {
+  temporary('temporary', 'Temporary'),
+  longTerm('long_term', 'Long-Term'),
+  /// Legacy — Shared Living listing UI only. Not offered for Independent Place.
+  flexible('flexible', 'Flexible');
+
+  const TenurePreference(this.storageToken, this.label);
+  final String storageToken;
+  final String label;
+
+  static const sessionKey = 'tenure_preference';
+  static const listingKey = 'agreement_type';
+
+  /// Independent Place seeker + listing — Temporary / Long-Term only.
+  static const independentPlaceValues = <TenurePreference>[
+    temporary,
+    longTerm,
+  ];
+
+  /// Alias for listing create/edit (same IP set).
+  static const independentPlaceListingValues = independentPlaceValues;
+
+  static TenurePreference? fromStorage(String? raw) {
+    return switch (raw?.trim().toLowerCase()) {
+      'temporary' => temporary,
+      'long_term' || 'long term' => longTerm,
+      'flexible' => flexible,
+      _ => null,
+    };
+  }
+
+  /// Independent Place migration: legacy `flexible` → [longTerm].
+  static TenurePreference? migrateIndependentPlace(TenurePreference? value) {
+    if (value == flexible) return longTerm;
+    return value;
+  }
+
+  /// Session hydrate for IP seekers — migrates legacy flexible → long_term.
+  static TenurePreference? fromSession(Map<String, dynamic>? session) {
+    if (session == null) return null;
+    return migrateIndependentPlace(fromStorage(session[sessionKey]?.toString()));
+  }
+
+  /// Rewrites [sessionKey] in-place when legacy flexible is present (IP profiles).
+  static void migrateIndependentPlaceSession(Map<String, dynamic> session) {
+    final raw = session[sessionKey]?.toString();
+    if (fromStorage(raw) == flexible) {
+      session[sessionKey] = longTerm.storageToken;
+    }
+  }
+
+  static TenurePreference? fromListing(Map<String, dynamic>? listing) {
+    if (listing == null) return null;
+    return fromStorage(listing[listingKey]?.toString());
+  }
+}
+
+/// Independent Place only — furnishing preference (soft signal).
+enum FurnishingPreference {
+  furnished('furnished', 'Furnished'),
+  partFurnished('part_furnished', 'Part Furnished'),
+  noPreference('no_preference', 'No Preference');
+
+  const FurnishingPreference(this.storageToken, this.label);
+  final String storageToken;
+  final String label;
+
+  static const sessionKey = 'furnishing_preference';
+
+  static FurnishingPreference? fromSession(Map<String, dynamic>? session) {
+    if (session == null) return null;
+    final raw = session[sessionKey]?.toString() ?? '';
+    return switch (raw) {
+      'furnished' => furnished,
+      'part_furnished' => partFurnished,
+      'no_preference' => noPreference,
+      _ => null,
+    };
+  }
+}
+
+/// Independent Place only — house vs apartment preference (soft signal).
+enum PropertyTypePreference {
+  house('house', 'House'),
+  apartment('apartment', 'Apartment'),
+  noPreference('no_preference', 'No Preference');
+
+  const PropertyTypePreference(this.storageToken, this.label);
+  final String storageToken;
+  final String label;
+
+  static const sessionKey = 'property_type_preference';
+
+  static PropertyTypePreference? fromSession(Map<String, dynamic>? session) {
+    if (session == null) return null;
+    final raw = session[sessionKey]?.toString() ?? '';
+    return switch (raw) {
+      'house' => house,
+      'apartment' => apartment,
+      'no_preference' => noPreference,
+      _ => null,
+    };
+  }
+}
+
+/// Seeker soft preference — bathroom arrangement (IP + Shared Living).
+enum BathroomPreference {
+  privateBathroom('private_bathroom', 'Private Bathroom (Ensuite)'),
+  sharedBathroom('shared_bathroom', 'Shared Bathroom'),
+  noPreference('no_preference', 'No Preference');
+
+  const BathroomPreference(this.storageToken, this.label);
+  final String storageToken;
+  final String label;
+
+  static const sessionKey = 'bathroom_preference';
+
+  /// Chip labels with emoji (IP EqualChoiceRow / Shared choice chips).
+  String get chipLabel => switch (this) {
+        privateBathroom => '🛁 Private Bathroom (Ensuite)',
+        sharedBathroom => '🚿 Shared Bathroom',
+        noPreference => '◎ No Preference',
+      };
+
+  static BathroomPreference? fromSession(Map<String, dynamic>? session) {
+    if (session == null) return null;
+    final raw = session[sessionKey]?.toString() ?? '';
+    return switch (raw) {
+      'private_bathroom' || 'private_ensuite' || 'ensuite' => privateBathroom,
+      'shared_bathroom' => sharedBathroom,
+      'no_preference' => noPreference,
       _ => null,
     };
   }

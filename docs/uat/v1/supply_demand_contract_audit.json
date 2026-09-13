@@ -1,0 +1,109 @@
+{
+  "audit_name": "TrueCircle V1 Supply-Demand Contract Audit",
+  "status": "blocked",
+  "blocked_reason": "Frozen V1 field contract document not found. Audit must not infer fields from UI, screenshots, explanations, chat, marketplace assumptions, or matching/engine code.",
+  "audited_at": "2026-08-05",
+  "matrix_completed": false,
+  "source_of_truth": null,
+  "source_of_truth_paths": [],
+  "budget_rule_note": "price <= round(budget × 1.25) is intentional V1 behaviour; would not be flagged if audit proceeded.",
+  "searched": {
+    "docs": true,
+    "docs_uat_v1": true,
+    "docs_decisions": true,
+    "cursor_rules": true,
+    "plans": true,
+    "repo_globs": [
+      "*contract*",
+      "*field*matrix*",
+      "*supply*",
+      "*demand*",
+      "*freeze*",
+      "*eligibility*"
+    ],
+    "keywords": [
+      "field contract",
+      "V1 contract",
+      "frozen V1",
+      "explanation_eligible",
+      "supply demand",
+      "exists_on_SL_seeker",
+      "mandatory_or_optional",
+      "used_for_matching",
+      "Safe to Freeze"
+    ],
+    "agent_transcripts": true,
+    "notion_mcp": "needsAuth_not_searched"
+  },
+  "near_miss_candidates_not_used": [
+    {
+      "path_or_ref": "TrueCircle_Matching_Matrix_v1.xlsx (historical Downloads reference; IP Proposed Final)",
+      "rejection_reason": "Matching proposal workbook, not labeled frozen field contract; lacks explanation_eligible / four-surface matrix columns"
+    },
+    {
+      "path_or_ref": "docs/decisions/match-explanation-system-v1.md",
+      "rejection_reason": "Implementation-derived explanation copy spec, not field contract"
+    },
+    {
+      "path_or_ref": "docs/decisions/independent-places-matching-engine-v1.md",
+      "rejection_reason": "Documented from ListingMatchEngine; forbidden inference source"
+    },
+    {
+      "path_or_ref": "docs/uat/v1/missing_data_listing_audit.md",
+      "rejection_reason": "Listing completeness checklists only"
+    },
+    {
+      "path_or_ref": "docs/uat/v1/uat_execution_workbook.md",
+      "rejection_reason": "UAT execution schema freeze, not product field contract"
+    }
+  ],
+  "counts": {
+    "fields_in_matrix": 0,
+    "bidirectional": 0,
+    "derived": 0,
+    "seeker_only": 0,
+    "listing_only": 0,
+    "explanation_mismatches": 0
+  },
+  "matrix": [],
+  "summary_lists": {
+    "bidirectional_fields": [],
+    "derived_relationships": [],
+    "seeker_only_fields": [],
+    "listing_only_fields": [],
+    "explanation_mismatches": []
+  },
+  "parts": {
+    "full_field_matrix": "blocked",
+    "seeker_side_gaps": "blocked",
+    "listing_side_gaps": "blocked",
+    "explanation_eligibility_audit": "blocked",
+    "contract_consistency_check": "blocked",
+    "freeze_readiness": "blocked"
+  },
+  "freeze_blockers": [
+    {
+      "severity": "Critical",
+      "id": "MISSING_FROZEN_V1_FIELD_CONTRACT",
+      "summary": "No authoritative frozen V1 field contract found in-repo or as a checked-in transcript/UAT artifact."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "Critical",
+      "id": "MISSING_FROZEN_V1_FIELD_CONTRACT",
+      "summary": "Audit blocked: cannot build supply-demand matrix without the frozen V1 field contract.",
+      "recommendation": "Check in the frozen V1 field contract under docs/uat/v1/ or docs/decisions/, then re-run this audit against that file only."
+    }
+  ],
+  "recommended_contract_decisions": [
+    "Check in frozen V1 field contract (md and/or json) explicitly labeled as such",
+    "Enumerate every V1 field across SL seeker, SL listing, IP seeker, IP listing",
+    "Include mandatory/optional, used_for_matching, used_for_ranking, explanation_eligible, counterparts, example values",
+    "Re-run supply-demand contract audit without inferring from UI or ListingMatchEngine"
+  ],
+  "output_paths": [
+    "docs/uat/v1/supply_demand_contract_audit.md",
+    "docs/uat/v1/supply_demand_contract_audit.json"
+  ]
+}

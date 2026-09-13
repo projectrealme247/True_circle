@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:true_circle/services/fast_location_service.dart';
 import 'package:true_circle/services/transit_extraction_service.dart';
 
 void main() {
@@ -34,6 +35,15 @@ void main() {
       expect(proximity, isNotNull);
       expect(proximity!.containsKey('walk_minutes'), isTrue);
       expect(proximity.containsKey('distance_km'), isFalse);
+    });
+  });
+
+  group('Location reliability constants', () {
+    test('user-action GPS timeout is 8 seconds', () {
+      expect(
+        FastLocationService.userActionGpsTimeout,
+        const Duration(seconds: 8),
+      );
     });
   });
 }

@@ -28,18 +28,59 @@ void main() {
   });
 
   group('ApplicantStatusTransitionService', () {
-    test('allows pending to viewing, accept, or decline', () {
+    test('allows pending to invitation, accept, or decline', () {
       expect(
         ApplicantManagementController.validateStatusTransition(
           from: ApplicantApplicationStatus.pending,
-          to: ApplicantApplicationStatus.viewingScheduled,
+          to: ApplicantApplicationStatus.viewingInvitationSent,
         ),
         isNull,
       );
       expect(
         ApplicantManagementController.validateStatusTransition(
           from: ApplicantApplicationStatus.pending,
+          to: ApplicantApplicationStatus.viewingScheduled,
+        ),
+        isNotNull,
+      );
+      expect(
+        ApplicantManagementController.validateStatusTransition(
+          from: ApplicantApplicationStatus.pending,
           to: ApplicantApplicationStatus.accepted,
+        ),
+        isNull,
+      );
+    });
+
+    test('allows invitation sent to viewing scheduled', () {
+      expect(
+        ApplicantManagementController.validateStatusTransition(
+          from: ApplicantApplicationStatus.viewingInvitationSent,
+          to: ApplicantApplicationStatus.viewingScheduled,
+        ),
+        isNull,
+      );
+    });
+
+    test('allows invitation cancel and reschedule transitions', () {
+      expect(
+        ApplicantManagementController.validateStatusTransition(
+          from: ApplicantApplicationStatus.viewingInvitationSent,
+          to: ApplicantApplicationStatus.pending,
+        ),
+        isNull,
+      );
+      expect(
+        ApplicantManagementController.validateStatusTransition(
+          from: ApplicantApplicationStatus.viewingScheduled,
+          to: ApplicantApplicationStatus.pending,
+        ),
+        isNull,
+      );
+      expect(
+        ApplicantManagementController.validateStatusTransition(
+          from: ApplicantApplicationStatus.viewingScheduled,
+          to: ApplicantApplicationStatus.viewingInvitationSent,
         ),
         isNull,
       );
@@ -64,7 +105,7 @@ void main() {
   });
 
   group('SharedLivingApplicantStream', () {
-    test('groups by trust tier and sorts by lifestyle score within block', () {
+    test('builds flat stream sorted by lifestyle score (no tier sections)', () {
       final listing = {
         'id': 'listing-1',
         ListingCreationFieldKeys.marketplaceCategory: 'shared_living',
@@ -139,19 +180,25 @@ void main() {
 
       expect(stream.displayLabel, SharedLivingApplicantStream.categoryDisplayLabel);
       expect(stream.marketplaceCategory, 'shared_living');
-      expect(stream.blocks.first.trustTier, ApplicantTrustTier.sound);
-      expect(stream.blocks.first.applicants.first.seekerName, 'Casey');
-
-      final grandBlock = stream.blocks
-          .firstWhere((b) => b.trustTier == ApplicantTrustTier.grand);
-      expect(grandBlock.applicants.first.seekerName, 'Blake');
-      expect(grandBlock.applicants.first.customBioPitch, contains('Vegetarian'));
-      expect(grandBlock.applicants.first.kitchenCultureAligned, isTrue);
+      expect(stream.blocks, hasLength(1));
       expect(
-        grandBlock.applicants.first.languageAlignmentOverlap,
+        stream.flattenedApplicants.map((a) => a.seekerName).toSet(),
+        {'Alex', 'Blake', 'Casey'},
+      );
+
+      final byName = {
+        for (final row in stream.flattenedApplicants) row.seekerName: row,
+      };
+      expect(byName['Casey']!.trustTier, ApplicantTrustTier.sound);
+      final blake = byName['Blake']!;
+      expect(blake.trustTier, ApplicantTrustTier.grand);
+      expect(blake.customBioPitch, contains('Vegetarian'));
+      expect(blake.kitchenCultureAligned, isTrue);
+      expect(
+        blake.languageAlignmentOverlap,
         contains('Polish'),
       );
-      expect(grandBlock.applicants.first.seekerLanguages, ['English', 'Polish']);
+      expect(blake.seekerLanguages, ['English', 'Polish']);
     });
 
     test('rejects wrong marketplace_category', () {
@@ -209,7 +256,7 @@ void main() {
   });
 
   group('IndependentPlacesApplicantStream', () {
-    test('groups by trust tier and sorts by timeline variance then lease', () {
+    test('builds flat stream sorted by timeline/lease (no tier sections)', () {
       final listing = {
         'id': 'listing-2',
         ListingCreationFieldKeys.marketplaceCategory: 'independent_places',
@@ -333,7 +380,7 @@ void main() {
         },
       );
 
-      expect(capturedStatus, ApplicantApplicationStatus.viewingScheduled);
+      expect(capturedStatus, ApplicantApplicationStatus.viewingInvitationSent);
     });
   });
 }

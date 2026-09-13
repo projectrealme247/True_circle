@@ -8,11 +8,12 @@ import '../utils/listing_data.dart';
 import '../utils/listing_match_engine.dart';
 import '../utils/listing_media.dart';
 import '../utils/numeric_bounds.dart';
+import '../utils/shared_living_match_tokens.dart';
 import '../widgets/hoverable_listing_card.dart';
 import '../widgets/listing_gallery_nav_button.dart';
-import 'trust_badge.dart';
+import '../widgets/report_listing_bottom_sheet.dart';
 
-/// Discovery listing card — hero image, match band, price/location, and match chips.
+/// Discovery listing card — hero image, price/location, match chips, trust.
 class PropertyCard extends StatelessWidget {
   const PropertyCard({
     super.key,
@@ -23,10 +24,16 @@ class PropertyCard extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Includes 2px for the rest-state card border so inner content fits exactly.
-  static const double gridMainAxisExtent = 220;
+  /// Hero + stacked body rows, plus 2px for the rest-state card border.
+  static const double gridMainAxisExtent = heroHeight + bodyHeight + 2;
   static const double heroHeight = 110;
-  static const double bodyHeight = 110;
+  static const double bodyHeight = bodyPaddingTop +
+      priceLineHeight +
+      metadataMidGap +
+      locationLineHeight +
+      sectionGap +
+      chipsHeight +
+      bodyPaddingBottom;
   static const double contentPaddingH = 12;
   static const double bodyPaddingTop = 4;
   static const double metadataMidGap = 2;
@@ -35,8 +42,6 @@ class PropertyCard extends StatelessWidget {
   static const double priceLineHeight = 19;
   static const double locationLineHeight = 14;
   static const double chipsHeight = 26;
-  static const double trustPaddingTop = 8;
-  static const double trustLineHeight = 26;
   static const double _cardRadius = 12;
 
   final Map<String, dynamic> listing;
@@ -56,8 +61,6 @@ class PropertyCard extends StatelessWidget {
       reasons: match.reasons,
       excluded: match.excluded,
       tower: match.tower,
-      trustStage: match.trustStage,
-      inCircle: match.inCircle,
       preArrivalBadge: match.preArrivalBadge,
     );
 
@@ -75,40 +78,29 @@ class PropertyCard extends StatelessWidget {
             clipBehavior: Clip.hardEdge,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final bodySlotHeight =
-                    (constraints.maxHeight - heroHeight).clamp(0.0, bodyHeight);
                 return Column(
                   mainAxisSize: MainAxisSize.max,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     SizedBox(
                       height: heroHeight,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _PropertyCardCoverCarousel(
-                            listing: listing,
-                            onOpenGallery: (index) =>
-                                _ListingCardGalleryPreview.show(
-                              context,
-                              listing: listing,
-                              initialIndex: index,
-                            ),
-                          ),
-                          Positioned(
-                            top: 6,
-                            left: 6,
-                            child: _MatchQualityBand(match: clampedMatch),
-                          ),
-                        ],
+                      child: _PropertyCardCoverCarousel(
+                        listing: listing,
+                        onOpenGallery: (index) =>
+                            _ListingCardGalleryPreview.show(
+                          context,
+                          listing: listing,
+                          initialIndex: index,
+                        ),
                       ),
                     ),
-                    SizedBox(
-                      height: bodySlotHeight,
-                      child: _CardBody(
-                        listing: listing,
-                        match: clampedMatch,
-                        activeSpace: activeSpace,
+                    Expanded(
+                      child: ClipRect(
+                        child: _CardBody(
+                          listing: listing,
+                          match: clampedMatch,
+                          activeSpace: activeSpace,
+                        ),
                       ),
                     ),
                   ],
@@ -140,6 +132,7 @@ class _CardBody extends StatelessWidget {
         horizontal: PropertyCard.contentPaddingH,
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: PropertyCard.bodyPaddingTop),
@@ -184,107 +177,28 @@ class _CardBody extends StatelessWidget {
           const SizedBox(height: PropertyCard.sectionGap),
           SizedBox(
             height: PropertyCard.chipsHeight,
-            child: ClipRect(
-              child: _CardMatchChips(
-                listing: listing,
-                activeSpace: activeSpace,
-                matchPercentage: match.percentage,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ClipRect(
+                      child: _CardMatchChips(
+                        listing: listing,
+                        activeSpace: activeSpace,
+                        matchPercentage: match.percentage,
+                      ),
+                    ),
+                  ),
+                ),
+                _ListingOverflowMenu(
+                  listingId: ListingData.id(listing),
+                ),
+              ],
             ),
-          ),
-          const Divider(height: 1, color: AppColors.divider),
-          const SizedBox(height: PropertyCard.trustPaddingTop),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _HostTrustLine(listing: listing),
           ),
           const SizedBox(height: PropertyCard.bodyPaddingBottom),
-        ],
-      ),
-    );
-  }
-}
-
-enum _MatchQualityBandKind {
-  topPick(
-    'Top Pick',
-    Color(0xFF3D2C00),
-    Color(0xFFF5CC6E),
-    Icons.emoji_events_outlined,
-  ),
-  strongMatch(
-    'Strong Match',
-    Color(0xFF1A2E1A),
-    Color(0xFF90C98A),
-    Icons.star_outline,
-  ),
-  goodFit(
-    'Good Fit',
-    Color(0xFF1A2233),
-    Color(0xFF8AB0D4),
-    Icons.check_circle_outline,
-  ),
-  worthALook(
-    'Worth a Look',
-    Color(0xFF1E1E1E),
-    Color(0xFF9A9A92),
-    Icons.visibility_outlined,
-  );
-
-  const _MatchQualityBandKind(
-    this.label,
-    this.backgroundColor,
-    this.foregroundColor,
-    this.icon,
-  );
-
-  final String label;
-  final Color backgroundColor;
-  final Color foregroundColor;
-  final IconData icon;
-
-  static _MatchQualityBandKind? fromMatch(ListingMatchResult match) {
-    final pct = match.percentage;
-    if (pct <= 0) return null;
-    if (pct >= 65) return _MatchQualityBandKind.topPick;
-    if (pct >= 50) return _MatchQualityBandKind.strongMatch;
-    if (pct >= 30) return _MatchQualityBandKind.goodFit;
-    return _MatchQualityBandKind.worthALook;
-  }
-}
-
-class _MatchQualityBand extends StatelessWidget {
-  const _MatchQualityBand({required this.match});
-
-  final ListingMatchResult match;
-
-  @override
-  Widget build(BuildContext context) {
-    final band = _MatchQualityBandKind.fromMatch(match);
-    if (band == null) return const SizedBox.shrink();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: band.backgroundColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(band.icon, size: 12, color: band.foregroundColor),
-          const SizedBox(width: 4),
-          Text(
-            band.label,
-            style: AppTypography.detail().copyWith(
-              fontWeight: FontWeight.w500,
-              fontSize: 11,
-              height: 1.0,
-              color: band.foregroundColor,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
         ],
       ),
     );
@@ -332,28 +246,24 @@ class _CardMatchChips extends StatelessWidget {
         chips.add(_buildChip(Icons.savings_outlined, 'Budget'));
       }
     } else {
-      final occ = listing['occupantType'] ?? listing['preferredTenantType'];
-      final occLabel = occ?.toString().trim() ?? '';
-      if (occLabel.isNotEmpty) {
-        final isStudent = occLabel.toLowerCase().contains('student');
+      // Shared Living Card Hierarchy V1 (priority = append order; transit then freshness).
+      final roomLabel = _sharedRoomTypeLabel();
+      if (roomLabel != null) {
+        chips.add(_buildChip(Icons.bed_outlined, roomLabel));
+      }
+
+      final householdLabel = _sharedHouseholdLabel();
+      if (householdLabel != null) {
+        final isStudent = householdLabel == 'Students';
         chips.add(_buildChip(
           isStudent ? Icons.school_outlined : Icons.work_outline,
-          occLabel,
+          householdLabel,
         ));
       }
 
-      final langs = listing['spoken_languages'];
-      if (langs is List && langs.isNotEmpty) {
-        final langLabel = langs.first?.toString().trim() ?? '';
-        if (langLabel.isNotEmpty) {
-          chips.add(_buildChip(Icons.language_outlined, langLabel));
-        }
-      }
-
-      final diet = listing['foodPreference'] ?? listing['food_preference'];
-      final dietLabel = diet?.toString().trim() ?? '';
-      if (dietLabel.isNotEmpty) {
-        chips.add(_buildChip(Icons.restaurant_outlined, dietLabel));
+      final availability = ListingData.availableFromDisplayLabel(listing);
+      if (availability.isNotEmpty) {
+        chips.add(_buildChip(Icons.calendar_today_outlined, availability));
       }
 
       final commute = _resolveCommuteLabel();
@@ -362,13 +272,71 @@ class _CardMatchChips extends StatelessWidget {
       }
     }
 
-    if (chips.isEmpty) return const SizedBox.shrink();
+    // Freshness is always the final metadata chip when published_at is present.
+    final listedLabel = ListingData.listedRelativeChipLabel(listing);
+    final freshnessChip = listedLabel.isEmpty
+        ? null
+        : _buildChip(Icons.access_time, listedLabel);
 
+    if (chips.isEmpty && freshnessChip == null) {
+      return const SizedBox.shrink();
+    }
+
+    final maxOther = freshnessChip != null ? 4 : 5;
     return Wrap(
       spacing: 4,
       runSpacing: 4,
-      children: chips.take(4).toList(),
+      children: [
+        ...chips.take(maxOther),
+        if (freshnessChip != null) freshnessChip,
+      ],
     );
+  }
+
+  /// Short room label: Private | Shared.
+  String? _sharedRoomTypeLabel() {
+    final token = SharedLivingMatchTokens.roomFromListing(listing);
+    if (token == SharedLivingMatchTokens.privateRoom) return 'Private';
+    if (token == SharedLivingMatchTokens.sharedRoom) return 'Shared';
+
+    final fallback = ListingData.cardRoomTypeLabel(listing).toLowerCase();
+    if (fallback.contains('shared') || fallback.contains('bed')) {
+      return 'Shared';
+    }
+    if (fallback.contains('private') || fallback.contains('ensuite')) {
+      return 'Private';
+    }
+    return null;
+  }
+
+  /// Short household label: Students | Professionals | Mixed.
+  String? _sharedHouseholdLabel() {
+    final occ = (listing['occupantType'] ?? listing['preferredTenantType'])
+        ?.toString()
+        .trim() ??
+        '';
+    final fromOcc = _shortHouseholdFromRaw(occ);
+    if (fromOcc != null) return fromOcc;
+
+    final cohort = (listing['flatmate_cohort'] ??
+            listing['household_cohort'] ??
+            listing['preferred_tenant_occupant'] ??
+            listing['cohort_type'])
+        ?.toString()
+        .trim() ??
+        '';
+    return _shortHouseholdFromRaw(cohort);
+  }
+
+  static String? _shortHouseholdFromRaw(String raw) {
+    if (raw.isEmpty) return null;
+    final lower = raw.toLowerCase();
+    if (lower.contains('student')) return 'Students';
+    if (lower.contains('working') || lower.contains('professional')) {
+      return 'Professionals';
+    }
+    if (lower.contains('mixed') || lower.contains('open')) return 'Mixed';
+    return null;
   }
 
   String? _resolveCommuteLabel() {
@@ -422,37 +390,68 @@ class _CardMatchChips extends StatelessWidget {
         border: Border.all(color: AppColors.divider, width: 0.5),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: AppColors.secondaryText),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.secondaryText,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+      child: Text.rich(
+        TextSpan(
+          style: const TextStyle(
+            fontSize: 11,
+            color: AppColors.secondaryText,
+            height: 1.0,
           ),
-        ],
+          children: [
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(
+                  icon,
+                  size: 12,
+                  color: AppColors.secondaryText,
+                ),
+              ),
+            ),
+            TextSpan(text: label),
+          ],
+        ),
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 }
 
-class _HostTrustLine extends StatelessWidget {
-  const _HostTrustLine({required this.listing});
+/// Metadata-row overflow (⋮) — opens Report Listing sheet directly (no popup).
+class _ListingOverflowMenu extends StatelessWidget {
+  const _ListingOverflowMenu({required this.listingId});
 
-  final Map<String, dynamic> listing;
+  final String listingId;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TrustBadge.fromHostTrustStage(
-        ListingData.hostTrustStage(listing),
+    if (listingId.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: 20,
+      height: PropertyCard.chipsHeight,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        tooltip: 'Report listing',
+        style: IconButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(20, 20),
+          maximumSize: const Size(20, PropertyCard.chipsHeight),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        icon: const Icon(
+          Icons.more_vert,
+          size: 14,
+          color: AppColors.secondaryText,
+        ),
+        onPressed: () {
+          ReportListingBottomSheet.show(context, listingId: listingId);
+        },
       ),
     );
   }

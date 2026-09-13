@@ -7,17 +7,16 @@ import '../config/market/dublin_commuter_hubs.dart';
 import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
 import '../models/move_in_timing.dart';
-import '../models/applicant_trust_tier.dart';
 import '../models/seeker_onboarding_enums.dart';
 import '../services/auth_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/profile_state_notifier.dart';
 import '../services/profile_storage_service.dart';
+import '../services/trust_service.dart';
 import '../utils/listing_media.dart';
-import '../utils/polymorphic_identity.dart';
 import '../utils/profile_data.dart';
 import '../utils/profile_progress.dart';
-import '../utils/viewer_profile.dart';
+import '../models/onboarding_user_role.dart';
 import '../widgets/openstreetmap_attribution.dart';
 import '../widgets/onboarding/onboarding_move_in_window_field.dart';
 import '../widgets/profile_completion_dialog.dart';
@@ -48,6 +47,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     super.initState();
     authSessionNotifier.addListener(_onAuthSessionChanged);
     profileStateNotifier.addListener(_onProfileStateChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _enforceSeekerRoleGate();
+    });
     final seeded = widget.initialSession ?? profileStateNotifier.session;
     if (seeded != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -55,6 +58,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       });
     } else {
       _loadFromStorage();
+    }
+  }
+
+  void _enforceSeekerRoleGate() {
+    final session = _session ??
+        widget.initialSession ??
+        AuthScreen.currentUserSession;
+    if (!AuthService.isSignedIn(session)) {
+      context.go('/');
+      return;
+    }
+    final role = UserRole.fromSession(session);
+    if (role == UserRole.landlord) {
+      context.go('/landlord-dashboard');
+      return;
+    }
+    if (role == UserRole.unassigned) {
+      context.go('/');
     }
   }
 
@@ -144,14 +165,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (!mounted) return;
 
       setState(() {
-        _session = normalized;
+        // Prefer normalized display profile, but never drop a live/stored session
+        // that already has seeker content (demo / partial onboarding).
+        _session = normalized ?? live ?? stored;
         _ownedListingCount = owned.length;
         _loading = false;
       });
 
-      if (normalized != null &&
-          AuthScreen.currentUserSession == null) {
-        AuthScreen.currentUserSession = normalized;
+      if (_session != null && AuthScreen.currentUserSession == null) {
+        AuthScreen.currentUserSession = _session;
       }
     } catch (_) {
       if (!mounted) return;
@@ -245,7 +267,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       return _EmptyProfile(onSignIn: _openAuth);
     }
 
-    if (ProfileData.isProfileIncomplete(_session!)) {
+    // Full profile when any session data exists. Completion-only shell is for
+    // genuinely empty profiles — not "matching essentials" gaps.
+    if (!ProfileData.hasRenderableProfileContent(_session)) {
       final missing = ProfileProgress.missingFields(
         _session,
         ownedListingCount: _ownedListingCount,
@@ -541,8 +565,8 @@ class _ProfileBodyState extends State<_ProfileBody> {
     final persona = SeekerPersona.fromSession(_session);
     final personaLabel = persona?.chipLabel ?? '';
     final photoUrl = ProfileData.text(_session['profile_photo_url']);
-    final trustTier = ApplicantTrustTier.fromSession(_session);
-    final trustStage = _trustStageFromSession(_session);
+    final isVerifiedUser =
+        TrustService.meetsContactVerification(_session);
 
     final budgetLabel = _ProfileDisplay.formatBudget(_session);
     final moveInLabel = _ProfileDisplay.formatMoveInDate(_session);
@@ -566,12 +590,9 @@ class _ProfileBodyState extends State<_ProfileBody> {
                 fullName: fullName,
                 personaLabel: personaLabel,
                 photoUrl: photoUrl,
-                trustTier: trustTier,
+                isVerifiedUser: isVerifiedUser,
                 photoUploading: _photoUploading,
                 onPhotoTap: photoUrl.isEmpty ? _pickProfilePhoto : null,
-                showEnterpriseBadge: PolymorphicIdentity.showEnterpriseVerifiedSeekerBadge(
-                  _session,
-                ),
               ),
               const SizedBox(height: 12),
               _ProfileBitCard(
@@ -654,10 +675,9 @@ class _ProfileBodyState extends State<_ProfileBody> {
                   ],
                 ),
               ),
-              if (trustStage.level < TrustStage.socialVerified.level) ...[
+              if (!isVerifiedUser) ...[
                 const SizedBox(height: 20),
                 _TrustUpgradeSection(
-                  trustStage: trustStage,
                   session: _session,
                 ),
               ],
@@ -696,12 +716,6 @@ class _ProfileBodyState extends State<_ProfileBody> {
       ),
     );
   }
-
-  static TrustStage _trustStageFromSession(Map<String, dynamic> session) {
-    final raw = session['trust_stage'];
-    if (raw is int) return TrustStage.fromLevel(raw);
-    return TrustStage.casual;
-  }
 }
 
 class _PassportHeader extends StatelessWidget {
@@ -709,19 +723,17 @@ class _PassportHeader extends StatelessWidget {
     required this.fullName,
     required this.personaLabel,
     required this.photoUrl,
-    required this.trustTier,
+    required this.isVerifiedUser,
     required this.photoUploading,
     this.onPhotoTap,
-    this.showEnterpriseBadge = false,
   });
 
   final String fullName;
   final String personaLabel;
   final String photoUrl;
-  final ApplicantTrustTier trustTier;
+  final bool isVerifiedUser;
   final bool photoUploading;
   final VoidCallback? onPhotoTap;
-  final bool showEnterpriseBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -814,26 +826,8 @@ class _PassportHeader extends StatelessWidget {
                 ),
               ),
             ],
-            if (showEnterpriseBadge) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.accentLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  PolymorphicIdentity.enterpriseVerifiedLabel,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.accentDark,
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 10),
-            TrustBadge(tier: trustTier, compact: true, outlined: true),
+            TrustBadge(isVerified: isVerifiedUser, compact: true, outlined: true),
           ],
         ),
       ),
@@ -1019,17 +1013,13 @@ class _AddLanguageChip extends StatelessWidget {
 
 class _TrustUpgradeSection extends StatelessWidget {
   const _TrustUpgradeSection({
-    required this.trustStage,
     required this.session,
   });
 
-  final TrustStage trustStage;
   final Map<String, dynamic> session;
 
   @override
   Widget build(BuildContext context) {
-    final stageNumber = trustStage.level.clamp(1, 3);
-
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -1041,44 +1031,19 @@ class _TrustUpgradeSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Just Landed → ☘️ Grand',
-                    style: AppTypography.withEmojiFallback(
-                      const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: _ProfileTheme.textPrimary,
-                        height: 1.25,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: _ProfileTheme.outlinePillDecoration.copyWith(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Stage $stageNumber of 3',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: _ProfileTheme.gray500,
-                    ),
-                  ),
-                ),
-              ],
+            const Text(
+              'Become a Verified User',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: _ProfileTheme.textPrimary,
+                height: 1.25,
+              ),
             ),
             const SizedBox(height: 10),
             const Text(
-              'Higher trust tiers improve your ranking in host search results and '
-              'unlock contact visibility. Verify with LinkedIn or your university '
-              'email to reach Grand.',
+              'Complete verification to unlock contact with hosts. '
+              'Verified users can connect instantly.',
               style: TextStyle(
                 fontSize: 13,
                 color: _ProfileTheme.gray500,
@@ -1099,13 +1064,11 @@ class _TrustUpgradeSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(
-                '☘️ Verify to unlock Grand',
-                style: AppTypography.withEmojiFallback(
-                  const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
+              child: const Text(
+                'Verify to become a Verified User',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
                 ),
               ),
             ),

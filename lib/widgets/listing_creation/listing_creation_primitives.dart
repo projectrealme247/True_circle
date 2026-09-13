@@ -72,11 +72,11 @@ const TextStyle listingPageTitleStyle = TextStyle(
 
 /// Wizard step section headers (Tenure & duration, Listing type, Photos).
 const TextStyle listingFormSectionHeaderStyle = TextStyle(
-  fontSize: 13,
-  fontWeight: FontWeight.w600,
-  color: AppColors.secondaryText,
-  letterSpacing: -0.1,
-  height: 1.35,
+  fontSize: 16,
+  fontWeight: FontWeight.w700,
+  color: AppColors.primaryText,
+  letterSpacing: -0.2,
+  height: 1.25,
   fontFamily: AppTypography.fontFamily,
   fontFamilyFallback: AppTypography.emojiFontFallback,
 );
@@ -171,8 +171,14 @@ class ListingSectionHeader extends StatelessWidget {
             ],
           ),
           if (subtitle != null) ...[
-            const SizedBox(height: 6),
-            Text(subtitle!, style: listingSubLabelStyle),
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              style: listingSubLabelStyle.copyWith(
+                fontSize: 13,
+                color: const Color(0xFF888888),
+              ),
+            ),
           ],
         ],
       ),
@@ -182,52 +188,24 @@ class ListingSectionHeader extends StatelessWidget {
 
 /// Subtle badge shown while title/description remain auto-drafted.
 class ListingAutoDraftBadge extends StatelessWidget {
-  const ListingAutoDraftBadge({super.key, this.visible = true});
+  const ListingAutoDraftBadge({
+    super.key,
+    this.visible = true,
+    this.label = '✏️ Edit',
+  });
 
   final bool visible;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: visible ? 1 : 0,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      child: AnimatedScale(
-        scale: visible ? 1 : 0.92,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-        child: IgnorePointer(
-          ignoring: !visible,
-          child: Container(
-            padding: TrustTierDesign.trustScaleCapsulePadding,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(
-                TrustTierDesign.trustScaleCapsuleRadius,
-              ),
-              border: Border.all(
-                color: TrustTierDesign.trustScaleCapsuleText.withValues(
-                  alpha: 0.35,
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.auto_awesome,
-                  size: 12,
-                  color: TrustTierDesign.trustScaleCapsuleText,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Auto-drafted — tap to edit',
-                  style: TrustTierDesign.trustScaleLabelStyle(compact: true),
-                ),
-              ],
-            ),
-          ),
-        ),
+    if (!visible) return const SizedBox.shrink();
+    return Text(
+      label,
+      style: listingFieldLabelStyle.copyWith(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppColors.accent,
       ),
     );
   }
@@ -383,7 +361,7 @@ class ListingDaftRadioChoiceList<T extends Object> extends StatelessWidget {
   });
 
   final Map<T, String> options;
-  final T selected;
+  final T? selected;
   final ValueChanged<T> onChanged;
   final bool enabled;
   final bool horizontal;

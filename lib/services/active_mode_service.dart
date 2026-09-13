@@ -1,4 +1,5 @@
 import '../data/dublin_mock_data.dart';
+import '../models/onboarding_user_role.dart';
 import '../models/profile_onboarding_models.dart';
 import '../screens/auth_screen.dart';
 import '../utils/profile_data.dart';
@@ -6,6 +7,7 @@ import 'listings_storage_service.dart';
 import 'marketplace_context_notifier.dart';
 import 'profile_state_notifier.dart';
 import 'profile_storage_service.dart';
+import 'qa_test_auth_service.dart';
 
 /// Explore (marketplace) vs Hosting (landlord dashboard) active shell.
 enum ActiveMode {
@@ -161,15 +163,31 @@ abstract final class ActiveModeService {
     );
   }
 
-  /// Resolves landing route using audit precedence (sync listing count variant).
+  /// Resolves landing route using explicit [UserRole] first, then legacy rules.
   static LandingResolution resolveLandingRoute({
     Map<String, dynamic>? session,
     required int ownedListingCount,
   }) {
-    final caps = capabilitiesFor(session).withOwnedListingCount(ownedListingCount);
+    final explicitRole = _explicitRole(session);
+    switch (explicitRole) {
+      case UserRole.landlord:
+        return LandingResolution.navigate('/landlord-dashboard');
+      case UserRole.seeker:
+        // Incomplete seekers stay on browse; home shows completion banner.
+        return LandingResolution.navigate('/');
+      case UserRole.unassigned:
+      case null:
+        break;
+    }
+
+    final caps =
+        capabilitiesFor(session).withOwnedListingCount(ownedListingCount);
     final mode = _modeForSession(session);
 
-    if (caps.canHost && caps.ownedListingCount == 0) {
+    // Seekers must never land on listing creation.
+    if (caps.canHost &&
+        caps.ownedListingCount == 0 &&
+        UserRole.fromSession(session) != UserRole.seeker) {
       return LandingResolution.navigate('/add-listing');
     }
 
@@ -183,7 +201,20 @@ abstract final class ActiveModeService {
       return LandingResolution.navigate('/landlord-dashboard');
     }
 
+    // Default when role is null/unknown.
     return LandingResolution.navigate('/');
+  }
+
+  /// Role written on login (demo / auth). Ignores inferred intent/caps.
+  static UserRole? _explicitRole(Map<String, dynamic>? session) {
+    if (session == null || session.isEmpty) return null;
+    final raw = session[UserRole.sessionKey]?.toString().trim().toLowerCase();
+    if (raw == null || raw.isEmpty) return null;
+    return switch (raw) {
+      'seeker' => UserRole.seeker,
+      'landlord' || 'host' || 'provider' => UserRole.landlord,
+      _ => null,
+    };
   }
 
   static ActiveMode _modeForSession(Map<String, dynamic>? session) {
@@ -286,7 +317,9 @@ abstract final class ActiveModeService {
     if (_isHostIntent(session[onboardingIntentKey]?.toString())) return true;
     if (_trackFromSession(session)?.isLandlord ?? false) return true;
     if (ownedListingCount > 0) return true;
-    if (session['role']?.toString() == 'host' && session['demo_mode'] == true) {
+    if ((session['role']?.toString() == 'host' ||
+            session['role']?.toString() == 'landlord') &&
+        session['demo_mode'] == true) {
       return true;
     }
     return false;
@@ -334,6 +367,7 @@ abstract final class ActiveModeService {
 
   static bool _useMockHostListings(Map<String, dynamic>? session) {
     if (!DublinMockData.useMockHarness) return false;
+    if (!QaTestAuthService.allowMockHostListings(session)) return false;
     return _canHost(session, ownedListingCount: 0);
   }
 

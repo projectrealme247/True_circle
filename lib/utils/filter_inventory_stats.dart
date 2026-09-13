@@ -66,7 +66,7 @@ class FilterInventoryAnalyzer {
     this.searchQuery = '',
   }) : _towerListings = [
           for (final item in allListings)
-            if (ListingData.propertyType(item) == towerPropertyType) item,
+            if (ListingData.listingType(item) == towerPropertyType) item,
         ];
 
   final String towerPropertyType;

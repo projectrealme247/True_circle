@@ -136,7 +136,7 @@ class _SpaceOptionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
+              const Icon(
                 Icons.chevron_right_rounded,
                 color: HomeMarketplaceTheme.textMuted,
               ),

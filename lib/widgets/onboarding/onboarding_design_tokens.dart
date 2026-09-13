@@ -155,7 +155,7 @@ abstract final class OnboardingTokens {
         filled: true,
         fillColor: inputFill,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: inputBorder),

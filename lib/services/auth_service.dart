@@ -5,10 +5,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../navigation/navigate_after_identity.dart';
 import '../screens/auth_screen.dart';
+import '../models/seeker_onboarding_enums.dart';
 import 'profile_state_notifier.dart';
 import 'profile_storage_service.dart';
 import 'profile_onboarding_repository.dart';
 import 'marketplace_context_notifier.dart';
+import 'user_session_store.dart';
 import '../utils/viewer_profile.dart';
 
 /// Supabase email/password auth + local profile hydration.
@@ -24,7 +26,11 @@ abstract final class AuthService {
   /// True when the user has a real auth identity — not a marketplace-only browse shell.
   static bool hasSignedInIdentity(Map<String, dynamic>? session) {
     if (session == null || session.isEmpty) return false;
-    if (session['demo_mode'] == true) return true;
+    assert(() {
+      if (session['demo_mode'] == true) return true;
+      return true;
+    }());
+    if (kDebugMode && session['demo_mode'] == true) return true;
     final email = session['email']?.toString().trim();
     if (email != null && email.isNotEmpty) return true;
     final userId = session['supabase_user_id']?.toString().trim();
@@ -34,6 +40,26 @@ abstract final class AuthService {
 
   static bool isSignedIn(Map<String, dynamic>? session) =>
       isAuthenticated || hasSignedInIdentity(session);
+
+  /// Local demo / identity that must survive Supabase-less bootstrap.
+  @visibleForTesting
+  static bool shouldPreserveLocalSession(Map<String, dynamic>? session) {
+    if (session == null || session.isEmpty) return false;
+    if (session['demo_mode'] == true) return true;
+    return hasSignedInIdentity(session);
+  }
+
+  /// Shared id for apply, Applications, and messaging (demo session or Supabase).
+  static String identityUserId([Map<String, dynamic>? session]) {
+    final data = session ?? AuthScreen.currentUserSession;
+    final fromSession = data?['supabase_user_id']?.toString().trim() ?? '';
+    if (fromSession.isNotEmpty) return fromSession;
+    try {
+      return currentUser?.id ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
 
   /// Restore Supabase session into [AuthScreen.currentUserSession] on app start.
   static Future<void> bootstrap() async {
@@ -164,8 +190,17 @@ abstract final class AuthService {
   static Future<void> _retainLocalProfileIfPresent({
     required String reason,
   }) async {
+    final inMemory = UserSessionStore.current;
     final stored = await ProfileStorageService.load();
     if (stored == null || stored.isEmpty) {
+      if (shouldPreserveLocalSession(inMemory)) {
+        debugPrint(
+          '[Auth] $reason — keeping in-memory local session '
+          '(demo_mode=${inMemory!['demo_mode']})',
+        );
+        profileStateNotifier.commitPersisted(inMemory);
+        return;
+      }
       debugPrint('[Auth] $reason — no local profile to retain');
       AuthScreen.currentUserSession = null;
       profileStateNotifier.clear();
@@ -182,6 +217,7 @@ abstract final class AuthService {
     final retained = Map<String, dynamic>.from(stored);
     final migrated =
         await ProfileOnboardingRepository.ensureLegacyHostTrackPersisted(retained);
+    TenurePreference.migrateIndependentPlaceSession(migrated);
     final needsOnboarding = ViewerProfile.sessionNeedsOnboarding(migrated);
     debugPrint(
       '[Auth] $reason — retaining local profile '
@@ -204,6 +240,7 @@ abstract final class AuthService {
         'email': user.email ?? profile['email'],
       },
     };
+    TenurePreference.migrateIndependentPlaceSession(payload);
 
     await ProfileStorageService.save(payload);
 
@@ -243,6 +280,7 @@ abstract final class AuthService {
       if (current != null) ...current,
       if (stored != null) ...stored,
     };
+    TenurePreference.migrateIndependentPlaceSession(merged);
 
     AuthScreen.currentUserSession = merged;
     profileStateNotifier.commitPersisted(merged);

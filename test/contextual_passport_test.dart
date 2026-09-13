@@ -97,18 +97,19 @@ void main() {
       expect(snapshot.householdBreakdown, contains('2 adults'));
     });
 
-    test('landlord full rental resolves rigor stack labels', () {
+    test('landlord full rental does not treat host trust fields as verified', () {
       final snapshot = ContextualPassportSnapshot.fromSession({
         'profile_onboarding_track': ProfileOnboardingTrack.landlordEntirePlace.storageToken,
         'full_name': 'Orla Quinn',
         'identity_trust_tier': 'ID_Verified',
-        'rtb_registered': true,
+        'agency_name': 'Quinn Lets',
         'host_trust_stage': 3,
       });
 
       expect(snapshot.track, ProfileOnboardingTrack.landlordEntirePlace);
-      expect(snapshot.idVerificationLabel, contains('Government ID'));
-      expect(snapshot.licensingLabel, contains('RTB'));
+      expect(snapshot.isVerifiedUser, isFalse);
+      expect(snapshot.idVerificationLabel, 'Verification not yet complete');
+      expect(snapshot.licensingLabel, contains('Agency'));
     });
   });
 

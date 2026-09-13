@@ -124,7 +124,11 @@ class _ListingManageScreenState extends State<ListingManageScreen> {
         Text(ListingData.title(listing), style: AppTypography.sectionTitle()),
         const SizedBox(height: 4),
         Text(
-          '${ListingData.price(listing)} · ${ListingData.location(listing)}',
+          [
+            ListingData.price(listing),
+            if (!isShare) ListingData.securityDepositLabel(listing),
+            ListingData.location(listing),
+          ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
           style: AppTypography.detail(),
         ),
         const SizedBox(height: 16),

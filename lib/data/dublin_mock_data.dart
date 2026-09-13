@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import '../config/app_env.dart';
 import '../models/high_signal_match.dart';
 import '../models/listing_creation_field_keys.dart';
 import '../models/shared_living_applicant_stream.dart';
@@ -13,7 +12,7 @@ abstract final class DublinMockData {
   static const listingId = 'mock-listing-dublin-ranelagh-shared';
 
   /// Injects the Ranelagh harness when the host has no owned listings (debug by default).
-  static bool get useMockHarness => AppEnv.demoMockHarness || kDebugMode;
+  static bool get useMockHarness => kDebugMode;
 
   static bool isHarnessListing(String id) => id == listingId;
 

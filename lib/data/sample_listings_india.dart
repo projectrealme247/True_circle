@@ -1,4 +1,5 @@
 import '../utils/listing_sample_images.dart';
+import 'listing_seed_published_at.dart';
 
 /// ~30 realistic sample listings for India marketplace testing (localStorage seed).
 abstract final class SampleListingsIndia {
@@ -919,6 +920,7 @@ abstract final class SampleListingsIndia {
       if (currentOccupants != null) 'current_occupants': currentOccupants,
       if (preferredTenantOccupant != null)
         'preferred_tenant_occupant': preferredTenantOccupant,
+      'published_at': ListingSeedPublishedAt.forId(id),
       'coverImageUrl': ListingSampleImages.urlFor(id, type),
     };
   }

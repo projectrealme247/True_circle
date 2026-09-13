@@ -5,21 +5,17 @@ import '../models/applicant_trust_tier_block.dart';
 import '../models/high_signal_match.dart';
 import '../models/independent_places_applicant_stream.dart';
 import '../models/listing_creation_field_keys.dart';
+import '../models/move_in_timing.dart';
 import '../models/shared_living_applicant_stream.dart';
+import '../utils/landlord_decision_summary_builder.dart';
 import '../utils/numeric_bounds.dart';
 import '../utils/profile_data.dart';
 import '../utils/shared_space_compatibility_scorer.dart';
 import 'applicant_management_supabase_service.dart';
 import 'applicant_payload_sanitizer.dart';
 
-/// Builds category-specific, trust-tier-grouped applicant stream payloads.
+/// Builds category-specific applicant stream payloads ordered by match score.
 abstract final class ApplicantStreamPayloadBuilder {
-  static const _trustTierOrder = [
-    ApplicantTrustTier.sound,
-    ApplicantTrustTier.grand,
-    ApplicantTrustTier.justLanded,
-  ];
-
   static IndependentPlacesApplicantStream buildIndependentPlacesStream({
     required Map<String, dynamic> listing,
     required List<Map<String, dynamic>> applicationRows,
@@ -34,9 +30,7 @@ abstract final class ApplicantStreamPayloadBuilder {
     final listingId = listing['id']?.toString() ?? '';
     final listingTargetMoveIn = _listingTargetMoveInDate(listing);
     final listingLeaseMonths = _listingLeaseTermMonths(listing);
-    final rowsByTier = {
-      for (final tier in _trustTierOrder) tier: <IndependentPlacesApplicantRow>[],
-    };
+    final applicants = <IndependentPlacesApplicantRow>[];
 
     for (final row in applicationRows) {
       final applicationId = row['id']?.toString() ?? '';
@@ -53,15 +47,48 @@ abstract final class ApplicantStreamPayloadBuilder {
       final earliestMoveIn = _parseDate(
         ProfileData.text(session[ApplicantFieldKeys.earliestMoveInDate]),
       );
+      final timing = MoveInTimingEngine.evaluate(
+        seekerSession: session,
+        listing: listing,
+      );
       final varianceDays = _timelineVarianceDays(
         seekerMoveIn: earliestMoveIn,
         listingTargetMoveIn: listingTargetMoveIn,
       );
+      final moveInMatch = timing.quality.earnsTimingScore ||
+          _moveInTimelineMatch(varianceDays);
 
       final localCompatibility = _compatibilityScore(row);
       final displayScore = signal?.overallMatchScore ?? localCompatibility;
+      final employmentVerified = _employmentVerified(session, trustProfile);
+      final corporateVerified = _corporateDocumentVerified(
+        session,
+        trustProfile,
+      );
+      final affordability = _affordabilityMultiplier(
+        session: session,
+        trustTier: trustTier,
+        listing: listing,
+      );
+      final commuteLabel = _commuteLabel(signal?.verifiedTransitDurationSeconds);
+      final decision = LandlordDecisionSummaryBuilder.fromSession(
+        session: session,
+        listing: listing,
+        isSharedLiving: false,
+        trustTier: trustTier,
+        leaseTermMatch: _leaseTermMatch(
+          seekerLeaseMonths: preferredLeaseMonths,
+          listingLeaseMonths: listingLeaseMonths,
+        ),
+        preferredLeaseMonths: preferredLeaseMonths,
+        employmentVerified: employmentVerified,
+        financialVerified: session[ApplicantFieldKeys.financialVerified] ==
+                true ||
+            trustProfile['financial_verified'] == true,
+        commuteLabel: commuteLabel,
+      );
 
-      rowsByTier[trustTier]!.add(
+      applicants.add(
         IndependentPlacesApplicantRow(
           applicationId: applicationId,
           listingId: listingId,
@@ -71,16 +98,13 @@ abstract final class ApplicantStreamPayloadBuilder {
             row['status']?.toString(),
           ),
           trustTier: trustTier,
-          moveInTimelineMatch: _moveInTimelineMatch(varianceDays),
+          moveInTimelineMatch: moveInMatch,
           leaseTermMatch: _leaseTermMatch(
             seekerLeaseMonths: preferredLeaseMonths,
             listingLeaseMonths: listingLeaseMonths,
           ),
-          employmentVerified: _employmentVerified(session, trustProfile),
-          corporateDocumentVerified: _corporateDocumentVerified(
-            session,
-            trustProfile,
-          ),
+          employmentVerified: employmentVerified,
+          corporateDocumentVerified: corporateVerified,
           timelineVarianceDays: varianceDays,
           preferredLeaseMonths: preferredLeaseMonths,
           earliestMoveInDate: earliestMoveIn?.toIso8601String().split('T').first,
@@ -88,42 +112,37 @@ abstract final class ApplicantStreamPayloadBuilder {
           overallMatchScore: signal?.overallMatchScore,
           verifiedTransitDurationSeconds:
               signal?.verifiedTransitDurationSeconds,
-          affordabilityMultiplier: _affordabilityMultiplier(
-            session: session,
-            trustTier: trustTier,
-            listing: listing,
-          ),
+          affordabilityMultiplier: affordability,
+          decision: decision,
           createdAt: _createdAt(row),
         ),
       );
     }
 
-    for (final tier in _trustTierOrder) {
-      rowsByTier[tier]!.sort((a, b) {
-        final scoreA = a.overallMatchScore ?? a.compatibilityScore;
-        final scoreB = b.overallMatchScore ?? b.compatibilityScore;
-        final byScore = scoreB.compareTo(scoreA);
-        if (byScore != 0) return byScore;
+    applicants.sort((a, b) {
+      final scoreA = a.overallMatchScore ?? a.compatibilityScore;
+      final scoreB = b.overallMatchScore ?? b.compatibilityScore;
+      final byScore = scoreB.compareTo(scoreA);
+      if (byScore != 0) return byScore;
 
-        final varianceA = a.timelineVarianceDays ?? 9999;
-        final varianceB = b.timelineVarianceDays ?? 9999;
-        final byTimeline = varianceA.compareTo(varianceB);
-        if (byTimeline != 0) return byTimeline;
+      final varianceA = a.timelineVarianceDays ?? 9999;
+      final varianceB = b.timelineVarianceDays ?? 9999;
+      final byTimeline = varianceA.compareTo(varianceB);
+      if (byTimeline != 0) return byTimeline;
 
-        final leaseA = a.preferredLeaseMonths ?? 0;
-        final leaseB = b.preferredLeaseMonths ?? 0;
-        return leaseB.compareTo(leaseA);
-      });
-    }
+      final leaseA = a.preferredLeaseMonths ?? 0;
+      final leaseB = b.preferredLeaseMonths ?? 0;
+      return leaseB.compareTo(leaseA);
+    });
 
-    final blocks = [
-      for (final tier in _trustTierOrder)
-        if (rowsByTier[tier]!.isNotEmpty)
-          ApplicantTrustTierBlock(
-            trustTier: tier,
-            applicants: rowsByTier[tier]!,
-          ),
-    ];
+    final blocks = applicants.isEmpty
+        ? <ApplicantTrustTierBlock<IndependentPlacesApplicantRow>>[]
+        : [
+            ApplicantTrustTierBlock(
+              trustTier: applicants.first.trustTier,
+              applicants: applicants,
+            ),
+          ];
 
     return IndependentPlacesApplicantStream(
       listingId: listingId,
@@ -151,9 +170,7 @@ abstract final class ApplicantStreamPayloadBuilder {
     final listingKitchenCulture = ProfileData.text(
       listing[ListingCreationFieldKeys.kitchenCulture],
     );
-    final rowsByTier = {
-      for (final tier in _trustTierOrder) tier: <SharedLivingApplicantRow>[],
-    };
+    final applicants = <SharedLivingApplicantRow>[];
 
     for (final row in applicationRows) {
       final applicationId = row['id']?.toString() ?? '';
@@ -186,8 +203,28 @@ abstract final class ApplicantStreamPayloadBuilder {
         ),
       );
       final displayScore = signal?.overallMatchScore ?? lifestyleScore;
+      final affordability = _affordabilityMultiplier(
+        session: session,
+        trustTier: trustTier,
+        listing: listing,
+      );
+      final commuteLabel = _commuteLabel(signal?.verifiedTransitDurationSeconds);
+      final decision = LandlordDecisionSummaryBuilder.fromSession(
+        session: session,
+        listing: listing,
+        isSharedLiving: true,
+        trustTier: trustTier,
+        lifestyleMatchPercent: displayScore,
+        languageOverlap: overlap,
+        kitchenCultureAligned: kitchenAligned,
+        employmentVerified: _employmentVerified(session, trustProfile),
+        financialVerified: session[ApplicantFieldKeys.financialVerified] ==
+                true ||
+            trustProfile['financial_verified'] == true,
+        commuteLabel: commuteLabel,
+      );
 
-      rowsByTier[trustTier]!.add(
+      applicants.add(
         SharedLivingApplicantRow(
           applicationId: applicationId,
           listingId: listingId,
@@ -209,32 +246,27 @@ abstract final class ApplicantStreamPayloadBuilder {
           overallMatchScore: signal?.overallMatchScore,
           verifiedTransitDurationSeconds:
               signal?.verifiedTransitDurationSeconds,
-          affordabilityMultiplier: _affordabilityMultiplier(
-            session: session,
-            trustTier: trustTier,
-            listing: listing,
-          ),
+          affordabilityMultiplier: affordability,
+          decision: decision,
           createdAt: _createdAt(row),
         ),
       );
     }
 
-    for (final tier in _trustTierOrder) {
-      rowsByTier[tier]!.sort((a, b) {
-        final scoreA = a.overallMatchScore ?? a.lifestyleMatchScorePercent;
-        final scoreB = b.overallMatchScore ?? b.lifestyleMatchScorePercent;
-        return scoreB.compareTo(scoreA);
-      });
-    }
+    applicants.sort((a, b) {
+      final scoreA = a.overallMatchScore ?? a.lifestyleMatchScorePercent;
+      final scoreB = b.overallMatchScore ?? b.lifestyleMatchScorePercent;
+      return scoreB.compareTo(scoreA);
+    });
 
-    final blocks = [
-      for (final tier in _trustTierOrder)
-        if (rowsByTier[tier]!.isNotEmpty)
-          ApplicantTrustTierBlock(
-            trustTier: tier,
-            applicants: rowsByTier[tier]!,
-          ),
-    ];
+    final blocks = applicants.isEmpty
+        ? <ApplicantTrustTierBlock<SharedLivingApplicantRow>>[]
+        : [
+            ApplicantTrustTierBlock(
+              trustTier: applicants.first.trustTier,
+              applicants: applicants,
+            ),
+          ];
 
     return SharedLivingApplicantStream(
       listingId: listingId,
@@ -293,7 +325,6 @@ abstract final class ApplicantStreamPayloadBuilder {
       ...session,
       ApplicantFieldKeys.fullName: trustProfile['full_name'],
       ApplicantFieldKeys.trustTier: trustProfile['trust_tier'],
-      ApplicantFieldKeys.trustStage: trustProfile['trust_stage'],
       ApplicantFieldKeys.employmentVerified: trustProfile['employment_verified'],
       ApplicantFieldKeys.financialVerified: trustProfile['financial_verified'],
       ApplicantFieldKeys.verificationTrack: trustProfile['verification_track'],
@@ -304,21 +335,38 @@ abstract final class ApplicantStreamPayloadBuilder {
     Map<String, dynamic> session,
     Map<String, dynamic> trustProfile,
   ) {
-    return ApplicantTrustTier.fromTrustProfile(
-      trustTier: ProfileData.text(
-        session[ApplicantFieldKeys.trustTier] ?? trustProfile['trust_tier'],
-      ),
-      trustStage: session[ApplicantFieldKeys.trustStage] is int
-          ? session[ApplicantFieldKeys.trustStage] as int
-          : trustProfile['trust_stage'] is int
-              ? trustProfile['trust_stage'] as int
-              : int.tryParse(
-                    ProfileData.text(
-                      session[ApplicantFieldKeys.trustStage] ??
-                          trustProfile['trust_stage'],
-                    ),
-                  ),
-    );
+    return ApplicantTrustTier.fromSession(_sessionWithTrustProfile(
+      session,
+      trustProfile,
+    ));
+  }
+
+  static Map<String, dynamic> _sessionWithTrustProfile(
+    Map<String, dynamic> session,
+    Map<String, dynamic> trustProfile,
+  ) {
+    if (trustProfile.isEmpty) return session;
+    return {
+      ...session,
+      if (ProfileData.text(session[ApplicantFieldKeys.trustTier]).isEmpty)
+        ApplicantFieldKeys.trustTier: trustProfile['trust_tier'],
+      if (session[ApplicantFieldKeys.employmentVerified] != true)
+        ApplicantFieldKeys.employmentVerified: trustProfile['employment_verified'],
+      if (session[ApplicantFieldKeys.financialVerified] != true)
+        ApplicantFieldKeys.financialVerified: trustProfile['financial_verified'],
+      if (session['linkedin_verified'] != true)
+        'linkedin_verified': trustProfile['linkedin_verified'],
+      if (session['employment_letter_verified'] != true)
+        'employment_letter_verified': trustProfile['employment_letter_verified'],
+      if (session['onboarding_letter_verified'] != true)
+        'onboarding_letter_verified': trustProfile['onboarding_letter_verified'],
+      if (session['light_trust_verified'] != true)
+        'light_trust_verified': trustProfile['light_trust_verified'],
+      if (ProfileData.text(session['verified_university_email']).isEmpty)
+        'verified_university_email': trustProfile['verified_university_email'],
+      if (ProfileData.text(session['occupant_type']).isEmpty)
+        'occupant_type': trustProfile['occupant_type'],
+    };
   }
 
   static String _seekerName(
@@ -465,35 +513,17 @@ abstract final class ApplicantStreamPayloadBuilder {
     required ApplicantTrustTier trustTier,
     required Map<String, dynamic> listing,
   }) {
-    final explicit = session[ApplicantFieldKeys.affordabilityMultiplier] ??
-        session['affordability_multiplier'];
-    if (explicit is num && explicit > 0) {
-      return (explicit.toDouble() * 10).roundToDouble() / 10;
-    }
-
-    final salaryRaw = session['annual_salary'];
-    if (salaryRaw is num && salaryRaw > 0) {
-      final rent = _listingMonthlyRent(listing);
-      if (rent != null && rent > 0) {
-        final monthlyGross = salaryRaw / 12;
-        return ((monthlyGross / rent) * 10).roundToDouble() / 10;
-      }
-    }
-
-    return switch (trustTier) {
-      ApplicantTrustTier.sound => 3.5,
-      ApplicantTrustTier.grand => 3.0,
-      ApplicantTrustTier.justLanded => 2.5,
-    };
+    return LandlordDecisionSummaryBuilder.fromSession(
+      session: session,
+      listing: listing,
+      isSharedLiving: false,
+      trustTier: trustTier,
+    ).affordabilityMultiplier;
   }
 
-  static double? _listingMonthlyRent(Map<String, dynamic> listing) {
-    final price = ProfileData.text(listing['price']);
-    if (price.isEmpty) return null;
-
-    final digits = price.replaceAll(RegExp(r'[^\d.]'), '');
-    if (digits.isEmpty) return null;
-
-    return double.tryParse(digits);
+  static String? _commuteLabel(int? transitSeconds) {
+    if (transitSeconds == null || transitSeconds <= 0) return null;
+    final minutes = (transitSeconds / 60).round();
+    return '$minutes min commute';
   }
 }

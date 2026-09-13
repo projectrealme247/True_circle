@@ -29,7 +29,7 @@ class HomeExploreResponsiveShell extends StatelessWidget {
     required this.onSignIn,
     required this.onListSpace,
     required this.profileTrailing,
-    this.modeSwitch,
+    this.primaryNav,
     this.onMoreFiltersTap,
     this.moreFiltersActiveCount = 0,
   });
@@ -47,7 +47,7 @@ class HomeExploreResponsiveShell extends StatelessWidget {
   final VoidCallback onSignIn;
   final VoidCallback onListSpace;
   final Widget profileTrailing;
-  final Widget? modeSwitch;
+  final Widget? primaryNav;
   final VoidCallback? onMoreFiltersTap;
   final int moreFiltersActiveCount;
 
@@ -74,7 +74,6 @@ class HomeExploreResponsiveShell extends StatelessWidget {
           signedIn: signedIn,
           onSignIn: onSignIn,
           onListSpace: onListSpace,
-          modeSwitch: modeSwitch,
           profileTrailing: profileTrailing,
           compact: isMobile,
         );
@@ -85,6 +84,7 @@ class HomeExploreResponsiveShell extends StatelessWidget {
             children: [
               HomeExploreHeader(
                 onLogoTap: onLogoTap,
+                primaryNav: primaryNav,
                 trailing: headerTrailing,
               ),
               const SizedBox(height: 8),
@@ -98,6 +98,7 @@ class HomeExploreResponsiveShell extends StatelessWidget {
           children: [
             _DesktopTopNav(
               onLogoTap: onLogoTap,
+              primaryNav: primaryNav,
               trailing: headerTrailing,
             ),
             const SizedBox(height: 12),
@@ -115,7 +116,6 @@ class _HeaderTrailing extends StatelessWidget {
     required this.onSignIn,
     required this.onListSpace,
     required this.profileTrailing,
-    this.modeSwitch,
     required this.compact,
   });
 
@@ -123,7 +123,6 @@ class _HeaderTrailing extends StatelessWidget {
   final VoidCallback onSignIn;
   final VoidCallback onListSpace;
   final Widget profileTrailing;
-  final Widget? modeSwitch;
   final bool compact;
 
   @override
@@ -142,13 +141,8 @@ class _HeaderTrailing extends StatelessWidget {
               ),
             ),
           )
-        else ...[
-          if (modeSwitch != null) ...[
-            modeSwitch!,
-            SizedBox(width: compact ? 6 : 10),
-          ],
+        else
           profileTrailing,
-        ],
         SizedBox(width: compact ? 4 : 12),
         FilledButton(
           onPressed: onListSpace,
@@ -180,10 +174,12 @@ class _DesktopTopNav extends StatelessWidget {
   const _DesktopTopNav({
     required this.onLogoTap,
     required this.trailing,
+    this.primaryNav,
   });
 
   final VoidCallback onLogoTap;
   final Widget trailing;
+  final Widget? primaryNav;
 
   @override
   Widget build(BuildContext context) {
@@ -209,6 +205,19 @@ class _DesktopTopNav extends StatelessWidget {
             ],
           ),
         ),
+        if (primaryNav != null) ...[
+          const SizedBox(width: 20),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: primaryNav!,
+              ),
+            ),
+          ),
+        ],
         const Spacer(),
         trailing,
       ],

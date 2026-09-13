@@ -11,6 +11,47 @@ abstract final class ListingsSupabaseService {
 
   static bool get canWrite => AuthService.isAuthenticated;
 
+  /// Best-effort insert into `listing_reports` for admin review sync.
+  /// Returns the inserted row, or null when unauthenticated / table missing / failed.
+  static Future<Map<String, dynamic>?> tryInsertListingReport(
+    Map<String, dynamic> report,
+  ) async {
+    if (!_supabaseReadyForWrite) return null;
+
+    try {
+      final response = await AuthService.client
+          .from('listing_reports')
+          .insert({
+            'report_type': report['report_type'] ?? 'listing',
+            'listing_id': report['listing_id'],
+            'reporter_id': report['reporter_id'],
+            'reason': report['reason'],
+            'details': report['details'] ?? '',
+            'status': report['status'] ?? 'open',
+            if (report['created_at'] != null) 'created_at': report['created_at'],
+          })
+          .select()
+          .maybeSingle();
+
+      if (response == null) return null;
+      return Map<String, dynamic>.from(response);
+    } on PostgrestException catch (e) {
+      debugPrint('ListingsSupabaseService report insert failed: ${e.message}');
+      return null;
+    } catch (e) {
+      debugPrint('ListingsSupabaseService report insert error: $e');
+      return null;
+    }
+  }
+
+  static bool get _supabaseReadyForWrite {
+    try {
+      return Supabase.instance.isInitialized && canWrite;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Inserts a listing row; returns app-shaped map or null when skipped/failed.
   static Future<Map<String, dynamic>?> tryInsertListing(
     Map<String, dynamic> local,
@@ -104,10 +145,11 @@ abstract final class ListingsSupabaseService {
       if (local['video'] != null) 'video': local['video'],
       if (local['spoken_languages'] is List)
         'spoken_languages': local['spoken_languages'],
-      if (local['host_trust_stage'] != null)
-        'host_trust_stage': local['host_trust_stage'],
-      if (local['host_trust_multiplier'] != null)
-        'host_trust_multiplier': local['host_trust_multiplier'],
+      if (ListingData.text(local['security_deposit']).isNotEmpty)
+        'security_deposit': ListingData.text(local['security_deposit']),
+      if (ListingData.text(local[ListingData.publishedAtKey]).isNotEmpty)
+        ListingData.publishedAtKey:
+            ListingData.text(local[ListingData.publishedAtKey]),
     };
 
     return {
@@ -193,6 +235,10 @@ abstract final class ListingsSupabaseService {
               .dbValue,
       if (meta['foodPreference'] != null) 'foodPreference': meta['foodPreference'],
       ...meta,
+      // Prefer column when present; otherwise metadata via [...meta].
+      if (ListingData.text(row[ListingData.publishedAtKey]).isNotEmpty)
+        ListingData.publishedAtKey:
+            ListingData.text(row[ListingData.publishedAtKey]),
     };
   }
 }

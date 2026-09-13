@@ -1,4 +1,5 @@
 import '../utils/listing_sample_images.dart';
+import 'listing_seed_published_at.dart';
 
 /// Shared builder for Dublin marketplace seed listings (v2 field coverage).
 abstract final class DublinListingBuilder {
@@ -74,6 +75,7 @@ abstract final class DublinListingBuilder {
       longitude: raw['longitude'] is num ? (raw['longitude'] as num).toDouble() : null,
       availableFrom: availableFrom,
       availabilityFlexibility: availabilityFlexibility,
+      publishedAt: raw['published_at']?.toString(),
       hostTrustStage: raw['host_trust_stage'] is int
           ? raw['host_trust_stage'] as int
           : trust,
@@ -114,6 +116,7 @@ abstract final class DublinListingBuilder {
     double? longitude,
     String? availableFrom,
     String? availabilityFlexibility,
+    String? publishedAt,
     int hostTrustStage = 1,
   }) {
     final lowerTitle = title.toLowerCase();
@@ -194,6 +197,9 @@ abstract final class DublinListingBuilder {
         'available_from': availableFrom,
       if (availabilityFlexibility != null && availabilityFlexibility.isNotEmpty)
         'availability_flexibility': availabilityFlexibility,
+      'published_at': (publishedAt != null && publishedAt.isNotEmpty)
+          ? publishedAt
+          : ListingSeedPublishedAt.forId(id),
       'host_trust_stage': hostTrustStage,
       'listing_type': type,
       'coverImageUrl': ListingSampleImages.photoAt(
@@ -275,11 +281,10 @@ abstract final class DublinListingBuilder {
 
   static String _availabilityFlexibilityForId(String id) {
     final n = int.tryParse(RegExp(r'(\d+)$').firstMatch(id)?.group(1) ?? '') ?? 1;
-    return switch (n % 4) {
-      0 => 'exact_date',
+    return switch (n % 3) {
+      0 => 'flexible',
       1 => 'plus_15_days',
-      2 => 'plus_1_month',
-      _ => 'flexible',
+      _ => 'plus_1_month',
     };
   }
 

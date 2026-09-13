@@ -4,12 +4,19 @@ import '../models/applicant_application_status.dart';
 abstract final class ApplicantStatusTransitionService {
   static const _allowedTransitions = {
     ApplicantApplicationStatus.pending: {
-      ApplicantApplicationStatus.viewingScheduled,
+      ApplicantApplicationStatus.viewingInvitationSent,
       ApplicantApplicationStatus.accepted,
       ApplicantApplicationStatus.declined,
     },
+    ApplicantApplicationStatus.viewingInvitationSent: {
+      ApplicantApplicationStatus.viewingScheduled,
+      ApplicantApplicationStatus.pending,
+      ApplicantApplicationStatus.declined,
+    },
     ApplicantApplicationStatus.viewingScheduled: {
+      ApplicantApplicationStatus.viewingInvitationSent,
       ApplicantApplicationStatus.accepted,
+      ApplicantApplicationStatus.pending,
       ApplicantApplicationStatus.declined,
     },
     ApplicantApplicationStatus.accepted: <ApplicantApplicationStatus>{},

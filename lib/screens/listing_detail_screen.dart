@@ -8,21 +8,27 @@ import '../services/listings_storage_service.dart';
 import '../services/trust_service.dart';
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_data.dart';
-import '../utils/trust_status_copy.dart';
+import '../utils/listing_match_engine.dart';
 import '../utils/viewer_profile.dart';
+import '../models/applicant_field_keys.dart';
 import '../models/marketplace_space.dart';
 import '../services/listing_applications_service.dart';
 import '../services/listing_contact_service.dart';
 import '../services/marketplace_context_notifier.dart';
 import '../services/replacement_workflow_service.dart';
+import '../services/application_conversation_service.dart';
+import '../services/application_service.dart';
+import '../utils/seeker_application_pipeline.dart';
 import '../utils/shared_space_compatibility_scorer.dart';
 import '../utils/applicant_household.dart';
 import '../utils/full_rental_applicant_scorer.dart';
 import '../utils/numeric_bounds.dart';
 import '../widgets/jit_verification_bottom_sheet.dart';
 import '../widgets/listing_action_bar.dart';
+import '../widgets/listing_detail/pitch_your_story_sheet.dart';
 import '../widgets/listing_detail_page_layout.dart';
 import '../widgets/listing_detail_tokens.dart';
+import '../widgets/report_listing_bottom_sheet.dart';
 import 'auth_screen.dart';
 
 class ListingDetailScreen extends StatefulWidget {
@@ -39,7 +45,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   bool _loading = true;
   bool _notFound = false;
   bool _startedLoad = false;
-  bool _hasApplied = false;
+  /// Non-null when the current seeker already applied to this listing.
+  String? _applicationStateLabel;
 
   @override
   void initState() {
@@ -54,7 +61,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   void _onAuthSessionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _refreshApplicationState();
   }
 
   @override
@@ -65,34 +73,43 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     _resolveListing();
   }
 
+  Future<void> _refreshApplicationState() async {
+    final session = AuthScreen.currentUserSession;
+    if (session == null) {
+      if (mounted) setState(() => _applicationStateLabel = null);
+      return;
+    }
+    await applicationService.ensureLoaded();
+    await applicationConversationService.ensureLoaded();
+    if (!mounted) return;
+    final label = SeekerApplicationPipeline.listingDetailStateLabel(
+      listingId: widget.listingId,
+      userId: AuthService.identityUserId(session),
+    );
+    if (!mounted) return;
+    setState(() => _applicationStateLabel = label);
+  }
+
   Future<void> _resolveListing() async {
-    final extra = GoRouterState.of(context).extra;
+    final extra = GoRouter.of(context).state.extra;
     if (extra is Map) {
       if (!mounted) return;
       setState(() {
         _listing = ListingData.normalizeItem(Map<String, dynamic>.from(extra));
         _loading = false;
       });
+      await _refreshApplicationState();
       return;
     }
 
     final stored = await ListingsStorageService.getById(widget.listingId);
     if (!mounted) return;
-    final session = AuthScreen.currentUserSession;
-    var hasApplied = false;
-    if (stored != null && session != null) {
-      hasApplied = await ListingApplicationsService.hasApplied(
-        listingId: widget.listingId,
-        applicantUserId: session['supabase_user_id']?.toString() ?? '',
-      );
-    }
-    if (!mounted) return;
     setState(() {
       _listing = stored;
       _loading = false;
       _notFound = stored == null;
-      _hasApplied = hasApplied;
     });
+    await _refreshApplicationState();
   }
 
   MarketplaceSpace get _listingSpace {
@@ -103,7 +120,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     );
   }
 
-  Future<void> _handleApply(Map<String, dynamic> item) async {
+  Future<void> _submitApplication(
+    Map<String, dynamic> item, {
+    required String personalNote,
+  }) async {
     final session = AuthScreen.currentUserSession;
     if (session == null) {
       _promptSignIn();
@@ -112,37 +132,40 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     if (!TrustService.canContact()) {
       _handleContactHost(
         canContact: false,
-        stage: TrustService.currentStage(),
         cohort: ViewerProfile.seekerCohortFromSession(session),
         listing: item,
       );
       return;
     }
 
+    final enrichedSession = Map<String, dynamic>.from(session)
+      ..[ApplicantFieldKeys.personalIntroduction] = personalNote;
+
     final isShare = _listingSpace == MarketplaceSpace.sharedSpace;
     final score = isShare
         ? SharedSpaceCompatibilityScorer.calculateCompatibility(
-            seekerSession: session,
+            seekerSession: enrichedSession,
             listing: item,
           )
         : FullRentalApplicantScorer.scoreApplicantGroup(
-            household: ApplicantHousehold.fromMap(session),
+            household: ApplicantHousehold.fromMap(enrichedSession),
             listing: item,
           ).finalScore;
 
     await ListingApplicationsService.submit(
       listingId: widget.listingId,
-      session: session,
+      session: enrichedSession,
       space: _listingSpace,
       compatibilityScore: NumericBounds.clampPercentInt(score),
     );
     await ListingContactService.notifyHost(
       listing: item,
-      applicantSession: session,
+      applicantSession: enrichedSession,
       compatibilityScore: NumericBounds.clampPercentInt(score),
     );
     if (!mounted) return;
-    setState(() => _hasApplied = true);
+    await _refreshApplicationState();
+    if (!mounted) return;
     final hostName = ListingData.hostName(item);
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -157,6 +180,15 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
+  }
+
+  Future<void> _handleApply(Map<String, dynamic> item) async {
+    final session = AuthScreen.currentUserSession;
+    if (session == null) {
+      _promptSignIn();
+      return;
+    }
+    await _submitApplication(item, personalNote: '');
   }
 
   Future<void> _handleStartReplacement(Map<String, dynamic> item) async {
@@ -198,6 +230,30 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
             letterSpacing: -0.3,
           ),
         ),
+        actions: [
+          if (!_loading && !_notFound && _listing != null)
+            PopupMenuButton<String>(
+              icon: const Icon(
+                Icons.more_horiz_rounded,
+                color: ListingDetailTokens.charcoal,
+              ),
+              tooltip: 'More',
+              onSelected: (value) {
+                if (value == 'report') {
+                  ReportListingBottomSheet.show(
+                    context,
+                    listingId: ListingData.id(_listing!),
+                  );
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem<String>(
+                  value: 'report',
+                  child: Text('Report Listing'),
+                ),
+              ],
+            ),
+        ],
       ),
       body: _loading
           ? const Center(
@@ -251,19 +307,21 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       item: item,
       userSession: userSession,
       space: _listingSpace,
-      hasApplied: _hasApplied,
+      hasApplied: _applicationStateLabel != null,
+      applicationStateLabel: _applicationStateLabel,
       isOwned: ListingActionBar.isOwnedListing(item, userSession),
       displayPrice: ListingDetailCopy.displayPrice(item),
       displayTitle: ListingDetailCopy.displayTitle(item),
       formatHighlightLabel: ListingDetailCopy.highlightLabel,
+      listedOnLabel: ListingData.listedOnDisplayLabel(item),
       depositLabel: ListingData.securityDepositLabel(item),
       mediaExtras: _buildMediaExtras(
         ListingData.imageDataUris(item),
         ListingData.videoDataUri(item) != null,
       ),
-      matchChips: _buildMatchChips(item, userSession),
+      matchChips: const [],
+      preferenceFitLabels: _preferenceFitLabels(item, userSession),
       onPitch: () => _handlePitch(item),
-      onRequestViewing: () => _showScheduleViewing(item),
       onManage: () => context.push('/listing/${widget.listingId}/manage'),
       onStartReplacement: () => _handleStartReplacement(item),
       onEdit: () => context.push('/add-listing', extra: item),
@@ -271,25 +329,56 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   void _handlePitch(Map<String, dynamic> item) {
-    if (AuthScreen.currentUserSession == null) {
+    if (_applicationStateLabel != null) return;
+    final session = AuthScreen.currentUserSession;
+    if (session == null) {
       _showSignInBottomSheet();
       return;
     }
-    _handleApply(item);
+    if (!TrustService.canContact()) {
+      _handleContactHost(
+        canContact: false,
+        cohort: ViewerProfile.seekerCohortFromSession(session),
+        listing: item,
+      );
+      return;
+    }
+
+    PitchYourStorySheet.show(
+      context,
+      hostName: ListingData.hostName(item),
+      space: _listingSpace,
+      session: session,
+      onSubmit: (note) => _submitApplication(item, personalNote: note),
+    );
   }
 
-  List<Widget> _buildMatchChips(
+  List<String> _preferenceFitLabels(
     Map<String, dynamic> item,
     Map<String, dynamic>? userSession,
   ) {
-    if (userSession == null) return [];
-    final match = ListingData.compareWithProfile(item, userSession);
-    if (!match.hasAny) return [];
-    return [
-      if (match.sameLocality) _matchChip('Same city'),
-      if (match.sameMotherTongue) _matchChip('Same language'),
-      if (match.dietMatch) _matchChip('Same food preference'),
-    ];
+    if (userSession == null) return const [];
+    final viewer = ViewerProfile.fromSession(userSession);
+
+    if (_listingSpace == MarketplaceSpace.fullRental) {
+      return ListingMatchEngine.independentPlacePreferenceExplanations(
+        item,
+        viewer,
+        viewerSession: userSession,
+        maxReasons: 3,
+      );
+    }
+
+    if (_listingSpace == MarketplaceSpace.sharedSpace) {
+      return ListingMatchEngine.sharedLivingPreferenceExplanations(
+        item,
+        viewer,
+        viewerSession: userSession,
+        maxReasons: 3,
+      );
+    }
+
+    return const [];
   }
 
 
@@ -388,42 +477,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       );
   }
 
-  String _contactGateMessage(TrustStage stage, {required SeekerCohort cohort}) {
-    if (TrustStatusCopy.usesLegacyCasualLabel(stage)) {
-      return TrustStatusCopy.justLandedBrowsing;
-    }
-
-    if (cohort == SeekerCohort.workingProfessional) {
-      if (stage.level < TrustStage.socialVerified.level) {
-        return 'Verify employment with LinkedIn or upload a corporate letter '
-            'to contact hosts.';
-      }
-      return 'You are verified at ${stage.label}.';
-    }
-    if (cohort == SeekerCohort.arrivingFamily) {
-      if (stage.level < TrustStage.socialVerified.level) {
-        return 'Confirm rental budget capability to contact hosts.';
-      }
-      return 'You are verified at ${stage.label}.';
-    }
-
-    final lightTrust =
-        MarketConfig.current.trustVerificationKind == TrustVerificationKind.lightTrust;
-    if (lightTrust) {
-      if (stage.level < TrustStage.socialVerified.level) {
-        return 'Social verification is required before you can contact hosts. '
-            '${TrustStatusCopy.justLandedBrowsing}';
-      }
-      return 'Contact requires university email verification (Track A) or '
-          'pre-arrival invite + offer letter (Track B).';
-    }
-    return 'ID verification is required to contact hosts. '
-        'Complete verification to connect with premium hosts instantly.';
-  }
-
   void _handleContactHost({
     required bool canContact,
-    required TrustStage stage,
     required SeekerCohort cohort,
     Map<String, dynamic>? listing,
   }) {
@@ -432,8 +487,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       return;
     }
 
-    if (cohort.needsJitSocialGate &&
-        stage.level < TrustStage.socialVerified.level) {
+    // Professionals / families: LinkedIn OR employment methods → JIT sheet.
+    if (cohort.needsJitSocialGate) {
       JitVerificationBottomSheet.show(
         context,
         cohort: cohort,
@@ -449,81 +504,22 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       return;
     }
 
-    if (cohort == SeekerCohort.student) {
-      _showStudentContactGate(stage);
-      return;
-    }
-
-    final lightTrust =
-        MarketConfig.current.trustVerificationKind == TrustVerificationKind.lightTrust;
-
-    String nextVerification;
-    String ctaLabel;
-    String body;
-
-    if (stage.level < TrustStage.socialVerified.level) {
-      nextVerification = '/verify/social';
-      ctaLabel = 'Start Social Verification';
-      body = lightTrust
-          ? 'Complete Stage 2 social verification first, then choose '
-              'university email or pre-arrival contact verification.'
-          : 'To protect both tenants and hosts, TrueCircle requires '
-              'social verification before ID verification.';
-    } else if (lightTrust) {
-      nextVerification = '/verify/id';
-      ctaLabel = 'Choose verification path';
-      body = 'You can verify with your college email (Community Verified) '
-          'or as a pre-arrival student with an invite code and offer letter.';
-    } else {
-      nextVerification = '/verify/id';
-      ctaLabel = 'Start ID Verification';
-      body = 'To protect both tenants and hosts, TrueCircle requires '
-          'ID verification before you can contact a host.';
-    }
-
-    _showLegacyVerificationSheet(
-      body: body,
-      ctaLabel: ctaLabel,
-      nextVerification: nextVerification,
-      lightTrust: lightTrust,
-      stage: stage,
-    );
+    // Students: university email OR pre-arrival declaration (not LinkedIn).
+    _showStudentContactGate();
   }
 
-  void _showStudentContactGate(TrustStage stage) {
+  void _showStudentContactGate() {
     final lightTrust =
         MarketConfig.current.trustVerificationKind == TrustVerificationKind.lightTrust;
 
-    late final String body;
-    late final String ctaLabel;
-    late final String nextVerification;
-
-    if (stage.level < TrustStage.socialVerified.level) {
-      nextVerification = '/verify/social';
-      ctaLabel = 'Start Social Verification';
-      body = lightTrust
-          ? 'Complete Stage 2 social verification first, then choose '
-              'university email or pre-arrival contact verification.'
-          : 'To protect both tenants and hosts, TrueCircle requires '
-              'social verification before ID verification.';
-    } else if (lightTrust) {
-      nextVerification = '/verify/id';
-      ctaLabel = 'Choose verification path';
-      body = 'You can verify with your college email (Community Verified) '
-          'or as a pre-arrival student with an invite code and offer letter.';
-    } else {
-      nextVerification = '/verify/id';
-      ctaLabel = 'Start ID Verification';
-      body = 'To protect both tenants and hosts, TrueCircle requires '
-          'ID verification before you can contact a host.';
-    }
-
     _showLegacyVerificationSheet(
-      body: body,
-      ctaLabel: ctaLabel,
-      nextVerification: nextVerification,
-      lightTrust: lightTrust,
-      stage: stage,
+      body: lightTrust
+          ? 'Choose how you want to verify so you can contact this host.'
+          : 'To protect both tenants and hosts, TrueCircle requires '
+              'verification before you can contact a host.',
+      ctaLabel: 'Start verification',
+      nextVerification: '/verify/id',
+      showStudentPathChoices: lightTrust,
     );
   }
 
@@ -531,8 +527,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     required String body,
     required String ctaLabel,
     required String nextVerification,
-    required bool lightTrust,
-    required TrustStage stage,
+    required bool showStudentPathChoices,
   }) {
     showModalBottomSheet(
       context: context,
@@ -556,51 +551,53 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280), height: 1.5),
             ),
-            if (lightTrust && stage.level >= TrustStage.socialVerified.level) ...[
+            if (showStudentPathChoices) ...[
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                height: 44,
-                child: OutlinedButton(
+                height: 48,
+                child: FilledButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    context.push('/verify/pre-arrival');
+                    context.push('/verify/id/university-email');
                   },
-                  child: const Text('Pre-arrival: invite + letter'),
+                  style: AppButtonStyles.primaryFilled,
+                  child: const Text('I have a university email'),
                 ),
               ),
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
-                height: 44,
+                height: 48,
                 child: OutlinedButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    context.push('/verify/id/university-email');
+                    context.push('/verify/pre-arrival');
                   },
-                  child: const Text('I have a college email'),
+                  child: const Text("I don't have a university email yet"),
                 ),
               ),
-            ],
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  context.push(nextVerification);
-                },
-                style: AppButtonStyles.primaryFilled,
-                child: Text(
-                  ctaLabel,
-                  style: AppTypography.button.copyWith(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 15,
+            ] else ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push(nextVerification);
+                  },
+                  style: AppButtonStyles.primaryFilled,
+                  child: Text(
+                    ctaLabel,
+                    style: AppTypography.button.copyWith(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -656,33 +653,6 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]}';
   }
-
-  Widget _matchChip(String label) {
-    const accent = AppColors.accent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accent.withValues(alpha: 0.22)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.verified_rounded, size: 12, color: accent),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: const TextStyle(
-              color: accent,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 abstract final class ListingDetailCopy {
@@ -699,7 +669,7 @@ abstract final class ListingDetailCopy {
         .join(' · ');
   }
 
-  /// Uniform title case for highlight matrix labels (preserves short acronyms like RTB).
+  /// Uniform title case for highlight matrix labels (preserves short transit acronyms).
   static String highlightLabel(String value) {
     if (value.trim().isEmpty) return value;
     return value
@@ -714,7 +684,7 @@ abstract final class ListingDetailCopy {
     if (RegExp(r'^[A-Z]{2,5}$').hasMatch(word)) return word;
     if (RegExp(r'^\d+$').hasMatch(word)) return word;
     final lower = word.toLowerCase();
-    const acronyms = {'rtb', 'dart', 'luas', 'ucd', 'bhk'};
+    const acronyms = {'dart', 'luas', 'ucd', 'bhk', 'ber'};
     if (acronyms.contains(lower)) return lower.toUpperCase();
     if (word.length == 1) return word.toUpperCase();
     return '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}';

@@ -1,7 +1,10 @@
+import '../services/application_service.dart';
+import '../utils/application_pitch_text.dart';
 import '../utils/rental_date_format.dart';
 import 'applicant_application_status.dart';
 import 'applicant_trust_tier.dart';
 import 'independent_places_applicant_stream.dart';
+import 'landlord_decision_summary.dart';
 import 'shared_living_applicant_stream.dart';
 
 /// Unified applicant card for the landlord pipeline workspace.
@@ -22,6 +25,7 @@ class LandlordApplicantCardModel {
     this.budgetLabel,
     this.commuteLabel,
     this.moveInLabel,
+    this.decision,
   });
 
   final String applicationId;
@@ -39,31 +43,56 @@ class LandlordApplicantCardModel {
   final String? budgetLabel;
   final String? commuteLabel;
   final String? moveInLabel;
+  final LandlordDecisionSummary? decision;
 
-  String get trustTabLabel => switch (trustTier) {
-        ApplicantTrustTier.sound => 'Sound (Vouched & Secured)',
-        ApplicantTrustTier.grand => 'Grand (Verified Intent)',
-        ApplicantTrustTier.justLanded => 'Just Landed (Casual / Inbound)',
-      };
+  String get trustTabLabel => trustTier.landlordBadgeLabel;
+
+  bool get isVerifiedUser =>
+      decision?.isVerifiedUser ?? false;
+
+  String get listingId {
+    final row = sourceRow;
+    if (row is SharedLivingApplicantRow) return row.listingId;
+    if (row is IndependentPlacesApplicantRow) return row.listingId;
+    return '';
+  }
+
+  String get applicantUserId {
+    final row = sourceRow;
+    if (row is SharedLivingApplicantRow) return row.applicantUserId;
+    if (row is IndependentPlacesApplicantRow) return row.applicantUserId;
+    return '';
+  }
 
   String get statusLabel => switch (status) {
         ApplicantApplicationStatus.pending => 'Pending',
+        ApplicantApplicationStatus.viewingInvitationSent =>
+          'Viewing Invitation Sent',
         ApplicantApplicationStatus.viewingScheduled => 'Viewing Scheduled',
         ApplicantApplicationStatus.accepted => 'Accepted',
         ApplicantApplicationStatus.declined => 'Declined',
       };
 
-  String get affordabilityLabel =>
-      '${affordabilityMultiplier.toStringAsFixed(1)}x Affordability Multiplier';
+  bool get hasAffordability =>
+      decision?.hasAffordability ?? affordabilityMultiplier > 0;
+
+  String get affordabilityLabel {
+    if (!hasAffordability) return 'Unknown';
+    return decision?.affordabilityLabel ??
+        '${affordabilityMultiplier.toStringAsFixed(1)}× rent';
+  }
+
+  String get incomeSourceLabel =>
+      decision?.incomeSourceLabel ?? 'Self-declared';
 
   /// Prominent headline beside the match wheel — sequenced by listing category.
   String get primaryBreakdownHeadline => isSharedLiving
       ? 'Lifestyle compatibility, roommate rhythm alignment, and shared kitchen culture scored against your household.'
-      : 'Financial security confirmed · $verificationLabel · employment stability verified for lease term.';
+      : 'Lease and timeline fit · $verificationLabel. Affordability uses self-declared income separately.';
 
   /// Secondary baseline detail below the primary headline.
   String get secondaryBreakdownDetail => isSharedLiving
-      ? 'Financial verification baseline: $verificationLabel'
+      ? 'Contact and employment-status signals: $verificationLabel'
       : 'Lifestyle fit: kitchen culture, language overlap, and household rhythm scored as a secondary compatibility layer.';
 
   static List<LandlordApplicantCardModel> fromSharedStream(
@@ -84,7 +113,10 @@ class LandlordApplicantCardModel {
 
   static LandlordApplicantCardModel fromSharedRow(SharedLivingApplicantRow row) {
     final matchPercent = row.overallMatchScore ?? row.lifestyleMatchScorePercent;
-    final multiplier = row.affordabilityMultiplier ?? _defaultMultiplier(row.trustTier);
+    final multiplier = _resolveMultiplier(
+      decisionMultiplier: row.decision?.affordabilityMultiplier,
+      rowMultiplier: row.affordabilityMultiplier,
+    );
 
     return LandlordApplicantCardModel(
       applicationId: row.applicationId,
@@ -95,12 +127,19 @@ class LandlordApplicantCardModel {
       matchBreakdownLabel: 'Overall match: $matchPercent%',
       verificationLabel: _verificationForShared(row),
       affordabilityMultiplier: multiplier,
-      bioPitch: row.customBioPitch,
+      bioPitch: row.customBioPitch.isNotEmpty
+          ? row.customBioPitch
+          : 'No personal introduction yet.',
       languages: row.seekerLanguages,
       sourceRow: row,
       isSharedLiving: true,
-      commuteLabel: _commuteLabel(row.verifiedTransitDurationSeconds),
-      moveInLabel: null,
+      budgetLabel: multiplier > 0
+          ? '${multiplier.toStringAsFixed(1)}× rent'
+          : null,
+      commuteLabel: row.decision?.commuteLabel ??
+          _commuteLabel(row.verifiedTransitDurationSeconds),
+      moveInLabel: row.decision?.moveInCompatibilityLabel,
+      decision: row.decision,
     );
   }
 
@@ -108,7 +147,14 @@ class LandlordApplicantCardModel {
     IndependentPlacesApplicantRow row,
   ) {
     final matchPercent = row.overallMatchScore ?? row.compatibilityScore;
-    final multiplier = row.affordabilityMultiplier ?? _defaultMultiplier(row.trustTier);
+    final multiplier = _resolveMultiplier(
+      decisionMultiplier: row.decision?.affordabilityMultiplier,
+      rowMultiplier: row.affordabilityMultiplier,
+    );
+
+    final pitch = ApplicationPitchText.fromApplicationRow(
+      applicationService.rowById(row.applicationId),
+    );
 
     return LandlordApplicantCardModel(
       applicationId: row.applicationId,
@@ -119,19 +165,22 @@ class LandlordApplicantCardModel {
       matchBreakdownLabel: 'Overall match: $matchPercent%',
       verificationLabel: _verificationForIndependent(row),
       affordabilityMultiplier: multiplier,
-      bioPitch:
-          'Lease fit: ${row.leaseTermMatch ? "aligned" : "review"} · '
-          'Timeline: ${row.moveInTimelineMatch ? "aligned" : "review"}',
+      bioPitch: pitch.isNotEmpty
+          ? pitch
+          : 'No personal introduction yet.',
       languages: const [],
       sourceRow: row,
       isSharedLiving: false,
       budgetLabel: multiplier > 0
-          ? '${multiplier.toStringAsFixed(1)}× rent affordability'
+          ? '${multiplier.toStringAsFixed(1)}× rent'
           : null,
-      commuteLabel: _commuteLabel(row.verifiedTransitDurationSeconds),
-      moveInLabel: row.earliestMoveInDate?.trim().isNotEmpty == true
-          ? 'Move-in ${RentalDateFormat.formatRentalAvailabilityDate(row.earliestMoveInDate)}'
-          : null,
+      commuteLabel: row.decision?.commuteLabel ??
+          _commuteLabel(row.verifiedTransitDurationSeconds),
+      moveInLabel: row.decision?.moveInCompatibilityLabel ??
+          (row.earliestMoveInDate?.trim().isNotEmpty == true
+              ? 'Move-in ${RentalDateFormat.formatRentalAvailabilityDate(row.earliestMoveInDate)}'
+              : null),
+      decision: row.decision,
     );
   }
 
@@ -141,51 +190,68 @@ class LandlordApplicantCardModel {
     return '$minutes min commute';
   }
 
-  static double _defaultMultiplier(ApplicantTrustTier tier) => switch (tier) {
-        ApplicantTrustTier.sound => 3.5,
-        ApplicantTrustTier.grand => 3.0,
-        ApplicantTrustTier.justLanded => 2.5,
-      };
+  /// Prefer a positive calculated multiplier; never invent trust-tier values.
+  static double _resolveMultiplier({
+    required double? decisionMultiplier,
+    required double? rowMultiplier,
+  }) {
+    if (decisionMultiplier != null && decisionMultiplier > 0) {
+      return decisionMultiplier;
+    }
+    if (rowMultiplier != null && rowMultiplier > 0) {
+      return rowMultiplier;
+    }
+    return 0;
+  }
 
   static String _verificationForShared(SharedLivingApplicantRow row) {
-    return switch (row.trustTier) {
-      ApplicantTrustTier.sound =>
-        'Confirmed employment contract · salary >3.5× rent target',
-      ApplicantTrustTier.grand => 'Verified via institutional .ac.ie domain OTP',
-      ApplicantTrustTier.justLanded =>
-        'Verified bank loan disbursal letter on file',
-    };
+    final chips = row.decision?.verificationChipLabels;
+    if (chips != null && chips.isNotEmpty) return chips.join(' · ');
+    if (row.decision?.isVerifiedUser == true) {
+      return ApplicantTrustTier.verifiedUserLabel;
+    }
+    return 'Verification pending';
   }
 
   static String _verificationForIndependent(IndependentPlacesApplicantRow row) {
+    final chips = row.decision?.verificationChipLabels;
+    if (chips != null && chips.isNotEmpty) return chips.join(' · ');
+    if (row.decision?.isVerifiedUser == true) {
+      return ApplicantTrustTier.verifiedUserLabel;
+    }
     if (row.employmentVerified && row.corporateDocumentVerified) {
-      return 'Dual verified · employment + corporate documentation';
+      return 'Employment document on file';
     }
     if (row.employmentVerified) {
-      return 'Employment verified via Open Banking track';
+      return 'Employment status confirmed';
     }
-    return 'Trust tier: ${row.trustTier.displayToken}';
+    return 'Verification pending';
   }
 }
 
-/// Trust-tier filter for segmented tabs.
+/// Applicant filter for segmented tabs (verified vs pending — no tier names).
 enum LandlordTrustFilter {
   all,
-  sound,
-  grand,
-  justLanded;
+  verified,
+  pending;
 
   String get label => switch (this) {
         LandlordTrustFilter.all => 'All Matches',
-        LandlordTrustFilter.sound => 'Sound (Vouched & Secured)',
-        LandlordTrustFilter.grand => 'Grand (Verified Intent)',
-        LandlordTrustFilter.justLanded => 'Just Landed (Casual / Inbound)',
+        LandlordTrustFilter.verified => ApplicantTrustTier.verifiedUserLabel,
+        LandlordTrustFilter.pending => 'Verification pending',
       };
 
+  /// @deprecated Prefer [matchesVerified]. Tier alone is not a contact unlock.
   bool matches(ApplicantTrustTier tier) => switch (this) {
         LandlordTrustFilter.all => true,
-        LandlordTrustFilter.sound => tier == ApplicantTrustTier.sound,
-        LandlordTrustFilter.grand => tier == ApplicantTrustTier.grand,
-        LandlordTrustFilter.justLanded => tier == ApplicantTrustTier.justLanded,
+        // Cannot derive contact unlock from JL/G/S — treat as pending.
+        LandlordTrustFilter.verified => false,
+        LandlordTrustFilter.pending => true,
+      };
+
+  bool matchesVerified(bool isVerifiedUser) => switch (this) {
+        LandlordTrustFilter.all => true,
+        LandlordTrustFilter.verified => isVerifiedUser,
+        LandlordTrustFilter.pending => !isVerifiedUser,
       };
 }

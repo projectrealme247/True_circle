@@ -36,7 +36,7 @@ void main() {
   });
 
   group('verificationGatewayLayoutForSession', () {
-    test('student shows university OTP primary and suppresses LinkedIn', () {
+    test('student shows university email primary and pre-arrival alternate', () {
       final layout = verificationGatewayLayoutForSession({
         'seeker_persona': 'student',
         'dublin_location_context': 'already_in_dublin',
@@ -46,13 +46,18 @@ void main() {
       expect(layout.recommended, VerificationGatewayPath.universityEmailOtp);
       expect(layout.alternates, [
         VerificationGatewayPath.offerLetterUpload,
-        VerificationGatewayPath.openBanking,
       ]);
-      expect(layout.alternates, isNot(contains(VerificationGatewayPath.linkedInCorporate)));
-      expect(layout.alternates, isNot(contains(VerificationGatewayPath.inboundRelocation)));
+      expect(
+        layout.alternates,
+        isNot(contains(VerificationGatewayPath.openBanking)),
+      );
+      expect(
+        layout.alternates,
+        isNot(contains(VerificationGatewayPath.linkedInCorporate)),
+      );
     });
 
-    test('student arriving soon still recommends university OTP', () {
+    test('student arriving soon still recommends university email', () {
       final layout = verificationGatewayLayoutForSession({
         'seeker_persona': 'student',
         'dublin_location_context': 'arriving_soon',
@@ -60,52 +65,95 @@ void main() {
 
       expect(layout.recommended, VerificationGatewayPath.universityEmailOtp);
       expect(layout.alternates, contains(VerificationGatewayPath.offerLetterUpload));
+      expect(
+        layout.alternates,
+        isNot(contains(VerificationGatewayPath.openBanking)),
+      );
     });
 
-    test('family shows inbound relocation and suppresses university OTP', () {
+    test('family shows LinkedIn and employment only', () {
       final layout = verificationGatewayLayoutForSession({
         'seeker_persona': 'family',
       });
 
-      expect(layout.recommended, VerificationGatewayPath.inboundRelocation);
+      expect(layout.recommended, VerificationGatewayPath.linkedInCorporate);
       expect(layout.alternates, [
         VerificationGatewayPath.employmentContractUpload,
-        VerificationGatewayPath.linkedInCorporate,
-        VerificationGatewayPath.openBanking,
       ]);
-      expect(layout.alternates, isNot(contains(VerificationGatewayPath.universityEmailOtp)));
+      expect(
+        layout.alternates,
+        isNot(contains(VerificationGatewayPath.openBanking)),
+      );
+      expect(
+        layout.recommended,
+        isNot(VerificationGatewayPath.inboundRelocation),
+      );
     });
 
-    test('relocating professional shows inbound relocation primary', () {
+    test('relocating professional shows LinkedIn and employment only', () {
       final layout = verificationGatewayLayoutForSession({
         'seeker_persona': 'relocating',
       });
 
-      expect(layout.recommended, VerificationGatewayPath.inboundRelocation);
-      expect(layout.alternates, contains(VerificationGatewayPath.linkedInCorporate));
+      expect(layout.recommended, VerificationGatewayPath.linkedInCorporate);
+      expect(
+        layout.alternates,
+        contains(VerificationGatewayPath.employmentContractUpload),
+      );
+      expect(
+        layout.alternates,
+        isNot(contains(VerificationGatewayPath.openBanking)),
+      );
       expect(layout.alternates, isNot(contains(VerificationGatewayPath.universityEmailOtp)));
+    });
+
+    test('Phase 1 layouts never include Open Banking', () {
+      for (final session in [
+        {'seeker_persona': 'student'},
+        {'seeker_persona': 'family'},
+        {'seeker_persona': 'relocating'},
+        {'seeker_persona': 'professional'},
+        {
+          'seeker_persona': 'professional',
+          'dublin_location_context': 'arriving_soon',
+        },
+        <String, dynamic>{},
+      ]) {
+        final layout = verificationGatewayLayoutForSession(
+          session.isEmpty ? null : session,
+        );
+        expect(
+          layout.recommended,
+          isNot(VerificationGatewayPath.openBanking),
+        );
+        expect(
+          layout.alternates,
+          isNot(contains(VerificationGatewayPath.openBanking)),
+        );
+      }
     });
   });
 
   group('getVerificationLabel', () {
-    test('student maps to university email OTP', () {
+    test('student maps to university email', () {
       final label = getVerificationLabel({
         'seeker_persona': 'student',
         'dublin_location_context': 'already_in_dublin',
       });
 
-      expect(label.pathTitle, 'University Email OTP');
+      expect(label.pathTitle, 'I have a university email');
       expect(label.leadingEmoji, '🎓');
       expect(label.route, '/verify/id/university-email');
       expect(label.path, VerificationGatewayPath.universityEmailOtp);
     });
 
-    test('family maps to inbound relocation without emoji in title', () {
+    test('family maps to LinkedIn without Open Banking copy', () {
       final label = getVerificationLabel({'seeker_persona': 'family'});
 
-      expect(label.pathTitle, 'Inbound Relocation Verification');
-      expect(label.pathTitle, isNot(contains('💼')));
-      expect(label.path, VerificationGatewayPath.inboundRelocation);
+      expect(label.pathTitle, 'LinkedIn');
+      expect(label.path, VerificationGatewayPath.linkedInCorporate);
+      expect(label.description.toLowerCase(), isNot(contains('open banking')));
+      expect(label.description.toLowerCase(), isNot(contains('financial accounts')));
     });
   });
 
@@ -118,8 +166,14 @@ void main() {
 
       expect(alternates, [
         VerificationGatewayPath.offerLetterUpload,
-        VerificationGatewayPath.openBanking,
       ]);
+    });
+
+    test('sessionless fallback excludes Open Banking', () {
+      final alternates = alternateVerificationPaths(
+        VerificationGatewayPath.linkedInCorporate,
+      );
+      expect(alternates, isNot(contains(VerificationGatewayPath.openBanking)));
     });
   });
 }

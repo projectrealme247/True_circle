@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../config/market/dublin_macro_areas.dart';
 import '../onboarding_choice_chip.dart';
 
-/// Reusable preferred-area macro chips for seeker onboarding.
+/// Reusable preferred-area macro chips for seeker flows.
 ///
-/// Extracted from Preferences for the upcoming Destination recommendation
-/// flow. Not mounted on Preferences after the Preferences cleanup.
+/// Not mounted in onboarding after Recommended Areas removal. Kept for
+/// future non-onboarding surfaces (e.g. profile edit / filters).
 class SeekerPreferredAreasSelector extends StatelessWidget {
   const SeekerPreferredAreasSelector({
     super.key,

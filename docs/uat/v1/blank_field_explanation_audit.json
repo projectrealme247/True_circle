@@ -1,0 +1,2252 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:56:50.921361Z",
+  "overall": "PASS WITH WARNINGS",
+  "overall_pass": false,
+  "product_rule": {
+    "title": "Listing-fact-only vs seeker-preference match framing",
+    "rule": "Preference-fit explanations (\"Why this could work for you\") must only claim a seeker preference match when the seeker explicitly provided that preference. Neutral listing facts may appear elsewhere on the detail page, but must not be framed as \"matches your preference\" when the field is blank / any / no_preference.",
+    "code_observation": "Explanation generators gate preference-framed copy on explicit seeker prefs: SL room requires non-empty roomFromSeeker; bathroom requires non-empty/non-no_preference bath token; household uses occupantMatch/studentMatch only (not roommateTypeMatch alone); availability requires SeekerMoveInWindow.fromSession != null; lifestyle requires explicit food preference. Matching blank-compat (roomCompatible/bathroomCompatible/flexible timing) is unchanged. IP property-type/bedrooms already gated; commute on hasCommuteIntent.",
+    "classification_guidance": "Preference-framed copy from a null/blank seeker field = blocker or high. Soft listing-only facts framed neutrally = out of scope for this card (not emitted by these APIs today)."
+  },
+  "success_criteria": {
+    "explanations_only_reference_completed_inputs": true,
+    "no_fabricated_reasons": true,
+    "no_null_field_references": true,
+    "no_cross_marketplace_terminology": true,
+    "no_misleading_explanation_content": true,
+    "met": false
+  },
+  "summary": {
+    "overall": "PASS WITH WARNINGS",
+    "seekers_tested": 11,
+    "invalid_reference_rows": 30,
+    "terminology_violation_rows": 0,
+    "by_severity": {
+      "blocker": 0,
+      "high": 0,
+      "medium": 30
+    },
+    "by_invalid_reference_type": {
+      "location_copy_vs_city_match": 30
+    }
+  },
+  "selected_seekers": [
+    {
+      "seeker_id": "SL-EDGE-05",
+      "marketplace": "shared_living",
+      "uat_scenario": "Edge · broad criteria · many matches",
+      "blank_fields": [
+        "room_preference",
+        "property_type_preference",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "desired_move_date"
+      ],
+      "synthetic_variant": false,
+      "source_seeker_id": null
+    },
+    {
+      "seeker_id": "SL-STU-10",
+      "marketplace": "shared_living",
+      "uat_scenario": "Student · shared · medium budget · no transit preference · broad",
+      "blank_fields": [
+        "property_type_preference",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "room_preference",
+        "desired_move_date"
+      ],
+      "synthetic_variant": false,
+      "source_seeker_id": null
+    },
+    {
+      "seeker_id": "SL-PRO-08",
+      "marketplace": "shared_living",
+      "uat_scenario": "Professional · shared · medium budget · hybrid · no parking",
+      "blank_fields": [
+        "property_type_preference",
+        "commute_destination",
+        "bathroom_preference",
+        "transit_preference_specific"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "room_preference",
+        "desired_move_date"
+      ],
+      "synthetic_variant": false,
+      "source_seeker_id": null
+    },
+    {
+      "seeker_id": "SL-EDGE-05-BLANK-MOVE",
+      "marketplace": "shared_living",
+      "uat_scenario": "Synthetic · SL-EDGE-05 with desired_move_date stripped",
+      "blank_fields": [
+        "room_preference",
+        "desired_move_date",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference",
+        "property_type_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type"
+      ],
+      "synthetic_variant": true,
+      "source_seeker_id": "SL-EDGE-05"
+    },
+    {
+      "seeker_id": "SL-EDGE-05-BLANK-HH",
+      "marketplace": "shared_living",
+      "uat_scenario": "Synthetic · SL-EDGE-05 with occupant_type omitted",
+      "blank_fields": [
+        "room_preference",
+        "household_preference",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "desired_move_date"
+      ],
+      "synthetic_variant": true,
+      "source_seeker_id": "SL-EDGE-05"
+    },
+    {
+      "seeker_id": "IP-EDGE-03",
+      "marketplace": "independent_places",
+      "uat_scenario": "Edge · premium budget · broad · many matches",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "room_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "desired_move_date"
+      ],
+      "synthetic_variant": false,
+      "source_seeker_id": null
+    },
+    {
+      "seeker_id": "IP-EDGE-07",
+      "marketplace": "independent_places",
+      "uat_scenario": "Edge · broad any property · high budget · many matches",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "desired_move_date"
+      ],
+      "synthetic_variant": false,
+      "source_seeker_id": null
+    },
+    {
+      "seeker_id": "IP-EDGE-05",
+      "marketplace": "independent_places",
+      "uat_scenario": "Edge · parking above all else · medium budget suburbs",
+      "blank_fields": [
+        "transit_preference",
+        "commute_destination",
+        "bedroom_layout",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "property_type_preference",
+        "desired_move_date"
+      ],
+      "synthetic_variant": false,
+      "source_seeker_id": null
+    },
+    {
+      "seeker_id": "IP-CPL-02",
+      "marketplace": "independent_places",
+      "uat_scenario": "Couple · premium budget · city/southside",
+      "blank_fields": [
+        "commute_destination",
+        "bedroom_layout",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "property_type_preference",
+        "desired_move_date"
+      ],
+      "synthetic_variant": false,
+      "source_seeker_id": null
+    },
+    {
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "marketplace": "independent_places",
+      "uat_scenario": "Synthetic · IP-EDGE-03 with desired_move_date stripped",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "desired_move_date",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type"
+      ],
+      "synthetic_variant": true,
+      "source_seeker_id": "IP-EDGE-03"
+    },
+    {
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "marketplace": "independent_places",
+      "uat_scenario": "Synthetic · IP-EDGE-03 with occupant_type omitted",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "household_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "desired_move_date"
+      ],
+      "synthetic_variant": true,
+      "source_seeker_id": "IP-EDGE-03"
+    }
+  ],
+  "invalid_references": [
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-19",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-19",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-17",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-46",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-37",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-32",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-24",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-34",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-49",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-17",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-02",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-07",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-08",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    }
+  ],
+  "terminology_violations": [],
+  "blockers": [],
+  "high": [],
+  "medium": [
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-19",
+      "seeker_id": "IP-EDGE-03",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-19",
+      "seeker_id": "IP-EDGE-07",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-17",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-46",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-37",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-32",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-24",
+      "seeker_id": "IP-EDGE-05",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-34",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-CPL-02",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-49",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-17",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-02",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-07",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    },
+    {
+      "listing_id": "dub-rent-08",
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "explanation_text": "📍 Matches your preferred area",
+      "invalid_reference": "location_copy_vs_city_match",
+      "severity": "medium",
+      "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+    }
+  ],
+  "seekers": [
+    {
+      "seeker_id": "SL-EDGE-05",
+      "source_seeker_id": null,
+      "synthetic_variant": false,
+      "uat_scenario": "Edge · broad criteria · many matches",
+      "marketplace_requested": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "room_preference",
+        "property_type_preference",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "desired_move_date"
+      ],
+      "matches_returned": 40,
+      "top_listing_ids": [
+        "dub-share-29",
+        "dub-share-34",
+        "dub-share-06",
+        "dub-share-07",
+        "dub-share-12"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-29",
+          "marketplace": "shared_living",
+          "title": "Master room · Ballyfermot Luas",
+          "explanations": [
+            "💼 Professional household",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-34",
+          "marketplace": "shared_living",
+          "title": "Private room · Chapelizod Luas",
+          "explanations": [
+            "💼 Professional household",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-06",
+          "marketplace": "shared_living",
+          "title": "Lime House · €800/person · multi-slot",
+          "explanations": [
+            "💼 Professional household",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-07",
+          "marketplace": "shared_living",
+          "title": "Ensuite double · female · Two Oaks D16",
+          "explanations": [
+            "💼 Professional household",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-12",
+          "marketplace": "shared_living",
+          "title": "Glass Bottle · sea view · Dublin 4",
+          "explanations": [
+            "💼 Professional household",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "household"
+          ]
+        }
+      ],
+      "invalid_references": [],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "seeker_id": "SL-STU-10",
+      "source_seeker_id": null,
+      "synthetic_variant": false,
+      "uat_scenario": "Student · shared · medium budget · no transit preference · broad",
+      "marketplace_requested": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "property_type_preference",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "room_preference",
+        "desired_move_date"
+      ],
+      "matches_returned": 16,
+      "top_listing_ids": [
+        "dub-share-11",
+        "dub-share-18",
+        "dub-share-30",
+        "dub-share-01",
+        "dub-share-04"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-11",
+          "marketplace": "shared_living",
+          "title": "Budget bed · Dundalk · all-in",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "household",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-18",
+          "marketplace": "shared_living",
+          "title": "Student-friendly · Cherrywood Luas",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "household",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-30",
+          "marketplace": "shared_living",
+          "title": "Bed in shared room · Finglas",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "household",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-01",
+          "marketplace": "shared_living",
+          "title": "Female only · shared bed · Cherrywood",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-04",
+          "marketplace": "shared_living",
+          "title": "All bills in · male · Dundalk DKIT",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "👩‍🎓 Student household",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household",
+            "room_type"
+          ]
+        }
+      ],
+      "invalid_references": [],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 16,
+        "ranked": 16
+      }
+    },
+    {
+      "seeker_id": "SL-PRO-08",
+      "source_seeker_id": null,
+      "synthetic_variant": false,
+      "uat_scenario": "Professional · shared · medium budget · hybrid · no parking",
+      "marketplace_requested": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "property_type_preference",
+        "commute_destination",
+        "bathroom_preference",
+        "transit_preference_specific"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "room_preference",
+        "desired_move_date"
+      ],
+      "matches_returned": 32,
+      "top_listing_ids": [
+        "dub-share-01",
+        "dub-share-05",
+        "dub-share-06",
+        "dub-share-15",
+        "dub-share-02"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-01",
+          "marketplace": "shared_living",
+          "title": "Female only · shared bed · Cherrywood",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "💼 Professional household",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "household",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-05",
+          "marketplace": "shared_living",
+          "title": "Bed space · female · Dublin 4 Luas",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "💼 Professional household",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "household",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-06",
+          "marketplace": "shared_living",
+          "title": "Lime House · €800/person · multi-slot",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "💼 Professional household",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "household",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-15",
+          "marketplace": "shared_living",
+          "title": "Immediate · male · Rathmines area",
+          "explanations": [
+            "🛏️ Shared room matches your preference",
+            "💼 Professional household",
+            "📅 Available when you plan to move"
+          ],
+          "referenced_signals": [
+            "availability",
+            "household",
+            "room_type"
+          ]
+        },
+        {
+          "listing_id": "dub-share-02",
+          "marketplace": "shared_living",
+          "title": "Male only · €700/person · Rialto",
+          "explanations": [
+            "💼 Professional household",
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "household"
+          ]
+        }
+      ],
+      "invalid_references": [],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 32,
+        "ranked": 32
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-05-BLANK-MOVE",
+      "source_seeker_id": "SL-EDGE-05",
+      "synthetic_variant": true,
+      "uat_scenario": "Synthetic · SL-EDGE-05 with desired_move_date stripped",
+      "marketplace_requested": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "room_preference",
+        "desired_move_date",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference",
+        "property_type_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type"
+      ],
+      "matches_returned": 40,
+      "top_listing_ids": [
+        "dub-share-29",
+        "dub-share-19",
+        "dub-share-34",
+        "dub-share-05",
+        "dub-share-06"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-29",
+          "marketplace": "shared_living",
+          "title": "Master room · Ballyfermot Luas",
+          "explanations": [
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-19",
+          "marketplace": "shared_living",
+          "title": "Ensuite · Rathmines · Luas commuter",
+          "explanations": [
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-34",
+          "marketplace": "shared_living",
+          "title": "Private room · Chapelizod Luas",
+          "explanations": [
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-05",
+          "marketplace": "shared_living",
+          "title": "Bed space · female · Dublin 4 Luas",
+          "explanations": [
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household"
+          ]
+        },
+        {
+          "listing_id": "dub-share-06",
+          "marketplace": "shared_living",
+          "title": "Lime House · €800/person · multi-slot",
+          "explanations": [
+            "💼 Professional household",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household"
+          ]
+        }
+      ],
+      "invalid_references": [],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "seeker_id": "SL-EDGE-05-BLANK-HH",
+      "source_seeker_id": "SL-EDGE-05",
+      "synthetic_variant": true,
+      "uat_scenario": "Synthetic · SL-EDGE-05 with occupant_type omitted",
+      "marketplace_requested": "shared_living",
+      "marketplace_from_session": "shared_living",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "room_preference",
+        "household_preference",
+        "transit_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "desired_move_date"
+      ],
+      "matches_returned": 40,
+      "top_listing_ids": [
+        "dub-share-02",
+        "dub-share-06",
+        "dub-share-07",
+        "dub-share-15",
+        "dub-share-16"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-share-02",
+          "marketplace": "shared_living",
+          "title": "Male only · €700/person · Rialto",
+          "explanations": [
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget"
+          ]
+        },
+        {
+          "listing_id": "dub-share-06",
+          "marketplace": "shared_living",
+          "title": "Lime House · €800/person · multi-slot",
+          "explanations": [
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget"
+          ]
+        },
+        {
+          "listing_id": "dub-share-07",
+          "marketplace": "shared_living",
+          "title": "Ensuite double · female · Two Oaks D16",
+          "explanations": [
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget"
+          ]
+        },
+        {
+          "listing_id": "dub-share-15",
+          "marketplace": "shared_living",
+          "title": "Immediate · male · Rathmines area",
+          "explanations": [
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget"
+          ]
+        },
+        {
+          "listing_id": "dub-share-16",
+          "marketplace": "shared_living",
+          "title": "Co-living · Dublin 16 · gym access",
+          "explanations": [
+            "📅 Available when you plan to move",
+            "💰 Within your budget"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget"
+          ]
+        }
+      ],
+      "invalid_references": [],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 40,
+        "after_filters": 40,
+        "ranked": 40
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-03",
+      "source_seeker_id": null,
+      "synthetic_variant": false,
+      "uat_scenario": "Edge · premium budget · broad · many matches",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "room_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "desired_move_date"
+      ],
+      "matches_returned": 50,
+      "top_listing_ids": [
+        "dub-rent-44",
+        "dub-rent-03",
+        "dub-rent-48",
+        "dub-rent-15",
+        "dub-rent-19"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-44",
+          "marketplace": "independent_places",
+          "title": "3 bed · Artane family",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "title": "3 bed house · Dundrum D14",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "marketplace": "independent_places",
+          "title": "3 bed · Palmerstown house",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "marketplace": "independent_places",
+          "title": "Family 3 bed · Dublin 16",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-19",
+          "marketplace": "independent_places",
+          "title": "2 bed · Blackrock DART",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        }
+      ],
+      "invalid_references": [
+        {
+          "listing_id": "dub-rent-44",
+          "seeker_id": "IP-EDGE-03",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "seeker_id": "IP-EDGE-03",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "seeker_id": "IP-EDGE-03",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "seeker_id": "IP-EDGE-03",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-19",
+          "seeker_id": "IP-EDGE-03",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        }
+      ],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-07",
+      "source_seeker_id": null,
+      "synthetic_variant": false,
+      "uat_scenario": "Edge · broad any property · high budget · many matches",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "desired_move_date"
+      ],
+      "matches_returned": 50,
+      "top_listing_ids": [
+        "dub-rent-44",
+        "dub-rent-03",
+        "dub-rent-48",
+        "dub-rent-15",
+        "dub-rent-19"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-44",
+          "marketplace": "independent_places",
+          "title": "3 bed · Artane family",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "title": "3 bed house · Dundrum D14",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "marketplace": "independent_places",
+          "title": "3 bed · Palmerstown house",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "marketplace": "independent_places",
+          "title": "Family 3 bed · Dublin 16",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-19",
+          "marketplace": "independent_places",
+          "title": "2 bed · Blackrock DART",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        }
+      ],
+      "invalid_references": [
+        {
+          "listing_id": "dub-rent-44",
+          "seeker_id": "IP-EDGE-07",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "seeker_id": "IP-EDGE-07",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "seeker_id": "IP-EDGE-07",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "seeker_id": "IP-EDGE-07",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-19",
+          "seeker_id": "IP-EDGE-07",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        }
+      ],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-05",
+      "source_seeker_id": null,
+      "synthetic_variant": false,
+      "uat_scenario": "Edge · parking above all else · medium budget suburbs",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "transit_preference",
+        "commute_destination",
+        "bedroom_layout",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "property_type_preference",
+        "desired_move_date"
+      ],
+      "matches_returned": 39,
+      "top_listing_ids": [
+        "dub-rent-17",
+        "dub-rent-46",
+        "dub-rent-37",
+        "dub-rent-32",
+        "dub-rent-24"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-17",
+          "marketplace": "independent_places",
+          "title": "1 bed · Cherrywood · new build",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-46",
+          "marketplace": "independent_places",
+          "title": "1 bed · Sandyford business park",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-37",
+          "marketplace": "independent_places",
+          "title": "Studio · Blanchardstown retail",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-32",
+          "marketplace": "independent_places",
+          "title": "Studio · Raheny commuter",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-24",
+          "marketplace": "independent_places",
+          "title": "1 bed · Drumcondra DART",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        }
+      ],
+      "invalid_references": [
+        {
+          "listing_id": "dub-rent-17",
+          "seeker_id": "IP-EDGE-05",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-46",
+          "seeker_id": "IP-EDGE-05",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-37",
+          "seeker_id": "IP-EDGE-05",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-32",
+          "seeker_id": "IP-EDGE-05",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-24",
+          "seeker_id": "IP-EDGE-05",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        }
+      ],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 39,
+        "ranked": 39
+      }
+    },
+    {
+      "seeker_id": "IP-CPL-02",
+      "source_seeker_id": null,
+      "synthetic_variant": false,
+      "uat_scenario": "Couple · premium budget · city/southside",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "commute_destination",
+        "bedroom_layout",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type",
+        "property_type_preference",
+        "desired_move_date"
+      ],
+      "matches_returned": 50,
+      "top_listing_ids": [
+        "dub-rent-34",
+        "dub-rent-03",
+        "dub-rent-48",
+        "dub-rent-15",
+        "dub-rent-44"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-34",
+          "marketplace": "independent_places",
+          "title": "2 bed · Ballyfermot Luas",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "title": "3 bed house · Dundrum D14",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "marketplace": "independent_places",
+          "title": "3 bed · Palmerstown house",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "marketplace": "independent_places",
+          "title": "Family 3 bed · Dublin 16",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-44",
+          "marketplace": "independent_places",
+          "title": "3 bed · Artane family",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        }
+      ],
+      "invalid_references": [
+        {
+          "listing_id": "dub-rent-34",
+          "seeker_id": "IP-CPL-02",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "seeker_id": "IP-CPL-02",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "seeker_id": "IP-CPL-02",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "seeker_id": "IP-CPL-02",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-44",
+          "seeker_id": "IP-CPL-02",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        }
+      ],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+      "source_seeker_id": "IP-EDGE-03",
+      "synthetic_variant": true,
+      "uat_scenario": "Synthetic · IP-EDGE-03 with desired_move_date stripped",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "desired_move_date",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "occupation_type"
+      ],
+      "matches_returned": 50,
+      "top_listing_ids": [
+        "dub-rent-44",
+        "dub-rent-03",
+        "dub-rent-49",
+        "dub-rent-48",
+        "dub-rent-15"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-44",
+          "marketplace": "independent_places",
+          "title": "3 bed · Artane family",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📍 Matches your preferred area",
+            "👨‍👩‍👧‍👦 Suitable for your household"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "title": "3 bed house · Dundrum D14",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📍 Matches your preferred area",
+            "👨‍👩‍👧‍👦 Suitable for your household"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-49",
+          "marketplace": "independent_places",
+          "title": "4 bed · Knocklyon family",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📍 Matches your preferred area",
+            "👨‍👩‍👧‍👦 Suitable for your household"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "marketplace": "independent_places",
+          "title": "3 bed · Palmerstown house",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📍 Matches your preferred area",
+            "👨‍👩‍👧‍👦 Suitable for your household"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "marketplace": "independent_places",
+          "title": "Family 3 bed · Dublin 16",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📍 Matches your preferred area",
+            "👨‍👩‍👧‍👦 Suitable for your household"
+          ],
+          "referenced_signals": [
+            "budget",
+            "household",
+            "location"
+          ]
+        }
+      ],
+      "invalid_references": [
+        {
+          "listing_id": "dub-rent-44",
+          "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-49",
+          "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-48",
+          "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-15",
+          "seeker_id": "IP-EDGE-03-BLANK-MOVE",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        }
+      ],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    },
+    {
+      "seeker_id": "IP-EDGE-03-BLANK-HH",
+      "source_seeker_id": "IP-EDGE-03",
+      "synthetic_variant": true,
+      "uat_scenario": "Synthetic · IP-EDGE-03 with occupant_type omitted",
+      "marketplace_requested": "independent_places",
+      "marketplace_from_session": "independent_places",
+      "marketplace_correct": "YES",
+      "blank_fields": [
+        "property_type_preference",
+        "bedroom_layout",
+        "household_preference",
+        "commute_destination",
+        "bathroom_preference"
+      ],
+      "provided_fields": [
+        "max_budget",
+        "preferred_locations",
+        "desired_move_date"
+      ],
+      "matches_returned": 50,
+      "top_listing_ids": [
+        "dub-rent-17",
+        "dub-rent-02",
+        "dub-rent-03",
+        "dub-rent-07",
+        "dub-rent-08"
+      ],
+      "top_listings": [
+        {
+          "listing_id": "dub-rent-17",
+          "marketplace": "independent_places",
+          "title": "1 bed · Cherrywood · new build",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-02",
+          "marketplace": "independent_places",
+          "title": "1 bed · Dublin 4 · sea proximity",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "marketplace": "independent_places",
+          "title": "3 bed house · Dundrum D14",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-07",
+          "marketplace": "independent_places",
+          "title": "Modern 2 bed · Dublin 16",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        },
+        {
+          "listing_id": "dub-rent-08",
+          "marketplace": "independent_places",
+          "title": "Studio · Grand Canal Dock",
+          "explanations": [
+            "💰 Good value for your budget",
+            "📅 Available when you plan to move",
+            "📍 Matches your preferred area"
+          ],
+          "referenced_signals": [
+            "availability",
+            "budget",
+            "location"
+          ]
+        }
+      ],
+      "invalid_references": [
+        {
+          "listing_id": "dub-rent-17",
+          "seeker_id": "IP-EDGE-03-BLANK-HH",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-02",
+          "seeker_id": "IP-EDGE-03-BLANK-HH",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-03",
+          "seeker_id": "IP-EDGE-03-BLANK-HH",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-07",
+          "seeker_id": "IP-EDGE-03-BLANK-HH",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        },
+        {
+          "listing_id": "dub-rent-08",
+          "seeker_id": "IP-EDGE-03-BLANK-HH",
+          "explanation_text": "📍 Matches your preferred area",
+          "invalid_reference": "location_copy_vs_city_match",
+          "severity": "medium",
+          "note": "Copy says preferred area; _locationMatch uses detected_city (Dublin), not preferred_locations list"
+        }
+      ],
+      "terminology_violations": [],
+      "pipeline_stages": {
+        "corpus": 90,
+        "after_tower": 50,
+        "after_filters": 50,
+        "ranked": 50
+      }
+    }
+  ],
+  "methodology": {
+    "active_mode": "explore",
+    "code_paths": [
+      "MarketplaceSpace.fromSession",
+      "MarketplaceListingPipeline.runWithFilters (tower → rank)",
+      "ListingMatchEngine.sharedLivingPreferenceExplanations",
+      "ListingMatchEngine.independentPlacePreferenceExplanations",
+      "listing_detail_screen._preferenceFitLabels (wrapper)"
+    ],
+    "listing_corpus": {
+      "name": "SampleListingsDublin",
+      "shared_living_count": 40,
+      "independent_places_count": 50,
+      "total": 90
+    },
+    "seeker_dataset": {
+      "status": "reconstructed",
+      "note": "Frozen UAT seeker JSON is not checked into the repo. Partial seekers reconstructed from prior UAT chat artifact (66 seekers with uat_validation_points). Blank-move / blank-household variants are synthetic derivatives of UAT rows to cover dimensions absent from the frozen set (all 66 had desired_move_date; all had occupation_type).",
+      "session_key_mapping": {
+        "room_preference (SL)": "preferred_layout = private_room | shared_room (roomFromSeeker). Omitted when any/blank.",
+        "property_type (IP)": "property_type_preference session key (PropertyTypePreference.fromSession). any → no_preference.",
+        "move_date": "desired_move_date → earliest_move_in_date (MoveInTimingMigration → move_in_window).",
+        "commute_blank": "commute_destination_unknown=true; no commute profiles; no maximum_commute_budget_minutes.",
+        "bathroom_blank": "bathroom_preference omitted"
+      }
+    },
+    "top_n": 5
+  }
+}

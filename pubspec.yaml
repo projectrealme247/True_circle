@@ -29,7 +29,6 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   intl: ^0.20.2
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -50,9 +49,6 @@ flutter:
           weight: 600
         - asset: assets/fonts/Plus_Jakarta_Sans/static/PlusJakartaSans-Bold.ttf
           weight: 700
-    - family: Noto Color Emoji
-      fonts:
-        - asset: assets/fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf
-    - family: NotoColorEmoji
-      fonts:
-        - asset: assets/fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf
+    # Do NOT register Noto Color Emoji here. The ~24MB CBDT/CBLC TTF crashes
+    # Flutter web CanvasKit during engine font init (canvaskit/fonts.dart).
+    # Emoji glyphs use OS / CSS fallbacks via AppTypography.emojiFontFallback.

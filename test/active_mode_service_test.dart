@@ -21,6 +21,105 @@ void main() {
             ActiveModeService.lastModeUpdatedAtKey: updatedAt,
         };
 
+    test('explicit landlord role routes to dashboard', () {
+      final resolution = ActiveModeService.resolveLandingRoute(
+        session: {
+          'role': 'landlord',
+          'onboarding_intent': 'provider',
+          'host_profile_complete': true,
+        },
+        ownedListingCount: 0,
+      );
+
+      expect(resolution.action, LandingAction.navigate);
+      expect(resolution.route, '/landlord-dashboard');
+    });
+
+    test('explicit seeker role with incomplete profile routes to browse', () {
+      final resolution = ActiveModeService.resolveLandingRoute(
+        session: {
+          'role': 'seeker',
+          'onboarding_intent': 'seeker',
+          'full_name': 'Seeker',
+        },
+        ownedListingCount: 0,
+      );
+
+      expect(resolution.action, LandingAction.navigate);
+      expect(resolution.route, '/');
+    });
+
+    test('explicit seeker role with complete profile routes to browse', () {
+      final resolution = ActiveModeService.resolveLandingRoute(
+        session: {
+          'role': 'seeker',
+          'onboarding_intent': 'seeker',
+          'preferred_property_type': 'Share',
+          'seeker_persona': 'professional',
+          'budget_min': 1000,
+          'budget_max': 2000,
+          'move_in_window': 'flexible',
+          'commute_profiles': [
+            {
+              'id': 'primary',
+              'commute_method': 'public_transport_walking',
+              'commute_destination_hub_id': 'tcd',
+              'max_commute_minutes': 45,
+            },
+          ],
+        },
+        ownedListingCount: 0,
+      );
+
+      expect(resolution.action, LandingAction.navigate);
+      expect(resolution.route, '/');
+    });
+
+    test('explicit seeker role never routes to add-listing', () {
+      final resolution = ActiveModeService.resolveLandingRoute(
+        session: {
+          'role': 'seeker',
+          'onboarding_intent': 'seeker',
+          'host_profile_complete': true,
+          'preferred_property_type': 'Share',
+          'seeker_persona': 'professional',
+          'budget_min': 1000,
+          'budget_max': 2000,
+          'move_in_window': 'flexible',
+          'commute_profiles': [
+            {
+              'id': 'primary',
+              'commute_method': 'public_transport_walking',
+              'commute_destination_hub_id': 'tcd',
+              'max_commute_minutes': 45,
+            },
+          ],
+        },
+        ownedListingCount: 0,
+      );
+
+      expect(resolution.action, LandingAction.navigate);
+      expect(resolution.route, isNot('/add-listing'));
+      expect(resolution.route, '/');
+    });
+
+    test('inferred seeker intent never routes to add-listing', () {
+      final resolution = ActiveModeService.resolveLandingRoute(
+        session: {
+          'onboarding_intent': 'seeker',
+          'host_profile_complete': true,
+          'budget_max': 1800,
+          'detected_city': 'Dublin',
+          'full_name': 'Seeker',
+          'mother_tongue': 'English',
+          'spoken_languages': ['English'],
+        },
+        ownedListingCount: 0,
+      );
+
+      expect(resolution.route, isNot('/add-listing'));
+    });
+
     test('host-capable with zero listings routes to add-listing', () {
       final session = {
         'email': 'host@example.com',

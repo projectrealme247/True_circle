@@ -1,39 +1,29 @@
 import '../services/active_mode_service.dart';
 import '../services/trust_service.dart';
-import 'listing_data.dart';
-import 'profile_data.dart';
-import 'viewer_profile.dart';
 
-/// Trust badges and completion logic for the polymorphic identity layer.
+/// Completion helpers for dual seeker/host identity — no trust-tier badges.
 abstract final class PolymorphicIdentity {
+  /// @deprecated Enterprise badge removed — use ✅ Verified User via contact unlock.
   static const enterpriseVerifiedLabel = '🔵 Enterprise Verified';
+
+  /// @deprecated Host professional badge removed — no host verification programme.
   static const verifiedProfessionalHostLabel = '🔒 Verified Professional Host';
 
-  static bool isAtLeastSocialVerified() =>
-      TrustService.currentStage().level >= TrustStage.socialVerified.level;
-
-  static bool isAtLeastIdVerified() =>
-      TrustService.currentStage().level >= TrustStage.idVerified.level;
-
-  /// Seeker-facing enterprise badge (Working Professionals cohort).
+  /// Never show Enterprise Verified — single badge is ✅ Verified User.
   static bool showEnterpriseVerifiedSeekerBadge(
     Map<String, dynamic>? session,
-  ) {
-    if (session == null || !isAtLeastSocialVerified()) return false;
+  ) =>
+      false;
 
-    final cohort = ViewerProfile.seekerCohortFromSession(session);
-    if (cohort != SeekerCohort.workingProfessional) return false;
-
-    return session['linkedin_verified'] == true ||
-        session['employment_letter_verified'] == true ||
-        ProfileData.text(session['company']).isNotEmpty;
-  }
-
-  /// Host-facing badge inherited onto listing cards.
+  /// Never show host trust badges from listing trust stamps.
   static bool showVerifiedProfessionalHostBadge(
     Map<String, dynamic> listing,
   ) =>
-      ListingData.hostTrustStage(listing) >= TrustStage.socialVerified.level;
+      false;
+
+  /// Seeker Verified User — same criteria as [TrustService.canContact].
+  static bool showVerifiedUserBadge(Map<String, dynamic>? session) =>
+      TrustService.meetsContactVerification(session);
 
   static bool useHostCompletionDenominator({
     required Map<String, dynamic>? session,

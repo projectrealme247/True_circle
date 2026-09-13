@@ -15,6 +15,7 @@ class ListingMediaPicker extends StatelessWidget {
     required this.enabled,
     this.onMessage,
     this.minPhotosRequired = 0,
+    this.requirementHint,
     this.previewHeight = 80,
     this.useDropzoneStyle = false,
     this.showRequirementLabel = true,
@@ -29,6 +30,8 @@ class ListingMediaPicker extends StatelessWidget {
   final bool enabled;
   final void Function(String message)? onMessage;
   final int minPhotosRequired;
+  /// Overrides the dropzone hint line (e.g. Shared Spaces photo guidance).
+  final String? requirementHint;
   final double previewHeight;
   final bool useDropzoneStyle;
   final bool showRequirementLabel;
@@ -280,7 +283,8 @@ class ListingMediaPicker extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Min 3 · Recommended 5+ · Max ${ListingMedia.maxImages}',
+                          requirementHint ??
+                              'Min 3 · Recommended 5+ · Max ${ListingMedia.maxImages}',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,

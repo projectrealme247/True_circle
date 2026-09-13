@@ -43,6 +43,11 @@ abstract final class ListingCreationValidationService {
       _validateShared(draft, errors);
     }
 
+    if (!draft.listingAuthorizationConfirmed) {
+      errors[ListingCreationFieldKeys.listingAuthorizationConfirmed] =
+          'Confirm you are authorised to advertise this listing before publishing.';
+    }
+
     return errors;
   }
 
@@ -54,11 +59,6 @@ abstract final class ListingCreationValidationService {
     if (beds == null || beds < 1) {
       errors[ListingCreationFieldKeys.bedsCount] =
           'Enter the number of bedrooms (at least 1).';
-    }
-
-    if (draft.rtbStatus == null) {
-      errors[ListingCreationFieldKeys.rtbStatus] =
-          'Select whether this listing is RTB registered.';
     }
 
     if (draft.parkingAvailable == null) {

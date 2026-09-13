@@ -12,10 +12,11 @@ import '../navigation/navigate_after_identity.dart';
 import '../navigation/space_gateway_navigation.dart';
 import '../services/auth_service.dart';
 import '../services/demo_auth_service.dart';
+import '../services/qa_test_auth_service.dart';
 import '../services/user_session_store.dart';
 import '../utils/listing_data.dart';
 import '../models/spoken_language_entry.dart';
-import '../utils/profile_data.dart';
+import '../models/financial_support_type.dart';
 import '../utils/spoken_language_profile_codec.dart';
 import '../widgets/truecircle_logo.dart';
 import '../widgets/language_pill_chips.dart';
@@ -38,7 +39,7 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   bool _isLoginMode = true;
-  bool _showEmailLogin = false; // Demo-first entry — keep until user asks to remove (see .cursor/rules/demo-auth-entry.mdc)
+  final bool _showEmailLogin = true;
   int _signUpStep = 1;
   bool _showAddMore = false;
   bool _authLoading = false;
@@ -46,7 +47,6 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
-  final _nativePlaceController = TextEditingController();
   final _locationController = TextEditingController();
 
   String _selectedFoodPref = 'Pure Veg';
@@ -61,7 +61,7 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _selectedAreaKey;
   String? _selectedOccupantType;
   String? _selectedGenderPref;
-  String? _selectedStudentType;
+  String? _selectedFinancialSupportType;
   String preferredArrangement =
       ProfileSeekerPreferences.arrangementOptions.first;
   String? preferredLayout;
@@ -89,7 +89,7 @@ class _AuthScreenState extends State<AuthScreen> {
       MarketConfig.current.profileOccupantOptions;
   List<String> get _genderPrefOptions =>
       MarketConfig.current.profileGenderPrefOptions;
-  List<String> get _studentFundingOptions =>
+  List<String> get _financialSupportOptions =>
       MarketConfig.current.profileStudentFundingOptions;
 
   @override
@@ -125,7 +125,6 @@ class _AuthScreenState extends State<AuthScreen> {
       'social_trust_score': 0,
       'is_aadhaar_verified': false,
       'passkey_public_key': null,
-      'identity_trust_tier': 'Casual_Browser',
     };
 
     final payload = {
@@ -133,7 +132,6 @@ class _AuthScreenState extends State<AuthScreen> {
       'email': _emailController.text.trim(),
       'full_name': _nameController.text.trim(),
       'detected_city': _resolvedCity(),
-      'native_place': _nativePlaceController.text.trim(),
       ..._commutePayloadFields(),
       ..._spokenLanguageSessionFields(),
       ...ProfileSeekerPreferences.persistFields(
@@ -142,7 +140,8 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
       if (_selectedOccupantType != null) 'occupant_type': _selectedOccupantType,
       if (_selectedGenderPref != null) 'gender_preference': _selectedGenderPref,
-      if (_selectedStudentType != null) 'student_type': _selectedStudentType,
+      if (_selectedFinancialSupportType != null)
+        FinancialSupportType.storageKey: _selectedFinancialSupportType,
       if (_selectedOccupantType == 'Family') ...{
         'family_adults': _familyAdults,
         'family_children': _familyChildren,
@@ -167,15 +166,6 @@ class _AuthScreenState extends State<AuthScreen> {
         'budget_min': int.tryParse(_budgetMinController.text.trim()),
       if (_budgetMaxController.text.trim().isNotEmpty)
         'budget_max': int.tryParse(_budgetMaxController.text.trim()),
-      'trust_stage': ProfileData.isMatchingReady({
-        'full_name': _nameController.text.trim(),
-        'detected_city': _resolvedCity(),
-        'mother_tongue': _selectedMotherTongue,
-        'spoken_languages': _selectedLanguages,
-      })
-          ? 1
-          : 0,
-      'identity_trust_tier': 'Casual_Browser',
     };
 
     if (!ProfileSeekerPreferences.isSharedRoom(preferredArrangement)) {
@@ -186,6 +176,7 @@ class _AuthScreenState extends State<AuthScreen> {
         ..remove('preferred_spoken_languages')
         ..remove('preferred_spoken_languages_csv');
     }
+    payload.remove('native_place');
     return payload;
   }
 
@@ -326,7 +317,6 @@ class _AuthScreenState extends State<AuthScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _nameController.dispose();
-    _nativePlaceController.dispose();
     _locationController.dispose();
     _budgetMinController.dispose();
     _budgetMaxController.dispose();
@@ -442,39 +432,60 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Future<void> _enterAsDemoLandlord() async {
+  Future<void> _enterAsQaAccount(QaTestAccount account) async {
     if (_authLoading) return;
     setState(() => _authLoading = true);
+    final router = GoRouter.of(context);
     try {
-      await DemoAuthService.enterAsDemoLandlord();
-      if (!mounted) return;
-      if (context.canPop()) {
-        context.pop(true);
-      }
-      if (!mounted) return;
-      await navigateAfterIdentity(context, force: true);
+      await QaTestAuthService.enter(account);
+      final location = account.isLandlord
+          ? '/landlord-dashboard'
+          : kQaSeekerWelcomeRoute;
+      _dismissPushedAuthThenGo(router, location);
     } catch (e) {
       if (!mounted) return;
-      _showNotification('Could not enter demo landlord mode: $e');
+      _showNotification('Could not enter ${account.id}: $e');
     } finally {
       if (mounted) setState(() => _authLoading = false);
     }
   }
 
-  Future<void> _enterAsDemoSeeker() async {
+  /// Pop a Sign-in overlay without triggering [_openSignIn]'s post-pop
+  /// [navigateAfterAuth], then [GoRouter.go]. Do not require [mounted] for
+  /// [go] — [enter] already refreshed the session and may have unmounted us.
+  void _dismissPushedAuthThenGo(GoRouter router, String location) {
+    final navigator = Navigator.maybeOf(context);
+    if (navigator != null && navigator.canPop()) {
+      navigator.pop();
+    }
+    router.go(location);
+  }
+
+  Future<void> _enterAsNewSeeker() async {
     if (_authLoading) return;
     setState(() => _authLoading = true);
+    final router = GoRouter.of(context);
     try {
-      await DemoAuthService.enterAsDemoSeeker();
-      if (!mounted) return;
-      if (context.canPop()) {
-        context.pop(true);
-      }
-      if (!mounted) return;
-      await navigateAfterIdentity(context, force: true);
+      await DemoAuthService.enterAsNewSeeker();
+      router.go('/profile/edit');
     } catch (e) {
       if (!mounted) return;
-      _showNotification('Could not enter demo seeker mode: $e');
+      _showNotification('Could not start new seeker flow: $e');
+    } finally {
+      if (mounted) setState(() => _authLoading = false);
+    }
+  }
+
+  Future<void> _enterAsNewLandlord() async {
+    if (_authLoading) return;
+    setState(() => _authLoading = true);
+    final router = GoRouter.of(context);
+    try {
+      await DemoAuthService.enterAsNewLandlord();
+      router.go('/add-listing');
+    } catch (e) {
+      if (!mounted) return;
+      _showNotification('Could not start new landlord flow: $e');
     } finally {
       if (mounted) setState(() => _authLoading = false);
     }
@@ -568,8 +579,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canGoBack = Navigator.of(context).canPop();
-
     return Scaffold(
       backgroundColor: _AuthPalette.canvas,
       body: LayoutBuilder(
@@ -596,23 +605,6 @@ class _AuthScreenState extends State<AuthScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (canGoBack)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: TextButton.icon(
-                              onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(Icons.arrow_back_rounded,
-                                  size: 18),
-                              label: const Text('Back to listings'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: _AuthPalette.textSecondary,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
-                                ),
-                              ),
-                            ),
-                          ),
                         DecoratedBox(
                           decoration: BoxDecoration(
                             borderRadius:
@@ -657,83 +649,60 @@ class _AuthScreenState extends State<AuthScreen> {
           textAlign: TextAlign.center,
           style: _AuthPalette.pageTitle,
         ),
-        if (!_showEmailLogin) ...[
-          const Text(
-            'Jump in with a one-click demo — no email or password needed.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _AuthPalette.textSecondary,
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-          _buildDemoEntrySection(compact: false),
-        ] else ...[
-          _buildInput(
-            _emailController,
-            label: 'Email',
-            hint: 'you@company.com',
-            textInputAction: TextInputAction.next,
-          ),
-          _buildInput(
-            _passwordController,
-            label: 'Password',
-            hint: 'Enter your password',
-            isObscured: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _executeSignIn(),
-          ),
-          _buildPrimaryButton(
-            label: _authLoading ? 'Signing in…' : 'Sign in',
-            onPressed: _authLoading ? null : _executeSignIn,
-          ),
-        ],
-        Center(
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => setState(() => _showEmailLogin = !_showEmailLogin),
-              child: Text(
-                _showEmailLogin
-                    ? '← Back to demo entry'
-                    : 'Sign in with email instead',
-                style: const TextStyle(
-                  color: _AuthPalette.primary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
+        _buildInput(
+          _emailController,
+          label: 'Email',
+          hint: 'you@company.com',
+          textInputAction: TextInputAction.next,
         ),
-        if (!_showEmailLogin)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'New here? ',
-                style: TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
-              ),
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () => setState(() {
-                    _isLoginMode = false;
-                    _signUpStep = 1;
-                    _showAddMore = false;
-                  }),
-                  child: const Text(
-                    'Create an account',
-                    style: TextStyle(
-                      color: _AuthPalette.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+        _buildInput(
+          _passwordController,
+          label: 'Password',
+          hint: 'Enter your password',
+          isObscured: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _executeSignIn(),
+        ),
+        _buildPrimaryButton(
+          label: _authLoading ? 'Signing in…' : 'Sign in',
+          onPressed: _authLoading ? null : _executeSignIn,
+        ),
+        if (kDebugMode) ...[
+          const Divider(),
+          const Text(
+            'DEV ONLY',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+          ),
+          _buildDemoEntrySection(compact: true),
+        ],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'New here? ',
+              style: TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
+            ),
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _isLoginMode = false;
+                  _signUpStep = 1;
+                  _showAddMore = false;
+                }),
+                child: const Text(
+                  'Create an account',
+                  style: TextStyle(
+                    color: _AuthPalette.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -1042,16 +1011,18 @@ class _AuthScreenState extends State<AuthScreen> {
           label: _authLoading ? 'Creating account…' : 'Continue',
           onPressed: _authLoading ? null : _executeSignUpAccountStep,
         ),
-        const SizedBox(height: 4),
-        const Text(
-          'Or try a demo without signing up',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: _AuthPalette.textSecondary,
-            fontSize: 12,
+        if (kDebugMode) ...[
+          const SizedBox(height: 4),
+          const Text(
+            'Or try a demo without signing up',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _AuthPalette.textSecondary,
+              fontSize: 12,
+            ),
           ),
-        ),
-        _buildDemoEntrySection(compact: true),
+          _buildDemoEntrySection(compact: true),
+        ],
         Center(
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -1074,24 +1045,43 @@ class _AuthScreenState extends State<AuthScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (!compact) const SizedBox(height: 4),
-        _buildPrimaryButton(
-          label: _authLoading ? 'Loading…' : 'Demo Landlord',
-          onPressed: _authLoading ? null : _enterAsDemoLandlord,
-          backgroundColor: _AuthPalette.accent,
+        const Text(
+          'QA ACCOUNTS',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+        ),
+        const SizedBox(height: 8),
+        for (final account in QaTestAccount.values) ...[
+          _buildSecondaryButton(
+            label: _authLoading ? 'Loading…' : account.buttonLabel,
+            onPressed:
+                _authLoading ? null : () => _enterAsQaAccount(account),
+            height: compact ? 46 : 52,
+          ),
+          const SizedBox(height: 8),
+        ],
+        const Text(
+          'FIRST TIME USER',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+        ),
+        const SizedBox(height: 8),
+        _buildSecondaryButton(
+          label: _authLoading ? 'Loading…' : 'New Landlord',
+          onPressed: _authLoading ? null : _enterAsNewLandlord,
           height: compact ? 46 : 52,
         ),
         const SizedBox(height: 10),
-        _buildPrimaryButton(
-          label: _authLoading ? 'Loading…' : 'Demo Seeker',
-          onPressed: _authLoading ? null : _enterAsDemoSeeker,
-          backgroundColor: _AuthPalette.textPrimary,
+        _buildSecondaryButton(
+          label: _authLoading ? 'Loading…' : 'New Seeker',
+          onPressed: _authLoading ? null : _enterAsNewSeeker,
           height: compact ? 46 : 52,
         ),
-        if (kDebugMode && !DemoAuthService.isEnabled)
+        if (kDebugMode && QaTestAuthService.isEnabled)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              'Demo sessions run locally — no Supabase sign-in required.',
+              'QA sessions run locally — no password or Supabase sign-in.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _AuthPalette.textSecondary,
@@ -1269,17 +1259,6 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
       if (_showAddMore) ...[
         _buildFieldGroupCard(
-          title: 'Lifestyle & preferences',
-          subtitle: 'Helps us find compatible matches.',
-          fields: [
-            _buildInput(
-              _nativePlaceController,
-              label: 'Native place (India)',
-              hint: MarketConfig.current.profileNativePlaceHint,
-            ),
-          ],
-        ),
-        _buildFieldGroupCard(
           title: 'Budget range',
           subtitle: MarketConfig.current.profileBudgetSubtitle,
           fields: [
@@ -1319,7 +1298,7 @@ class _AuthScreenState extends State<AuthScreen> {
               options: _occupantOptions,
               onChanged: (val) => setState(() {
                 _selectedOccupantType = val;
-                if (val != 'Students') _selectedStudentType = null;
+                if (val != 'Students') _selectedFinancialSupportType = null;
                 if (val == 'Family') {
                   _selectedGenderPref = null;
                   _groupSize = 1;
@@ -1379,10 +1358,12 @@ class _AuthScreenState extends State<AuthScreen> {
             ],
             if (_selectedOccupantType == 'Students')
               ShadcnSelect(
-                label: 'Student funding',
-                value: _selectedStudentType ?? _studentFundingOptions.first,
-                options: _studentFundingOptions,
-                onChanged: (val) => setState(() => _selectedStudentType = val),
+                label: 'Financial Support',
+                value: _selectedFinancialSupportType ??
+                    _financialSupportOptions.first,
+                options: _financialSupportOptions,
+                onChanged: (val) =>
+                    setState(() => _selectedFinancialSupportType = val),
               ),
           ],
         ),
@@ -1659,6 +1640,65 @@ class _AuthScreenState extends State<AuthScreen> {
             fontWeight: FontWeight.w800,
             fontSize: prominent ? 18 : 16,
             letterSpacing: prominent ? 0.2 : 0.1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSecondaryButton({
+    required String label,
+    required VoidCallback? onPressed,
+    double height = _AuthLayout.buttonHeight,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return _AuthPalette.textSecondary.withValues(alpha: 0.55);
+            }
+            return _AuthPalette.textPrimary;
+          }),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return _AuthPalette.surfaceMuted;
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return _AuthPalette.inputSurface;
+            }
+            return _AuthPalette.surface;
+          }),
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return BorderSide(
+                color: _AuthPalette.borderSoft.withValues(alpha: 0.6),
+              );
+            }
+            return const BorderSide(color: _AuthPalette.borderSoft);
+          }),
+          overlayColor: WidgetStatePropertyAll(
+            _AuthPalette.textPrimary.withValues(alpha: 0.06),
+          ),
+          minimumSize: WidgetStatePropertyAll(Size(double.infinity, height)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(_AuthPalette.radiusXl),
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            letterSpacing: 0.1,
           ),
         ),
       ),

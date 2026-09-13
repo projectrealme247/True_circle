@@ -1,0 +1,1622 @@
+{
+  "audit_version": "1.0",
+  "audited_at": "2026-09-01T20:57:04.197053Z",
+  "source": {
+    "name": "SampleListingsDublin (local Dublin marketplace seed)",
+    "paths": [
+      "lib/data/sample_listings_dublin.dart",
+      "lib/data/sample_listings_dublin_v2.dart",
+      "lib/data/sample_listings_dublin_legacy.dart",
+      "lib/data/sample_listings_dublin_expansion.dart",
+      "lib/data/dublin_listing_builder.dart"
+    ],
+    "notes": "UAT workbook targets ~50 SL + ~50 IP; checked-in seed is 40 Share + 50 Rent. App home feed bootstraps from this seed via ListingsStorageService (not Firestore). Supabase public.listings was empty at last probe; remote schema drifts from local migrations. Firestore is not used.",
+    "shared_living_count": 40,
+    "independent_places_count": 50,
+    "total": 90
+  },
+  "summary": {
+    "VALID": 85,
+    "REVIEW": 5,
+    "INVALID": 0,
+    "success_criteria_met": true
+  },
+  "listings": [
+    {
+      "listing_id": "dub-share-01",
+      "title": "Female only · shared bed · Cherrywood",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "625/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-02",
+      "title": "Male only · €700/person · Rialto",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "700/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-03",
+      "title": "Ensuite · Dundrum · UCD bus",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "1336/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-04",
+      "title": "All bills in · male · Dundalk DKIT",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "350/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-05",
+      "title": "Bed space · female · Dublin 4 Luas",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "650/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-06",
+      "title": "Lime House · €800/person · multi-slot",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "800/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-07",
+      "title": "Ensuite double · female · Two Oaks D16",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "1050/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-08",
+      "title": "Ensuite for 2 · Lucan · WFH desk",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "1200/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-09",
+      "title": "Private room · veg kitchen · Rialto",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "780/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-10",
+      "title": "Professional house · Sandyford",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "920/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-11",
+      "title": "Budget bed · Dundalk · all-in",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "380/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-12",
+      "title": "Glass Bottle · sea view · Dublin 4",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "950/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-13",
+      "title": "Family-friendly spare room · Lucan",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "600/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-14",
+      "title": "Twin room · UCD commute · Dundrum",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": "2 bed",
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "850/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-15",
+      "title": "Immediate · male · Rathmines area",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "720/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-16",
+      "title": "Co-living · Dublin 16 · gym access",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "1100/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-17",
+      "title": "Tech corridor · Grand Canal Dock",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": "3 bed",
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "1150/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-18",
+      "title": "Student-friendly · Cherrywood Luas",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "540/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-19",
+      "title": "Ensuite · Rathmines · Luas commuter",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "880/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-20",
+      "title": "Twin share · Drumcondra DART",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Twin share",
+      "bedrooms": null,
+      "share_room_kind": "twin_share",
+      "marketplace_category": null,
+      "rent": "620/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-21",
+      "title": "Master room · Phibsborough bus links",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Master room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "1100/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-22",
+      "title": "Female only · Clontarf DART",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "750/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-23",
+      "title": "Male only · Stoneybatter Luas",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "690/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-24",
+      "title": "Portobello room · multi-modal transit",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "980/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-25",
+      "title": "Sound host · Sandyford Luas · professionals",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "920/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-26",
+      "title": "Private room · Grand Canal Dock",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "950/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-27",
+      "title": "Ensuite · Raheny DART",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "820/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-28",
+      "title": "Twin share · Terenure",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Twin share",
+      "bedrooms": null,
+      "share_room_kind": "twin_share",
+      "marketplace_category": null,
+      "rent": "580/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-29",
+      "title": "Master room · Ballyfermot Luas",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Master room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "1050/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-30",
+      "title": "Bed in shared room · Finglas",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "520/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-31",
+      "title": "Private room · Howth coastal",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "780/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-32",
+      "title": "Ensuite · Blanchardstown multi-modal",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "870/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-33",
+      "title": "Twin share · Coolock students",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Twin share",
+      "bedrooms": null,
+      "share_room_kind": "twin_share",
+      "marketplace_category": null,
+      "rent": "600/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-34",
+      "title": "Private room · Chapelizod Luas",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "720/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-35",
+      "title": "Ensuite · Tallaght Luas",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "840/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-36",
+      "title": "Bed space · Temple Bar bus",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Bed in shared room",
+      "bedrooms": null,
+      "share_room_kind": "bed_in_shared",
+      "marketplace_category": null,
+      "rent": "680/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-37",
+      "title": "Private room · Sandymount DART",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "910/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-38",
+      "title": "Master room · Rathfarnham family",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Master room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "1150/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-39",
+      "title": "Ensuite · Malahide DART",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Ensuite",
+      "bedrooms": null,
+      "share_room_kind": "ensuite",
+      "marketplace_category": null,
+      "rent": "890/month",
+      "signals": [
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-share-40",
+      "title": "Private room · Dalkey village",
+      "marketplace": "shared_living",
+      "listing_type": "Share",
+      "property_type": null,
+      "room_type": "Private room",
+      "bedrooms": null,
+      "share_room_kind": "private_room",
+      "marketplace_category": null,
+      "rent": "980/month",
+      "signals": [
+        "property_structure_language",
+        "room_share_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Shared Living / room-share listing."
+    },
+    {
+      "listing_id": "dub-rent-01",
+      "title": "2 bed apartment · Cherrywood · Luas",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1850/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-02",
+      "title": "1 bed · Dublin 4 · sea proximity",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2100/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-03",
+      "title": "3 bed house · Dundrum D14",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "house",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2800/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-04",
+      "title": "2 bed · Lucan · commuter belt",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1650/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-05",
+      "title": "1 bed flat · Rialto D12",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1400/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-06",
+      "title": "2 bed · Dundalk · near DKIT",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1200/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-07",
+      "title": "Modern 2 bed · Dublin 16",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1950/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-08",
+      "title": "Studio · Grand Canal Dock",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "Studio",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1750/month",
+      "signals": [
+        "property_structure_language",
+        "studio"
+      ],
+      "classification_status": "REVIEW",
+      "review_reason": "Independent Places edge case: studio/annex/self-contained — confirm exclusive entire unit (VALID if exclusive)."
+    },
+    {
+      "listing_id": "dub-rent-09",
+      "title": "3 bed semi-D · Cherrywood",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2650/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-10",
+      "title": "1 bed · Dundrum shopping district",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1550/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-11",
+      "title": "2 bed cottage · Lucan",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "house",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1700/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-12",
+      "title": "Luxury 2 bed · Glass Bottle",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "3200/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-13",
+      "title": "Affordable 1 bed · Rialto",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1250/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-14",
+      "title": "2 bed · Dundalk town centre",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1100/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-15",
+      "title": "Family 3 bed · Dublin 16",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2400/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-16",
+      "title": "2 bed apartment · Dundrum Luas",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2200/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-17",
+      "title": "1 bed · Cherrywood · new build",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1600/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-18",
+      "title": "Budget 1 bed · Lucan village",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1350/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-19",
+      "title": "2 bed · Blackrock DART",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2400/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-20",
+      "title": "1 bed · Portobello canal",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1900/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-21",
+      "title": "3 bed house · Clontarf",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "house",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2950/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-22",
+      "title": "Studio · Dublin City Centre",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "Studio",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1650/month",
+      "signals": [
+        "property_structure_language",
+        "studio"
+      ],
+      "classification_status": "REVIEW",
+      "review_reason": "Independent Places edge case: studio/annex/self-contained — confirm exclusive entire unit (VALID if exclusive)."
+    },
+    {
+      "listing_id": "dub-rent-23",
+      "title": "2 bed · Stoneybatter Luas",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2100/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-24",
+      "title": "1 bed · Drumcondra DART",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1750/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-25",
+      "title": "2 bed · Phibsborough bus corridor",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1800/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-26",
+      "title": "3 bed · Ranelagh Luas",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "3100/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-28",
+      "title": "2 bed · remote commuter (test low match)",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "3400/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-29",
+      "title": "1 bed · Rathmines student-friendly",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1950/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-30",
+      "title": "1 bed · Rathmines · Luas · student top pick",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1400/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-27",
+      "title": "Budget 1 bed · Rialto bus",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "900/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-31",
+      "title": "4 bed · Docklands family home",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "4 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "4200/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-32",
+      "title": "Studio · Raheny commuter",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "Studio",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1350/month",
+      "signals": [
+        "property_structure_language",
+        "studio"
+      ],
+      "classification_status": "REVIEW",
+      "review_reason": "Independent Places edge case: studio/annex/self-contained — confirm exclusive entire unit (VALID if exclusive)."
+    },
+    {
+      "listing_id": "dub-rent-33",
+      "title": "1 bed · Terenure quiet",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1700/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-34",
+      "title": "2 bed · Ballyfermot Luas",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1850/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-35",
+      "title": "3 bed · Finglas house",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "house",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2200/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-36",
+      "title": "4 bed · Howth sea view",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "4 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "3800/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-37",
+      "title": "Studio · Blanchardstown retail",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "Studio",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1200/month",
+      "signals": [
+        "property_structure_language",
+        "studio"
+      ],
+      "classification_status": "REVIEW",
+      "review_reason": "Independent Places edge case: studio/annex/self-contained — confirm exclusive entire unit (VALID if exclusive)."
+    },
+    {
+      "listing_id": "dub-rent-38",
+      "title": "1 bed · Coolock student pad",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1450/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-39",
+      "title": "2 bed · Chapelizod riverside",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2000/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-40",
+      "title": "3 bed · Tallaght family",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2450/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-41",
+      "title": "4 bed · Dún Laoghaire seafront",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "house",
+      "room_type": null,
+      "bedrooms": "4 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "3600/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-42",
+      "title": "1 bed · Swords airport corridor",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1550/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-43",
+      "title": "2 bed · Ballsbridge DART",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2800/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-44",
+      "title": "3 bed · Artane family",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2300/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-45",
+      "title": "Studio · Walkinstown budget",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "Studio",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1100/month",
+      "signals": [
+        "property_structure_language",
+        "studio"
+      ],
+      "classification_status": "REVIEW",
+      "review_reason": "Independent Places edge case: studio/annex/self-contained — confirm exclusive entire unit (VALID if exclusive)."
+    },
+    {
+      "listing_id": "dub-rent-46",
+      "title": "1 bed · Sandyford business park",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1650/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-47",
+      "title": "2 bed · Citywest Luas",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "house",
+      "room_type": null,
+      "bedrooms": "2 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1950/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-48",
+      "title": "3 bed · Palmerstown house",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "house",
+      "room_type": null,
+      "bedrooms": "3 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "2100/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-49",
+      "title": "4 bed · Knocklyon family",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "4 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "3200/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    },
+    {
+      "listing_id": "dub-rent-50",
+      "title": "1 bed · Smithfield Luas",
+      "marketplace": "independent_places",
+      "listing_type": "Rent",
+      "property_type": "apartment",
+      "room_type": null,
+      "bedrooms": "1 bed",
+      "share_room_kind": null,
+      "marketplace_category": null,
+      "rent": "1500/month",
+      "signals": [
+        "multi_or_n_bed_property",
+        "property_structure_language"
+      ],
+      "classification_status": "VALID",
+      "review_reason": "Clear Independent Places / entire-property listing."
+    }
+  ]
+}

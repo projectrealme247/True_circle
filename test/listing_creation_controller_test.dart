@@ -28,7 +28,6 @@ void main() {
       const draft = ListingCreationDraft(
         category: ListingCreationCategory.independentPlaces,
         bedsCount: 2,
-        rtbStatus: ListingRtbStatus.registered,
         parkingAvailable: true,
         latitude: 53.3,
         longitude: -6.2,
@@ -38,7 +37,6 @@ void main() {
 
       expect(next.category, ListingCreationCategory.sharedLiving);
       expect(next.bedsCount, isNull);
-      expect(next.rtbStatus, isNull);
       expect(next.parkingAvailable, isNull);
       expect(next.latitude, isNull);
       expect(next.languagesSpoken, ['English']);
@@ -74,7 +72,6 @@ void main() {
 
       final errors = ListingCreationValidationService.validate(draft);
       expect(errors.containsKey(ListingCreationFieldKeys.bedsCount), isTrue);
-      expect(errors.containsKey(ListingCreationFieldKeys.rtbStatus), isTrue);
       expect(
         errors.containsKey(ListingCreationFieldKeys.parkingAvailable),
         isTrue,
@@ -92,9 +89,28 @@ void main() {
         householdDynamic: ListingHouseholdDynamic.professionals,
         kitchenCulture: ListingKitchenCulture.open,
         languagesSpoken: ['English'],
+        listingAuthorizationConfirmed: true,
       );
 
       expect(ListingCreationValidationService.validate(draft), isEmpty);
+    });
+
+    test('requires listing authorization before publish', () {
+      const draft = ListingCreationDraft(
+        category: ListingCreationCategory.independentPlaces,
+        title: 'Bright 2-bed',
+        price: '2100/month',
+        description: 'A lovely flat near the Luas.',
+        eircode: 'D02 X285',
+        bedsCount: 2,
+        parkingAvailable: true,
+      );
+
+      final errors = ListingCreationValidationService.validate(draft);
+      expect(
+        errors.containsKey(ListingCreationFieldKeys.listingAuthorizationConfirmed),
+        isTrue,
+      );
     });
 
     test('strips deprecated kitchen utility keys', () {
@@ -121,8 +137,8 @@ void main() {
         latitude: 53.333,
         longitude: -6.248,
         bedsCount: 1,
-        rtbStatus: ListingRtbStatus.notProvided,
         parkingAvailable: false,
+        listingAuthorizationConfirmed: true,
       );
 
       final local = ListingCreationPayloadBuilder.toLocalListingMap(draft);
@@ -132,6 +148,8 @@ void main() {
       );
 
       expect(local['kitchen_usage_timing'], isNull);
+      expect(local[ListingCreationFieldKeys.listingAuthorizationConfirmed], true);
+      expect(row[ListingCreationFieldKeys.listingAuthorizationConfirmed], true);
       expect(row[ListingCreationFieldKeys.bedsCount], 1);
       expect(row[ListingCreationFieldKeys.locationGeom], isNotNull);
       final geom = row[ListingCreationFieldKeys.locationGeom] as Map;
@@ -212,8 +230,8 @@ void main() {
         description: 'Description long enough for validation.',
         eircode: 'D02 X285',
         bedsCount: 2,
-        rtbStatus: ListingRtbStatus.registered,
         parkingAvailable: true,
+        listingAuthorizationConfirmed: true,
       );
 
       await expectLater(
@@ -260,10 +278,10 @@ void main() {
       );
       draft = draft.copyWith(
         bedsCount: 2,
-        rtbStatus: ListingRtbStatus.notProvided,
         parkingAvailable: false,
         latitude: 53.32,
         longitude: -6.27,
+        listingAuthorizationConfirmed: true,
       );
 
       expect(ListingCreationController.validate(draft), isEmpty);
@@ -278,7 +296,8 @@ void main() {
       expect(local['languages_spoken'], isNull);
       expect(local[ListingCreationFieldKeys.languagesSpoken], isNull);
       expect(local[ListingCreationFieldKeys.bedsCount], 2);
-      expect(local[ListingCreationFieldKeys.rtbStatus], isNotNull);
+      expect(local['rtb_status'], isNull);
+      expect(local['rtb_registered'], isNull);
       expect(local[ListingCreationFieldKeys.parkingAvailable], isFalse);
 
       final row = ListingCreationPayloadBuilder.toSupabaseRow(
@@ -306,8 +325,8 @@ void main() {
         latitude: 53.342,
         longitude: -6.267,
         bedsCount: 2,
-        rtbStatus: ListingRtbStatus.registered,
         parkingAvailable: true,
+        listingAuthorizationConfirmed: true,
       );
 
       Future<Map<String, dynamic>> slowInsert(Map<String, dynamic> _) async {

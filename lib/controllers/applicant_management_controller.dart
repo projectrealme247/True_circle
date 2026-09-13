@@ -75,7 +75,7 @@ abstract final class ApplicantManagementController {
   }) {
     return _mutateStatus(
       applicationId: applicationId,
-      nextStatus: ApplicantApplicationStatus.viewingScheduled,
+      nextStatus: ApplicantApplicationStatus.viewingInvitationSent,
       currentStatus: currentStatus,
       updateOverride: updateOverride,
     );

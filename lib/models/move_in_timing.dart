@@ -36,8 +36,13 @@ enum SeekerMoveInWindow {
 }
 
 /// Landlord availability flexibility — extends forward from [available_from].
+///
+/// Independent Place create/edit uses [independentPlaceValues] only
+/// (+15 Days / +1 Month / Flexible). [fixed] remains for Shared Living UI and
+/// for matching existing listings until re-saved (IP migrate → [flexible]).
 enum LandlordAvailabilityFlexibility {
-  exactDate('exact_date', 'Exact Date'),
+  /// Shared Living + legacy IP — single-day window from Available From.
+  fixed('fixed', 'Fixed'),
   plus15Days('plus_15_days', '+15 Days'),
   plus1Month('plus_1_month', '+1 Month'),
   flexible('flexible', 'Flexible');
@@ -47,12 +52,40 @@ enum LandlordAvailabilityFlexibility {
   final String storageToken;
   final String label;
 
+  /// Shared Spaces listing create/edit — Within 1 Month + Flexible only.
+  static const sharedSpacesValues = <LandlordAvailabilityFlexibility>[
+    plus1Month,
+    flexible,
+  ];
+
+  /// Independent Place listing create/edit — no Fixed.
+  static const independentPlaceValues = <LandlordAvailabilityFlexibility>[
+    plus15Days,
+    plus1Month,
+    flexible,
+  ];
+
+  /// @Deprecated — use [independentPlaceValues].
+  static const selectableValues = independentPlaceValues;
+
   static LandlordAvailabilityFlexibility parse(String? raw) {
-    final token = raw?.trim() ?? '';
-    for (final value in LandlordAvailabilityFlexibility.values) {
-      if (value.storageToken == token) return value;
-    }
-    return flexible;
+    final token = raw?.trim().toLowerCase() ?? '';
+    return switch (token) {
+      'fixed' || 'exact_date' => fixed,
+      'plus_15_days' => plus15Days,
+      'plus_1_month' => plus1Month,
+      'flexible' => flexible,
+      // Unknown/missing keeps fixed for matching; IP form migrates → flexible.
+      _ => fixed,
+    };
+  }
+
+  /// IP listings: legacy `fixed` / `exact_date` → [flexible].
+  static LandlordAvailabilityFlexibility migrateIndependentPlace(
+    LandlordAvailabilityFlexibility value,
+  ) {
+    if (value == fixed) return flexible;
+    return value;
   }
 
   static LandlordAvailabilityFlexibility fromListing(Map<String, dynamic> listing) {
@@ -285,7 +318,7 @@ abstract final class MoveInTimingEngine {
   ) {
     final start = _dateOnly(availableFrom);
     return switch (flexibility) {
-      LandlordAvailabilityFlexibility.exactDate =>
+      LandlordAvailabilityFlexibility.fixed =>
         MoveInDateRange(start: start, end: start),
       LandlordAvailabilityFlexibility.plus15Days => MoveInDateRange(
           start: start,
@@ -330,7 +363,7 @@ abstract final class MoveInTimingEngine {
       availableFrom,
     );
     return switch (flexibility) {
-      LandlordAvailabilityFlexibility.exactDate => startLabel,
+      LandlordAvailabilityFlexibility.fixed => startLabel,
       LandlordAvailabilityFlexibility.plus15Days =>
         '$startLabel → ${RentalDateFormat.formatRentalAvailabilityDateTime(availableFrom.add(const Duration(days: 15)))}',
       LandlordAvailabilityFlexibility.plus1Month =>

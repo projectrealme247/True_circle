@@ -1,8 +1,8 @@
 ﻿import '../config/market/dublin_commuter_hubs.dart';
+import '../models/seeker_onboarding_enums.dart';
 import '../models/spoken_language_entry.dart';
 import '../services/commute_scoring_service.dart';
 import 'commute_profile.dart';
-import 'geo_math.dart';
 import 'spoken_language_profile_codec.dart';
 
 /// Safe parsing and display helpers for profile fields.
@@ -13,7 +13,6 @@ abstract final class ProfileData {
     'full_name',
     'email',
     'detected_city',
-    'native_place',
     'mother_tongue',
     'food_preference',
     'spoken_languages',
@@ -80,13 +79,25 @@ abstract final class ProfileData {
   static bool isProfileIncomplete(Map<String, dynamic>? session) =>
       !isMatchingReady(session);
 
+  /// True when the session has any identity / onboarding content worth showing
+  /// on `/profile`. Distinct from [isMatchingReady] (five essentials).
+  static bool hasRenderableProfileContent(Map<String, dynamic>? session) {
+    if (session == null || session.isEmpty) return false;
+    if (normalize(session) != null) return true;
+    if (text(session['full_name']).isNotEmpty) return true;
+    if (text(session['email']).isNotEmpty) return true;
+    return hasListingTypeSelected(session) ||
+        hasPersonaSelected(session) ||
+        hasBudgetSet(session) ||
+        hasDestinationSet(session) ||
+        hasMoveInWindowSet(session);
+  }
+
+  /// Ready when the five seeker onboarding essentials are present.
+  /// English is assumed — mother tongue / primary language is never required.
   static bool isMatchingReady(Map<String, dynamic>? session) {
     if (session == null || session.isEmpty) return false;
-    final hasCore = text(session['full_name']).isNotEmpty &&
-        text(session['detected_city']).isNotEmpty &&
-        text(session['mother_tongue']).isNotEmpty;
-    if (!hasCore) return false;
-    return languageList(session['spoken_languages']).isNotEmpty;
+    return _modernCompletionChecks(session).every((check) => check);
   }
 
   static int calculateProfileCompletionPercentage(Map<String, dynamic>? session) {
@@ -100,54 +111,64 @@ abstract final class ProfileData {
   static int profileCompletenessPercent(Map<String, dynamic>? session) =>
       calculateProfileCompletionPercentage(session);
 
+  /// Seeker completion essentials (order matches [missingFieldsForCompletion]).
   static List<bool> _modernCompletionChecks(Map<String, dynamic> session) => [
-        text(session['full_name']).isNotEmpty,
-        text(session['email']).isNotEmpty,
-        text(session['detected_city']).isNotEmpty ||
-            text(session['current_area']).isNotEmpty,
-        text(session['mother_tongue']).isNotEmpty,
-        languageList(session['spoken_languages']).isNotEmpty,
-        session['linkedin_verified'] == true ||
-            (session['trust_stage'] is int &&
-                (session['trust_stage'] as int) >= 2),
-        maximumCommuteBudgetMinutes(session) != null,
-        text(session['budget_min']).isNotEmpty &&
-            text(session['budget_max']).isNotEmpty,
-        text(session['occupant_type']).isNotEmpty,
-        hasCommutePreferences(session),
+        hasListingTypeSelected(session),
+        hasPersonaSelected(session),
+        hasBudgetSet(session),
+        hasDestinationSet(session),
+        hasMoveInWindowSet(session),
       ];
 
-  static List<String> missingMatchingFields(Map<String, dynamic>? session) {
-    if (session == null) {
-      return const [
-        'Full name',
-        'Mother tongue',
-        'Languages spoken',
-        'Commuter profiles',
-      ];
+  static bool hasListingTypeSelected(Map<String, dynamic>? session) {
+    if (session == null) return false;
+    final propType = text(session['preferred_property_type']);
+    if (propType == 'Share' || propType == 'Rent') return true;
+    final arrangement = text(session['preferred_arrangement']).toLowerCase();
+    if (arrangement.contains('shared') ||
+        arrangement.contains('room') ||
+        arrangement.contains('entire') ||
+        arrangement.contains('place') ||
+        arrangement.contains('apartment')) {
+      return true;
     }
-    final missing = <String>[];
-    if (text(session['full_name']).isEmpty) missing.add('Full name');
-    if (text(session['mother_tongue']).isEmpty) missing.add('Mother tongue');
-    if (languageList(session['spoken_languages']).isEmpty) {
-      missing.add('Languages spoken');
-    }
-    if (!hasCommutePreferences(session)) missing.add('Commuter profiles');
-    return missing;
+    return text(session['active_marketplace_space']).isNotEmpty;
   }
+
+  static bool hasPersonaSelected(Map<String, dynamic>? session) =>
+      SeekerPersona.fromSession(session) != null;
+
+  static bool hasBudgetSet(Map<String, dynamic>? session) {
+    if (session == null) return false;
+    return text(session['budget_min']).isNotEmpty &&
+        text(session['budget_max']).isNotEmpty;
+  }
+
+  static bool hasDestinationSet(Map<String, dynamic>? session) =>
+      hasCommutePreferences(session);
+
+  static bool hasMoveInWindowSet(Map<String, dynamic>? session) =>
+      MoveInBucket.fromSession(session) != null;
+
+  static List<String> missingMatchingFields(Map<String, dynamic>? session) =>
+      missingFieldsForCompletion(session);
 
   static List<String> missingFieldsForCompletion(Map<String, dynamic>? session) {
     if (session == null) {
-      return const ['Full name', 'Email', 'City', 'Mother tongue', 'Languages spoken'];
+      return const [
+        'Listing type',
+        'Persona',
+        'Budget',
+        'Destination',
+        'Move-in window',
+      ];
     }
     final missing = <String>[];
-    if (text(session['full_name']).isEmpty) missing.add('Full name');
-    if (text(session['email']).isEmpty) missing.add('Email');
-    if (text(session['detected_city']).isEmpty) missing.add('City');
-    if (text(session['mother_tongue']).isEmpty) missing.add('Mother tongue');
-    if (languageList(session['spoken_languages']).isEmpty) {
-      missing.add('Languages spoken');
-    }
+    if (!hasListingTypeSelected(session)) missing.add('Listing type');
+    if (!hasPersonaSelected(session)) missing.add('Persona');
+    if (!hasBudgetSet(session)) missing.add('Budget');
+    if (!hasDestinationSet(session)) missing.add('Destination');
+    if (!hasMoveInWindowSet(session)) missing.add('Move-in window');
     return missing;
   }
 

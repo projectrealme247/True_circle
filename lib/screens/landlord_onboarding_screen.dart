@@ -16,7 +16,8 @@ import '../widgets/onboarding/onboarding_content_shell.dart';
 import '../widgets/onboarding/onboarding_design_tokens.dart';
 import '../widgets/truecircle_logo.dart';
 
-/// Streamlined landlord onboarding — hosting track + full name only.
+/// Shared Living host onboarding — name only.
+/// Independent Place hosts skip this screen; name is collected on Add Listing.
 class LandlordOnboardingScreen extends StatefulWidget {
   const LandlordOnboardingScreen({super.key, this.initialProfile});
 
@@ -29,13 +30,10 @@ class LandlordOnboardingScreen extends StatefulWidget {
 
 class _LandlordOnboardingScreenState extends State<LandlordOnboardingScreen> {
   final _nameController = TextEditingController();
-  bool _isSharedSpace = false;
   bool _hydrating = true;
   Map<String, dynamic>? _baselineProfile;
 
-  ProfileOnboardingTrack get _selectedTrack => _isSharedSpace
-      ? ProfileOnboardingTrack.landlordSharedSpace
-      : ProfileOnboardingTrack.landlordEntirePlace;
+  static const _selectedTrack = ProfileOnboardingTrack.landlordSharedSpace;
 
   @override
   void initState() {
@@ -55,8 +53,6 @@ class _LandlordOnboardingScreenState extends State<LandlordOnboardingScreen> {
       AuthScreen.currentUserSession = _baselineProfile;
       final name = ProfileData.text(session['full_name']);
       if (name.isNotEmpty) _nameController.text = name;
-      final track = ProfileOnboardingRepository.resolveHostTrack(session);
-      _isSharedSpace = track == ProfileOnboardingTrack.landlordSharedSpace;
     }
     if (mounted) setState(() => _hydrating = false);
   }
@@ -79,8 +75,7 @@ class _LandlordOnboardingScreenState extends State<LandlordOnboardingScreen> {
     final baseline = Map<String, dynamic>.from(
       _baselineProfile ?? AuthScreen.currentUserSession ?? {},
     );
-    final listingMode =
-        _selectedTrack.isSharedSpace ? 'shared_space' : 'entire_place';
+    const listingMode = 'shared_space';
     final fullName = _nameController.text.trim();
 
     return ApplicantSessionSync.enrich({
@@ -132,7 +127,7 @@ class _LandlordOnboardingScreenState extends State<LandlordOnboardingScreen> {
         if (context.canPop()) {
           context.pop();
         } else {
-          context.go('/welcome');
+          context.go('/');
         }
       },
       child: Scaffold(
@@ -143,12 +138,12 @@ class _LandlordOnboardingScreenState extends State<LandlordOnboardingScreen> {
           scrolledUnderElevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0F172A)),
-            tooltip: 'Back to welcome',
+            tooltip: 'Back',
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
               } else {
-                context.go('/welcome');
+                context.go('/');
               }
             },
           ),
@@ -183,11 +178,6 @@ class _LandlordOnboardingScreenState extends State<LandlordOnboardingScreen> {
                       child: OnboardingContentShell(
                         child: LandlordOnboardingForm(
                           nameController: _nameController,
-                          isSharedSpace: _isSharedSpace,
-                          onSelectEntirePlace: () =>
-                              setState(() => _isSharedSpace = false),
-                          onSelectSharedSpace: () =>
-                              setState(() => _isSharedSpace = true),
                           onNameChanged: () => setState(() {}),
                         ),
                       ),

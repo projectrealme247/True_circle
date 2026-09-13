@@ -1,0 +1,1220 @@
+﻿[
+    {
+        "seeker_id":  "SL-STU-01",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  650,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-STU-02",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  450,
+        "preferred_locations":  [
+                                    "Dublin 8",
+                                    "Dublin 12",
+                                    "Tallaght"
+                                ],
+        "desired_move_date":  "2026-09-15",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "SL-STU-03",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  900,
+        "preferred_locations":  [
+                                    "Dublin 4",
+                                    "Stillorgan",
+                                    "Blackrock",
+                                    "Dublin 14"
+                                ],
+        "desired_move_date":  "2026-08-20",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-STU-04",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  600,
+        "preferred_locations":  [
+                                    "Dublin 7",
+                                    "Dublin 1",
+                                    "Dublin 3"
+                                ],
+        "desired_move_date":  "2027-01-10",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-STU-05",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  500,
+        "preferred_locations":  [
+                                    "Dublin 2"
+                                ],
+        "desired_move_date":  "2026-08-10",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-STU-06",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  850,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Dublin 7",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "SL-STU-07",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  700,
+        "preferred_locations":  [
+                                    "Dublin 3",
+                                    "Clontarf",
+                                    "Howth",
+                                    "Dublin 5"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "SL-STU-08",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  480,
+        "preferred_locations":  [
+                                    "Dublin 8",
+                                    "Dublin 10",
+                                    "Dublin 12"
+                                ],
+        "desired_move_date":  "2026-08-05",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "SL-STU-09",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  750,
+        "preferred_locations":  [
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Rathmines"
+                                ],
+        "desired_move_date":  "2027-02-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-STU-10",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  620,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 8",
+                                    "Dublin 12",
+                                    "Dublin 14"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "none"
+    },
+    {
+        "seeker_id":  "SL-STU-11",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  950,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6"
+                                ],
+        "desired_move_date":  "2026-08-04",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-PRO-01",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  900,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Sandyford",
+                                    "Dublin 18"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-PRO-02",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  550,
+        "preferred_locations":  [
+                                    "Dublin 8",
+                                    "Dublin 12",
+                                    "Crumlin"
+                                ],
+        "desired_move_date":  "2026-08-25",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "SL-PRO-03",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1200,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 2",
+                                    "Grand Canal Dock",
+                                    "Dublin 4"
+                                ],
+        "desired_move_date":  "2026-09-15",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "SL-PRO-04",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1100,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 14",
+                                    "Rathfarnham",
+                                    "Terenure"
+                                ],
+        "desired_move_date":  "2026-10-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-PRO-05",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  750,
+        "preferred_locations":  [
+                                    "Ranelagh",
+                                    "Dundrum",
+                                    "Balally",
+                                    "Dublin 14"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-PRO-06",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  600,
+        "preferred_locations":  [
+                                    "Dublin 7",
+                                    "Dublin 8",
+                                    "Phibsborough"
+                                ],
+        "desired_move_date":  "2026-08-08",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-PRO-07",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1150,
+        "preferred_locations":  [
+                                    "Clontarf",
+                                    "Raheny",
+                                    "Howth",
+                                    "Dublin 3"
+                                ],
+        "desired_move_date":  "2026-09-20",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "SL-PRO-08",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  800,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-11-01",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "SL-PRO-09",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  850,
+        "preferred_locations":  [
+                                    "Dublin 8",
+                                    "Rialto",
+                                    "Heuston",
+                                    "Dublin 12"
+                                ],
+        "desired_move_date":  "2026-09-05",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-PRO-10",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1050,
+        "preferred_locations":  [
+                                    "Blackrock",
+                                    "Dun Laoghaire",
+                                    "Dublin 4"
+                                ],
+        "desired_move_date":  "2026-09-12",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "SL-EDGE-01",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  350,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-EDGE-02",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1800,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Ballsbridge"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "SL-EDGE-03",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  850,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 7",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-08-04",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-EDGE-04",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  800,
+        "preferred_locations":  [
+                                    "Dublin 2"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-EDGE-05",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1100,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 2",
+                                    "Dublin 3",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Dublin 7",
+                                    "Dublin 8",
+                                    "Dublin 12"
+                                ],
+        "desired_move_date":  "2026-10-01",
+        "room_preference":  "any",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "none"
+    },
+    {
+        "seeker_id":  "SL-EDGE-06",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  700,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-EDGE-07",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  680,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  true,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-EDGE-08",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  950,
+        "preferred_locations":  [
+                                    "Howth",
+                                    "Malahide",
+                                    "Portmarnock"
+                                ],
+        "desired_move_date":  "2026-09-08",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "SL-EDGE-09",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1500,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "SL-EDGE-10",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  720,
+        "preferred_locations":  [
+                                    "Dublin 7",
+                                    "Dublin 8",
+                                    "Dublin 1"
+                                ],
+        "desired_move_date":  "2026-09-15",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-EDGE-11",
+        "marketplace":  "shared_living",
+        "occupation_type":  "student",
+        "max_budget":  700,
+        "preferred_locations":  [
+                                    "Dublin 4",
+                                    "Dublin 6"
+                                ],
+        "desired_move_date":  "2027-03-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "SL-EDGE-12",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  400,
+        "preferred_locations":  [
+                                    "Blanchardstown",
+                                    "Finglas",
+                                    "Ballymun"
+                                ],
+        "desired_move_date":  "2026-08-15",
+        "room_preference":  "shared",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "SL-MARKET-01",
+        "marketplace":  "shared_living",
+        "occupation_type":  "professional",
+        "max_budget":  1000,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  "private",
+        "property_type_preference":  null,
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "IP-SIN-01",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  1400,
+        "preferred_locations":  [
+                                    "Dublin 8",
+                                    "Dublin 12",
+                                    "Tallaght"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-SIN-02",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  2000,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 2",
+                                    "Dublin 7"
+                                ],
+        "desired_move_date":  "2026-09-15",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-SIN-03",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  3200,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Ballsbridge"
+                                ],
+        "desired_move_date":  "2026-10-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "IP-SIN-04",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  2100,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 8",
+                                    "Rathmines"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  true,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-SIN-05",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  2300,
+        "preferred_locations":  [
+                                    "Sandyford",
+                                    "Dundrum",
+                                    "Dublin 18",
+                                    "Stillorgan"
+                                ],
+        "desired_move_date":  "2026-09-20",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-SIN-06",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  2400,
+        "preferred_locations":  [
+                                    "Clontarf",
+                                    "Howth",
+                                    "Dun Laoghaire",
+                                    "Blackrock"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "IP-SIN-07",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  1800,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 7",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-08-20",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "IP-SIN-08",
+        "marketplace":  "independent_places",
+        "occupation_type":  "student",
+        "max_budget":  1600,
+        "preferred_locations":  [
+                                    "Dublin 8",
+                                    "Dublin 6",
+                                    "Dublin 12"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-CPL-01",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  1700,
+        "preferred_locations":  [
+                                    "Dublin 8",
+                                    "Dublin 12",
+                                    "Dublin 6W"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-CPL-02",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  3500,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Ranelagh",
+                                    "Ballsbridge"
+                                ],
+        "desired_move_date":  "2026-10-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "IP-CPL-03",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  2500,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 14",
+                                    "Terenure"
+                                ],
+        "desired_move_date":  "2026-09-15",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  false,
+        "pets":  true,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-CPL-04",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  2800,
+        "preferred_locations":  [
+                                    "Dublin 14",
+                                    "Dublin 16",
+                                    "Sandyford",
+                                    "Dundrum"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-CPL-05",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  2200,
+        "preferred_locations":  [
+                                    "Dublin 7",
+                                    "Dublin 8",
+                                    "Dublin 3"
+                                ],
+        "desired_move_date":  "2026-09-20",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-CPL-06",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  2400,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 1"
+                                ],
+        "desired_move_date":  "2026-08-15",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-CPL-07",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  2700,
+        "preferred_locations":  [
+                                    "Dublin 14",
+                                    "Dublin 16",
+                                    "Rathfarnham"
+                                ],
+        "desired_move_date":  "2026-09-10",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  true,
+        "pets":  true,
+        "commute_priority":  "medium",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "IP-FAM-01",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  2600,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 14",
+                                    "Rathfarnham",
+                                    "Terenure"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "IP-FAM-02",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  3000,
+        "preferred_locations":  [
+                                    "Dublin 14",
+                                    "Dublin 16",
+                                    "Knocklyon",
+                                    "Templeogue"
+                                ],
+        "desired_move_date":  "2026-09-15",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "IP-FAM-03",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  2900,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Ranelagh",
+                                    "Rathgar",
+                                    "Dublin 14"
+                                ],
+        "desired_move_date":  "2026-10-01",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  false,
+        "pets":  true,
+        "commute_priority":  "low",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-FAM-04",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  3800,
+        "preferred_locations":  [
+                                    "Blackrock",
+                                    "Dun Laoghaire",
+                                    "Dalkey",
+                                    "Dublin 18"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  true,
+        "pets":  true,
+        "commute_priority":  "medium",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "IP-FAM-05",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  2700,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 3",
+                                    "Clontarf",
+                                    "Dublin 7"
+                                ],
+        "desired_move_date":  "2026-09-10",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "IP-FAM-06",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  3200,
+        "preferred_locations":  [
+                                    "Dublin 6",
+                                    "Dublin 14",
+                                    "Churchtown",
+                                    "Goatstown"
+                                ],
+        "desired_move_date":  "2026-11-01",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-FAM-07",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  3400,
+        "preferred_locations":  [
+                                    "Dublin 14",
+                                    "Dublin 15",
+                                    "Castleknock",
+                                    "Lucan"
+                                ],
+        "desired_move_date":  "2026-09-20",
+        "room_preference":  null,
+        "property_type_preference":  "house",
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "bus"
+    },
+    {
+        "seeker_id":  "IP-EDGE-01",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  1600,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 2",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "studio",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-EDGE-02",
+        "marketplace":  "independent_places",
+        "occupation_type":  "family",
+        "max_budget":  4000,
+        "preferred_locations":  [
+                                    "Dublin 16",
+                                    "Rathfarnham",
+                                    "Castleknock",
+                                    "Malahide"
+                                ],
+        "desired_move_date":  "2026-10-01",
+        "room_preference":  null,
+        "property_type_preference":  "detached_house",
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "IP-EDGE-03",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  5000,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Blackrock"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "any",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "IP-EDGE-04",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  900,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-EDGE-05",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  2000,
+        "preferred_locations":  [
+                                    "Dublin 14",
+                                    "Dublin 15",
+                                    "Dublin 16",
+                                    "Swords"
+                                ],
+        "desired_move_date":  "2026-09-05",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  true,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "none"
+    },
+    {
+        "seeker_id":  "IP-EDGE-06",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  800,
+        "preferred_locations":  [
+                                    "Dublin 4"
+                                ],
+        "desired_move_date":  "2026-08-05",
+        "room_preference":  null,
+        "property_type_preference":  "studio",
+        "parking_required":  true,
+        "pets":  true,
+        "commute_priority":  "high",
+        "transit_preference":  "dart"
+    },
+    {
+        "seeker_id":  "IP-EDGE-07",
+        "marketplace":  "independent_places",
+        "occupation_type":  "couple",
+        "max_budget":  3600,
+        "preferred_locations":  [
+                                    "Dublin 1",
+                                    "Dublin 2",
+                                    "Dublin 3",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Dublin 7",
+                                    "Dublin 8",
+                                    "Dublin 14"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "any",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "low",
+        "transit_preference":  "any"
+    },
+    {
+        "seeker_id":  "IP-EDGE-08",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  2200,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 1"
+                                ],
+        "desired_move_date":  "2026-08-10",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "high",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-EDGE-09",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  1900,
+        "preferred_locations":  [
+                                    "Dublin 7",
+                                    "Dublin 8",
+                                    "Dublin 3"
+                                ],
+        "desired_move_date":  "2026-09-12",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "luas"
+    },
+    {
+        "seeker_id":  "IP-MARKET-01",
+        "marketplace":  "independent_places",
+        "occupation_type":  "single_professional",
+        "max_budget":  2500,
+        "preferred_locations":  [
+                                    "Dublin 2",
+                                    "Dublin 4",
+                                    "Dublin 6",
+                                    "Dublin 8"
+                                ],
+        "desired_move_date":  "2026-09-01",
+        "room_preference":  null,
+        "property_type_preference":  "apartment",
+        "parking_required":  false,
+        "pets":  false,
+        "commute_priority":  "medium",
+        "transit_preference":  "any"
+    }
+]

@@ -26,7 +26,8 @@ Future<NearbyAmenities?> fetchNearbyAmenities(double lat, double lon) async {
   for (final result in fullResults) {
     merged = NearbyAmenities.merge(merged, result);
   }
-  if (merged != null && !merged.isEmpty) return merged;
+  // Thin full results (e.g. bus + grocery only) must not skip lifestyle fallback.
+  if (merged != null && merged.hasEnrichmentCoverage) return merged;
 
   final essentialResults = await Future.wait([
     for (final endpoint in endpoints)
@@ -34,7 +35,6 @@ Future<NearbyAmenities?> fetchNearbyAmenities(double lat, double lon) async {
   ]);
   for (final result in essentialResults) {
     merged = NearbyAmenities.merge(merged, result);
-    if (merged != null && !merged.isEmpty) return merged;
   }
   return merged;
 }

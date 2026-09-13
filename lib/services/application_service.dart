@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/listing_application.dart';
 import '../models/marketplace_space.dart';
+import '../models/applicant_application_status.dart';
 import '../utils/numeric_bounds.dart';
 import '../utils/profile_data.dart';
+import 'auth_service.dart';
 import 'user_session_store.dart';
 
 /// Local application store for seeker apply flows.
@@ -84,6 +86,53 @@ class ApplicationService {
 
   List<Map<String, dynamic>> allRows() => List.unmodifiable(_rows);
 
+  Map<String, dynamic>? rowById(String applicationId) {
+    if (applicationId.isEmpty) return null;
+    for (final row in _rows) {
+      if (row['id']?.toString() == applicationId) return row;
+    }
+    return null;
+  }
+
+  /// Existing application for a seeker on a listing, if any.
+  Map<String, dynamic>? rowForListingUser({
+    required String listingId,
+    required String userId,
+  }) {
+    if (listingId.isEmpty || userId.isEmpty) return null;
+    for (final row in _rows) {
+      if (row['listing_id']?.toString() == listingId &&
+          _rowUserId(row) == userId) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  /// Persists host lifecycle status for a local application row.
+  Future<bool> updateApplicationStatus({
+    required String applicationId,
+    required ApplicantApplicationStatus nextStatus,
+    Map<String, dynamic>? extras,
+  }) async {
+    if (applicationId.isEmpty) return false;
+    await ensureLoaded();
+    final index = _rows.indexWhere(
+      (row) => row['id']?.toString() == applicationId,
+    );
+    if (index < 0) return false;
+
+    final rows = List<Map<String, dynamic>>.from(_rows);
+    rows[index] = {
+      ...rows[index],
+      if (extras != null) ...extras,
+      'status': nextStatus.storageToken,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    await _saveAll(rows);
+    return true;
+  }
+
   /// Returns `true` when a new application is stored.
   Future<bool> applyToListing(
     String listingId,
@@ -145,7 +194,10 @@ class ApplicationService {
     }
     await ensureLoaded();
 
-    final userId = ProfileData.text(session['supabase_user_id']);
+    var userId = ProfileData.text(session['supabase_user_id']);
+    if (userId.isEmpty) {
+      userId = AuthService.identityUserId(session);
+    }
     final rows = List<Map<String, dynamic>>.from(_rows);
     final existing = rows.indexWhere(
       (row) =>
@@ -153,19 +205,16 @@ class ApplicationService {
           _rowUserId(row) == userId,
     );
 
+    // One application per seeker + listing — never create a second row.
+    if (existing >= 0) {
+      return Map<String, dynamic>.from(rows[existing]);
+    }
+
     final application = ListingApplication(
-      id: existing >= 0
-          ? rows[existing]['id']?.toString() ??
-              'app-${DateTime.now().millisecondsSinceEpoch}'
-          : 'app-${DateTime.now().millisecondsSinceEpoch}',
+      id: 'app-${DateTime.now().millisecondsSinceEpoch}',
       listingId: listingId,
       userId: userId,
-      createdAt: existing >= 0
-          ? DateTime.tryParse(
-                rows[existing]['created_at']?.toString() ?? '',
-              ) ??
-              DateTime.now()
-          : DateTime.now(),
+      createdAt: DateTime.now(),
       status: ListingApplicationStatus.pending,
     );
 
@@ -179,11 +228,7 @@ class ApplicationService {
       'payload': Map<String, dynamic>.from(session),
     };
 
-    if (existing >= 0) {
-      rows[existing] = payload;
-    } else {
-      rows.add(payload);
-    }
+    rows.add(payload);
     await _saveAll(rows);
     return payload;
   }

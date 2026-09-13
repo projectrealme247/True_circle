@@ -9,7 +9,7 @@ import 'package:true_circle/widgets/property_card.dart';
 import 'package:true_circle/widgets/trust_badge.dart';
 
 void main() {
-  testWidgets('PropertyCard shows full trust badge for host_trust_stage', (
+  testWidgets('PropertyCard does not show Verified User from host_trust_stage', (
     tester,
   ) async {
     final share = SampleListingsDublinV2.items.firstWhere(
@@ -46,21 +46,11 @@ void main() {
       ),
     );
 
-    expect(find.byType(TrustBadge), findsOneWidget);
-    final badgeSize = tester.getSize(find.byType(TrustBadge));
-    expect(
-      badgeSize.height,
-      greaterThanOrEqualTo(22),
-      reason: 'Trust badge should not be vertically clipped',
-    );
-    expect(
-      find.textContaining('Grand'),
-      findsOneWidget,
-    );
-
-    await expectLater(
-      find.byType(PropertyCard),
-      matchesGoldenFile('goldens/property_card_trust_badge.png'),
-    );
+    expect(find.byType(TrustBadge), findsNothing);
+    expect(find.text(TrustBadge.label), findsNothing);
+    expect(find.textContaining('Grand'), findsNothing);
+    expect(find.textContaining('Just Landed'), findsNothing);
+    expect(find.textContaining('Verified Pro'), findsNothing);
+    expect(find.textContaining('ID Verified'), findsNothing);
   });
 }

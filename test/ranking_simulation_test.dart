@@ -382,9 +382,9 @@ void _simulateTower({
     // ignore: avoid_print
     print('   Price: $price | Final: ${m.score}/${m.maxScore} (${m.percentage.round()}%)');
     // ignore: avoid_print
-    print('   Pref score: ${s.preferenceScore.toStringAsFixed(1)} | Circle: ${m.inCircle}');
+    print('   Pref score: ${s.preferenceScore.toStringAsFixed(1)}');
     // ignore: avoid_print
-    print('   Trust: ${m.trustStage.label} | Reasons: ${m.reasons.join(' · ')}');
+    print('   Reasons: ${m.reasons.join(' · ')}');
     // ignore: avoid_print
     print('   Factor breakdown (raw compat, pre-trust):');
     for (final entry in breakdown.entries) {

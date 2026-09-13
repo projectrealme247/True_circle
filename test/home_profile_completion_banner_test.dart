@@ -20,9 +20,9 @@ Map<String, dynamic> incompleteSeekerSession() => {
       'email': 'seeker@example.com',
       'demo_mode': true,
       'full_name': 'Ana',
-      'mother_tongue': 'English',
-      'spoken_languages': ['English', 'Hindi'],
-      'maximum_commute_budget_minutes': 45,
+      'preferred_property_type': 'Share',
+      'seeker_persona': 'professional',
+      // budget / destination / move-in missing → incomplete
     };
 
 void main() {
@@ -77,12 +77,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Complete Profile (30%)'), findsOneWidget);
       expect(
-        find.text('Complete your profile for better matches.'),
+        find.text('Complete your profile to see your best matches'),
         findsOneWidget,
       );
-      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Complete profile'), findsOneWidget);
       expect(find.text('Dismiss'), findsOneWidget);
 
       await expectLater(
@@ -146,7 +145,12 @@ void main() {
         ownedListingCount: 0,
       );
       expect(percent, greaterThan(0));
-      expect(find.textContaining('Complete Profile ($percent%)'), findsOneWidget);
+      expect(percent, lessThan(100));
+      expect(
+        find.text('Complete your profile to see your best matches'),
+        findsOneWidget,
+      );
+      expect(find.text('Complete profile'), findsOneWidget);
     });
 
     testWidgets('session dismiss removes banner from homepage', (tester) async {
@@ -173,10 +177,20 @@ void main() {
       final session = {
         'email': 'ready@example.com',
         'demo_mode': true,
-        'full_name': 'Priya',
-        'detected_city': 'Dublin',
-        'mother_tongue': 'Telugu',
-        'spoken_languages': ['Telugu', 'English'],
+        'role': 'seeker',
+        'preferred_property_type': 'Share',
+        'seeker_persona': 'professional',
+        'budget_min': 1000,
+        'budget_max': 2000,
+        'move_in_window': 'flexible',
+        'commute_profiles': [
+          {
+            'id': 'primary',
+            'commute_method': 'public_transport_walking',
+            'commute_destination_hub_id': 'tcd',
+            'max_commute_minutes': 45,
+          },
+        ],
       };
       expect(ProfileData.isMatchingReady(session), isTrue);
 

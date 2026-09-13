@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/applicant_application_status.dart';
+import '../../models/application_conversation.dart';
 import '../../models/landlord_applicant_card_model.dart';
+import '../../services/application_conversation_service.dart';
 import '../../services/listing_contact_service.dart';
-import '../trust_tier_badge.dart';
 import 'affordability_multiplier_chip.dart';
 import 'landlord_dashboard_theme.dart';
-import 'lifestyle_match_score_ring.dart';
+import 'landlord_decision_summary_panel.dart';
+import 'landlord_embedded_conversation.dart';
+import 'landlord_trust_tier_pill.dart';
 
 /// Split two-column pipeline: applicant preview feed + passport workspace.
 class LandlordPipelineWorkspace extends StatelessWidget {
@@ -233,6 +236,36 @@ class _PreviewCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  ListenableBuilder(
+                    listenable: applicationConversationService,
+                    builder: (context, _) {
+                      final unread =
+                          applicationConversationService.unreadCount(
+                        applicationId: applicant.applicationId,
+                        role: ApplicationParticipantRole.host,
+                      );
+                      if (unread <= 0) return const SizedBox.shrink();
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: LandlordDashboardTheme.accent,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '$unread',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     '${applicant.matchPercent}% Match',
                     style: const TextStyle(
@@ -268,8 +301,8 @@ class _PreviewCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 10),
-              TrustTierBadge(
-                tier: applicant.trustTier,
+              LandlordTrustTierPill(
+                isVerified: applicant.isVerifiedUser,
                 compact: true,
               ),
             ],
@@ -372,17 +405,17 @@ class _ApplicantPassport extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Applicant Passport',
+                    'Decision summary',
                     style: LandlordDashboardTheme.cardSubtext().copyWith(
                       fontSize: 12,
                       color: LandlordDashboardTheme.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  _ScoreSplitSection(applicant: applicant),
                   const SizedBox(height: 20),
-                  _AffordabilityProfileCard(
-                    multiplier: applicant.affordabilityMultiplier,
+                  LandlordDecisionSummaryPanel(applicant: applicant),
+                  LandlordEmbeddedConversation(
+                    key: ValueKey(applicant.applicationId),
+                    applicant: applicant,
                   ),
                   if (_contactUnlocked && hostPrefersWhatsapp) ...[
                     const SizedBox(height: 16),
@@ -430,64 +463,57 @@ class _ApplicantPassport extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             decoration: const BoxDecoration(
               border: Border(
                 top: BorderSide(color: LandlordDashboardTheme.border),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
               children: [
-                SizedBox(
-                  width: 180,
-                  height: 44,
-                  child: OutlinedButton(
-                    onPressed: loading
-                        ? null
-                        : () => onArchive(applicant),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: LandlordDashboardTheme.textSecondary,
-                      side: const BorderSide(
-                        color: LandlordDashboardTheme.border,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text(
-                      'Archive',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
+                FilledButton(
+                  onPressed: loading ||
+                          applicant.status != ApplicantApplicationStatus.pending
+                      ? null
+                      : () => onInvite(applicant),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: LandlordDashboardTheme.accent,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(128, 40),
                   ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 180,
-                  height: 44,
-                  child: FilledButton(
-                    onPressed: loading ? null : () => onInvite(applicant),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: LandlordDashboardTheme.accent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: loading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Invite Match',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                  child: loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
                           ),
+                        )
+                      : const Text('Invite viewing'),
+                ),
+                OutlinedButton(
+                  onPressed: loading
+                      ? null
+                      : () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Offer flow coming soon.'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                  child: const Text('Offer'),
+                ),
+                OutlinedButton(
+                  onPressed: loading ? null : () => onArchive(applicant),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: LandlordDashboardTheme.textSecondary,
                   ),
+                  child: const Text('Reject'),
                 ),
               ],
             ),
@@ -545,324 +571,6 @@ class _StatusBadge extends StatelessWidget {
           fontWeight: FontWeight.w600,
           color: LandlordDashboardTheme.textSecondary,
         ),
-      ),
-    );
-  }
-}
-
-class _ScoreSplitSection extends StatelessWidget {
-  const _ScoreSplitSection({required this.applicant});
-
-  final LandlordApplicantCardModel applicant;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stacked = constraints.maxWidth < 520;
-        final matchMetrics = MatchBreakdownMetrics.forApplicant(applicant);
-        final verifyTokens = TrustVerificationTokens.forTier(applicant.trustTier);
-
-        final matchPanel = _Panel(
-          title: 'Match Breakdown',
-          expandContent: !stacked,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: stacked ? MainAxisSize.min : MainAxisSize.max,
-            children: [
-              MatchScoreWithAffordabilityChip(
-                percent: applicant.matchPercent,
-                affordabilityMultiplier: applicant.affordabilityMultiplier,
-                ringSize: 56,
-                stackChip: true,
-              ),
-              const SizedBox(height: 14),
-              for (var i = 0; i < matchMetrics.length; i++)
-                Padding(
-                  padding: EdgeInsets.only(
-                    bottom: i == matchMetrics.length - 1 ? 0 : 10,
-                  ),
-                  child: _MicroMetricTile(
-                    emoji: matchMetrics[i].emoji,
-                    title: matchMetrics[i].title,
-                    subtitle: matchMetrics[i].subtitle,
-                  ),
-                ),
-            ],
-          ),
-        );
-        final verifyPanel = _Panel(
-          title: 'Cryptographic verification tokens',
-          expandContent: !stacked,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: stacked ? MainAxisSize.min : MainAxisSize.max,
-            children: [
-              TrustTierBadge(
-                tier: applicant.trustTier,
-              ),
-              const SizedBox(height: 14),
-              for (var i = 0; i < verifyTokens.length; i++)
-                Padding(
-                  padding: EdgeInsets.only(
-                    bottom: i == verifyTokens.length - 1 ? 0 : 10,
-                  ),
-                  child: _MicroMetricTile(
-                    emoji: verifyTokens[i].emoji,
-                    title: verifyTokens[i].title,
-                    subtitle: verifyTokens[i].subtitle,
-                  ),
-                ),
-              if (applicant.languages.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Languages: ${applicant.languages.join(' · ')}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF94A3B8),
-                    height: 1.35,
-                  ),
-                ),
-              ],
-              if (!stacked) const Spacer(),
-              if (stacked) const SizedBox(height: 10),
-              Text(
-                'Raw document uploads are withheld per Irish Data Protection guidelines. Only verification tokens are surfaced.',
-                style: LandlordDashboardTheme.cardSubtext().copyWith(
-                  fontSize: 10,
-                  fontStyle: FontStyle.italic,
-                  color: const Color(0xFF94A3B8),
-                ),
-              ),
-            ],
-          ),
-        );
-
-        if (stacked) {
-          return Column(
-            children: [
-              matchPanel,
-              const SizedBox(height: 12),
-              verifyPanel,
-            ],
-          );
-        }
-
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: matchPanel),
-              const SizedBox(width: 12),
-              Expanded(child: verifyPanel),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class MatchBreakdownMetricItem {
-  const MatchBreakdownMetricItem({
-    required this.emoji,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final String emoji;
-  final String title;
-  final String subtitle;
-}
-
-abstract final class MatchBreakdownMetrics {
-  static List<MatchBreakdownMetricItem> forApplicant(
-    LandlordApplicantCardModel applicant,
-  ) {
-    final multiplierLabel =
-        applicant.affordabilityMultiplier.toStringAsFixed(1);
-
-    return [
-      const MatchBreakdownMetricItem(
-        emoji: '🏡',
-        title: 'Lifestyle Compatibility',
-        subtitle: 'Shared household rhythm & vibe alignment',
-      ),
-      const MatchBreakdownMetricItem(
-        emoji: '🍳',
-        title: 'Shared Kitchen Culture',
-        subtitle: 'Co-living cooking window & space match',
-      ),
-      MatchBreakdownMetricItem(
-        emoji: '💼',
-        title: 'Financial Security',
-        subtitle:
-            'Salary exceeds ${multiplierLabel}x rent target baseline',
-      ),
-    ];
-  }
-}
-
-class _MicroMetricTile extends StatelessWidget {
-  const _MicroMetricTile({
-    required this.emoji,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final String emoji;
-  final String title;
-  final String subtitle;
-
-  static const _titleColor = Color(0xFF1E293B);
-  static const _subtitleColor = Color(0xFF64748B);
-  static const _emojiStyle = TextStyle(fontSize: 18, height: 1.1);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: LandlordDashboardTheme.commuteTint,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: LandlordDashboardTheme.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(emoji, style: _emojiStyle),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _titleColor,
-                    height: 1.25,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: _subtitleColor,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Panel extends StatelessWidget {
-  const _Panel({
-    required this.title,
-    required this.child,
-    this.expandContent = false,
-  });
-
-  final String title;
-  final Widget child;
-  final bool expandContent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: LandlordDashboardTheme.canvas,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: LandlordDashboardTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: LandlordDashboardTheme.cardLabel()),
-          const SizedBox(height: 12),
-          if (expandContent) Expanded(child: child) else child,
-        ],
-      ),
-    );
-  }
-}
-
-class _AffordabilityProfileCard extends StatelessWidget {
-  const _AffordabilityProfileCard({required this.multiplier});
-
-  final double multiplier;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: LandlordDashboardTheme.commuteTint,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: LandlordDashboardTheme.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: LandlordDashboardTheme.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: LandlordDashboardTheme.border),
-            ),
-            child: const Icon(
-              Icons.euro_rounded,
-              size: 20,
-              color: LandlordDashboardTheme.textSecondary,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Gross income coverage',
-                  style: LandlordDashboardTheme.cardLabel().copyWith(
-                    fontSize: 13,
-                    color: LandlordDashboardTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${multiplier.toStringAsFixed(1)}x Affordability Multiplier',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: LandlordDashboardTheme.textPrimary,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Verified gross income relative to monthly rent target.',
-                  style: LandlordDashboardTheme.cardSubtext().copyWith(
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

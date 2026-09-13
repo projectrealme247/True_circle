@@ -11,10 +11,12 @@ class HomeExploreHeader extends StatelessWidget {
   const HomeExploreHeader({
     super.key,
     required this.onLogoTap,
+    this.primaryNav,
     this.trailing,
   });
 
   final VoidCallback onLogoTap;
+  final Widget? primaryNav;
   final Widget? trailing;
 
   @override
@@ -62,6 +64,19 @@ class HomeExploreHeader extends StatelessWidget {
                 ),
               ),
             ),
+            if (primaryNav != null) ...[
+              const SizedBox(width: 16),
+              Flexible(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: primaryNav!,
+                  ),
+                ),
+              ),
+            ],
             const Spacer(),
             if (trailing != null)
               Flexible(

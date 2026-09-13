@@ -20,8 +20,6 @@ class CommuteDestinationField extends StatefulWidget {
     required this.selectedHub,
     required this.onHubSelected,
     this.onCleared,
-    this.onCommuteDestinationUnknown,
-    this.commuteDestinationUnknown = false,
     this.persona,
     this.label = 'Popular daily destinations',
     this.occupantType,
@@ -36,8 +34,6 @@ class CommuteDestinationField extends StatefulWidget {
   final DublinCommuterHub? selectedHub;
   final ValueChanged<DublinCommuterHub> onHubSelected;
   final VoidCallback? onCleared;
-  final VoidCallback? onCommuteDestinationUnknown;
-  final bool commuteDestinationUnknown;
   final SeekerPersona? persona;
   final String label;
 
@@ -54,7 +50,7 @@ class CommuteDestinationField extends StatefulWidget {
   /// When false, only the custom destination search field is shown.
   final bool showPresets;
 
-  /// When set, replaces persona-filtered presets (family driver overrides).
+  /// When set, replaces persona-filtered presets.
   final List<SeekerMacroPreset>? presetOverride;
 
   /// Seeker polish: 44px search field, quieter chrome.
@@ -559,17 +555,6 @@ class _CommuteDestinationFieldState extends State<CommuteDestinationField> {
             seekerOptionStyle: true,
           ),
         ],
-        SizedBox(height: rowGap),
-        OnboardingEqualGridRow(
-          labels: const ['Not sure yet'],
-          selectedIndices: widget.commuteDestinationUnknown ? {0} : const {},
-          onSelected: widget.enabled
-              ? (_) => widget.onCommuteDestinationUnknown?.call()
-              : (_) {},
-          compactLabel: true,
-          dense: widget.compactPresets,
-          seekerOptionStyle: true,
-        ),
       ],
     );
   }

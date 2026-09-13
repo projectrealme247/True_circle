@@ -7,10 +7,10 @@ import 'listing_sample_images.dart';
 import 'profile_data.dart';
 import 'rental_date_format.dart';
 import 'address_privacy.dart';
+import '../models/listing_creation_form_models.dart';
 import '../services/commute_scoring_service.dart';
 import 'student_track_preference.dart';
 import 'target_search_areas.dart';
-import 'viewer_profile.dart';
 
 /// Compatibility between viewer profile and a listing host.
 class ListingProfileMatch {
@@ -29,6 +29,16 @@ class ListingProfileMatch {
 
 /// Safe accessors and normalization for listing objects in localStorage.
 abstract final class ListingData {
+  /// Host declaration required before publish (Phase 1 listing accountability).
+  static const listingAuthorizationConfirmedKey =
+      'listing_authorization_confirmed';
+
+  static const listingAuthorizationDeclaration =
+      'I am authorised to advertise this property/room and the information provided is accurate.';
+
+  /// First-publish timestamp (ISO-8601). Listing Freshness Phase 1.
+  static const publishedAtKey = 'published_at';
+
   static const propertyTypes = ['Rent', 'Buy', 'Share'];
 
   /// Alias for forms — property listing mode (Rent / Buy / Share).
@@ -98,6 +108,41 @@ abstract final class ListingData {
   static String availableFromDisplayLabel(Map<String, dynamic> item) =>
       RentalDateFormat.formatRentalAvailabilityDate(text(item['available_from']));
 
+  /// Parsed [published_at], or null when missing / unparseable.
+  static DateTime? publishedAt(Map<String, dynamic> item) =>
+      RentalDateFormat.parseDateTime(text(item[publishedAtKey]));
+
+  /// Property-card freshness chip — empty when [published_at] is absent.
+  ///
+  /// `Listed today` | `Listed X days ago` | `Listed 60+ days ago`
+  static String listedRelativeChipLabel(
+    Map<String, dynamic> item, {
+    DateTime? now,
+  }) {
+    final at = publishedAt(item);
+    if (at == null) return '';
+
+    final anchor = now ?? DateTime.now();
+    final startToday = DateTime(anchor.year, anchor.month, anchor.day);
+    final startListed = DateTime(at.year, at.month, at.day);
+    final days = startToday.difference(startListed).inDays;
+
+    if (days <= 0) return 'Listed today';
+    if (days >= 60) return 'Listed 60+ days ago';
+    return 'Listed $days days ago';
+  }
+
+  /// Detail-page line — empty when [published_at] is absent.
+  ///
+  /// `Listed on DD MMM YYYY`
+  static String listedOnDisplayLabel(Map<String, dynamic> item) {
+    final at = publishedAt(item);
+    if (at == null) return '';
+    final formatted = RentalDateFormat.formatListedOnDate(at);
+    if (formatted.isEmpty) return '';
+    return 'Listed on $formatted';
+  }
+
   /// Parses numeric amount from price strings like `22000/month` or `₹25,000/month`.
   static int? listingPriceAmount(Map<String, dynamic> item) {
     final raw = text(item['price']);
@@ -117,9 +162,25 @@ abstract final class ListingData {
     return text(item['owner_city']);
   }
 
+  /// Canonical marketplace tower: `Rent` | `Buy` | `Share`.
+  ///
+  /// Prefers [listing_type], then [type], then [marketplace_category].
+  /// Used by discovery tower filtering — must stay aligned with [listingType].
   static String propertyType(Map<String, dynamic> item) {
+    final listing = text(item['listing_type']);
+    if (propertyTypes.contains(listing)) return listing;
+
     final raw = text(item['type']);
     if (propertyTypes.contains(raw)) return raw;
+
+    final cat = text(item['marketplace_category']).toLowerCase();
+    if (cat.contains('shared')) return 'Share';
+    if (cat.contains('independent') ||
+        cat.contains('full_rental') ||
+        cat == 'full_rental') {
+      return 'Rent';
+    }
+
     return 'Rent';
   }
 
@@ -151,12 +212,6 @@ abstract final class ListingData {
     final mother = text(item['hostMotherTongue']);
     if (mother.isNotEmpty) return mother;
     return text(item['owner_mother_tongue']);
-  }
-
-  static String hostNativePlace(Map<String, dynamic> item) {
-    final native = text(item['hostNativePlace']);
-    if (native.isNotEmpty) return native;
-    return text(item['host_native_place']);
   }
 
   static String hostFoodPreference(Map<String, dynamic> item) {
@@ -392,7 +447,22 @@ abstract final class ListingData {
       if (occupant.isEmpty) occupant = 'Working Professionals';
       property = 'Rent';
     } else if (!propertyTypes.contains(property)) {
-      property = 'Rent';
+      // Prefer explicit listing_type / marketplace_category over default Rent.
+      final listing = text(raw['listing_type']);
+      if (propertyTypes.contains(listing)) {
+        property = listing;
+      } else {
+        final cat = text(raw['marketplace_category']).toLowerCase();
+        if (cat.contains('shared')) {
+          property = 'Share';
+        } else if (cat.contains('independent') ||
+            cat.contains('full_rental') ||
+            cat == 'full_rental') {
+          property = 'Rent';
+        } else {
+          property = 'Rent';
+        }
+      }
     }
 
     return {'type': property, 'occupantType': occupant};
@@ -656,12 +726,8 @@ abstract final class ListingData {
     return '$mins-min to Luas';
   }
 
-  /// Supabase `listing_type` when present, else legacy `type`.
-  static String listingType(Map<String, dynamic> item) {
-    final explicit = text(item['listing_type']);
-    if (explicit.isNotEmpty && propertyTypes.contains(explicit)) return explicit;
-    return propertyType(item);
-  }
+  /// Same canonical tower as [propertyType] (listing_type → type → category).
+  static String listingType(Map<String, dynamic> item) => propertyType(item);
 
   static bool isIndependentRental(Map<String, dynamic> item) =>
       listingType(item) == 'Rent';
@@ -672,6 +738,8 @@ abstract final class ListingData {
   static bool hasBikeStorage(Map<String, dynamic> item) {
     if (item['secure_bike_storage'] == true) return true;
     if (item['has_bike_storage'] == true) return true;
+    final features = ListingParkingFeature.parseFeatures(item);
+    if (features.contains(ListingParkingFeature.bikeParking)) return true;
     return false;
   }
 
@@ -680,29 +748,35 @@ abstract final class ListingData {
   /// True when the host explicitly provides parking (not no_parking / false flag).
   static bool parkingAvailable(Map<String, dynamic> item) {
     if (item['parking_available'] == false) return false;
+    final features = ListingParkingFeature.parseFeatures(item);
+    if (features.isNotEmpty) return true;
     final type = parkingType(item).toLowerCase();
-    if (type == 'no_parking') return false;
-    if (type.contains('free') || type.contains('paid')) return true;
-    return item['parking_available'] == true;
+    if (type.isEmpty) return item['parking_available'] == true;
+    if (type == 'no_parking' || type == 'not_available') return false;
+    return true;
   }
 
   static String parkingDisplayLabel(Map<String, dynamic> item) {
+    final features = ListingParkingFeature.parseFeatures(item);
+    if (features.isNotEmpty) {
+      return features.map((f) => f.label).join(' · ');
+    }
     return switch (parkingType(item)) {
-      'free_dedicated_parking' => 'Free Dedicated Parking',
-      'paid_on_street_parking' => 'Paid / On-Street Parking',
-      'no_parking' => 'No Parking',
+      'not_available' || 'no_parking' => 'Not Available',
+      'on_street' || 'paid_on_street_parking' => 'On Street',
+      'driveway' || 'free_dedicated_parking' => 'Driveway',
+      'garage' => 'Garage',
+      'secure_bike_parking' || 'bike_parking' => 'Secure Bike Parking',
+      'resident_car_parking' || 'resident_car' => 'Resident Car Parking',
       _ => '',
     };
   }
 
   /// Short parking label for listing-detail anatomy row.
   static String parkingHighlightLabel(Map<String, dynamic> item) {
-    return switch (parkingType(item)) {
-      'free_dedicated_parking' => 'Parking Included',
-      'paid_on_street_parking' => 'Paid Parking',
-      'no_parking' => 'No Parking',
-      _ => 'Parking',
-    };
+    final label = parkingDisplayLabel(item);
+    if (label.isEmpty) return 'Parking';
+    return label;
   }
 
   /// Bed count label for listing-detail anatomy row (e.g. "2 Beds").
@@ -719,17 +793,16 @@ abstract final class ListingData {
     return 'Bedroom Count Not Listed';
   }
 
-  /// Whether the listing copy indicates RTB registration.
-  static bool isRtbRegistered(Map<String, dynamic> item) {
-    if (item['rtb_registered'] == true) return true;
-    final blob = '${description(item)} ${title(item)}'.toLowerCase();
-    return blob.contains('rtb registered') || blob.contains('rtb-registered');
-  }
-
   /// Security deposit line for detail header (null when unknown).
   static String? securityDepositLabel(Map<String, dynamic> item) {
     final explicit = text(item['security_deposit']);
-    if (explicit.isNotEmpty) return explicit;
+    if (explicit.isNotEmpty) {
+      final digits = explicit.replaceAll(RegExp(r'[^\d]'), '');
+      if (digits.isNotEmpty && RegExp(r'^[€₹$]?\s?[\d,]+$').hasMatch(explicit.trim())) {
+        return 'Deposit €$digits';
+      }
+      return explicit;
+    }
 
     final desc = description(item);
     final lower = desc.toLowerCase();
@@ -760,14 +833,6 @@ abstract final class ListingData {
     final label = parkingDisplayLabel(item);
     if (label.isNotEmpty) return label;
     return 'Ask Host About Parking';
-  }
-
-  /// RTB status copy for entire-place detail matrix.
-  static String rtbMatrixLabel(Map<String, dynamic> item) {
-    if (isRtbRegistered(item)) return 'RTB Registered Landlord';
-    final status = text(item['rtb_status']).toLowerCase();
-    if (status == 'not_registered') return 'RTB Not Registered';
-    return 'RTB Status Not Provided';
   }
 
   /// Walk/transit profile parsed from listing copy when proximity data is absent.
@@ -1001,9 +1066,13 @@ abstract final class ListingData {
 
   static String _parkingSubtextSegment(Map<String, dynamic> item) {
     return switch (parkingType(item)) {
-      'free_dedicated_parking' => '🅿️ Free Parking',
-      'paid_on_street_parking' => '🅿️ Paid Parking',
-      _ => '',
+      'free_dedicated_parking' || 'driveway' || 'garage' => '🅿️ Free Parking',
+      'paid_on_street_parking' || 'on_street' => '🅿️ Paid Parking',
+      'bike_parking' || 'secure_bike_parking' => '🚲 Bike Parking',
+      'resident_car' || 'resident_car_parking' => '🅿️ Resident Parking',
+      _ => ListingParkingFeature.parseFeatures(item).isNotEmpty
+          ? '🅿️ Parking'
+          : '',
     };
   }
 
@@ -1260,12 +1329,6 @@ abstract final class ListingData {
     return null;
   }
 
-  static bool _segmentDuplicatesCircleBanner(String segment, bool inCircle) {
-    if (!inCircle) return false;
-    final lower = segment.toLowerCase();
-    return lower.contains('in your circle');
-  }
-
   static bool _segmentRedundantWithChips(String segment, Set<String> chipLabels) {
     final lower = segment.toLowerCase();
 
@@ -1293,7 +1356,6 @@ abstract final class ListingData {
   /// Bottom-of-card intelligence line (joined with ·).
   static String cardDynamicSubtext(
     Map<String, dynamic> item, {
-    bool inCircle = false,
     Map<String, dynamic>? viewerProfile,
     Set<String>? excludeChipLabels,
   }) {
@@ -1312,7 +1374,6 @@ abstract final class ListingData {
     } else if (isRoomShare(item)) {
       void addSegment(String segment) {
         if (segment.isEmpty) return;
-        if (_segmentDuplicatesCircleBanner(segment, inCircle)) return;
         if (_segmentRedundantWithChips(segment, chipLabels)) return;
         segments.add(segment);
       }
@@ -1359,13 +1420,6 @@ abstract final class ListingData {
     return v is int ? v : 1;
   }
 
-  static double hostTrustMultiplier(Map<String, dynamic> item) {
-    final v = item['host_trust_multiplier'];
-    if (v is double) return v;
-    if (v is int) return v.toDouble();
-    return ViewerProfile.trustMultiplierForStage(hostTrustStage(item));
-  }
-
   static String? hostLinkedinBadge(Map<String, dynamic> item) {
     final v = text(item['host_linkedin_badge']);
     return v.isEmpty ? null : v;
@@ -1393,8 +1447,26 @@ abstract final class ListingData {
   static bool smokingAllowed(Map<String, dynamic> item) =>
       item['smoking_allowed'] == true;
 
-  static bool petsAllowed(Map<String, dynamic> item) =>
-      item['pets_allowed'] == true;
+  static bool petsAllowed(Map<String, dynamic> item) {
+    final policy = text(item['pets_policy']).toLowerCase();
+    if (policy == 'allowed') return true;
+    if (policy == 'not_allowed' || policy == 'case_by_case') return false;
+    if (item['pets_allowed'] == true) return true;
+    final flags = item['lifestyle_flags'];
+    if (flags is List && flags.map((e) => e.toString()).contains('no_pets')) {
+      return false;
+    }
+    return item['pets_allowed'] == true;
+  }
+
+  static String petsPolicyLabel(Map<String, dynamic> item) {
+    return switch (text(item['pets_policy']).toLowerCase()) {
+      'allowed' => 'Allowed',
+      'not_allowed' => 'Not Allowed',
+      'case_by_case' => 'Case-by-Case',
+      _ => petsAllowed(item) ? 'Allowed' : 'Not Allowed',
+    };
+  }
 
   static bool drinkingAllowed(Map<String, dynamic> item) =>
       item['drinking_allowed'] == true;
@@ -1419,7 +1491,6 @@ abstract final class ListingData {
         'hostCity': '',
         'hostLanguage': '',
         'hostMotherTongue': '',
-        'hostNativePlace': '',
         'hostFoodPreference': '',
       };
     }
@@ -1427,7 +1498,6 @@ abstract final class ListingData {
     final name = ProfileData.text(profile['full_name']);
     final city = ProfileData.text(profile['detected_city']);
     final mother = ProfileData.text(profile['mother_tongue']);
-    final nativePlace = ProfileData.text(profile['native_place']);
     final food = ProfileData.text(profile['food_preference']);
     final spoken = ProfileData.languageList(profile['spoken_languages']);
     final language = spoken.isNotEmpty ? spoken.join(', ') : mother;
@@ -1437,7 +1507,6 @@ abstract final class ListingData {
       'hostCity': city,
       'hostLanguage': language,
       'hostMotherTongue': mother,
-      'hostNativePlace': nativePlace,
       'hostFoodPreference': food,
     };
   }
@@ -1560,7 +1629,8 @@ abstract final class ListingData {
     final flags = lifestyleFlags(raw);
     final houseLanguages = languagesSpokenInHouse(raw);
     final parking = parkingType(raw);
-    final resolvedListingType = listingType({
+    // Single tower token for type + listing_type (Share must not collapse to Rent).
+    final canonicalTower = propertyType({
       ...raw,
       'type': resolved['type']!,
     });
@@ -1575,7 +1645,7 @@ abstract final class ListingData {
         : listingId.toString();
     // Always refresh network cover when there are no uploads (fixes stale 404 URLs).
     final resolvedCoverUrl = images.isEmpty
-        ? ListingSampleImages.urlFor(listingIdKey, resolved['type']!)
+        ? ListingSampleImages.urlFor(listingIdKey, canonicalTower)
         : '';
 
     final foodLabel = foodPreferenceLabel(raw);
@@ -1590,16 +1660,16 @@ abstract final class ListingData {
           : listingId,
       'title': title(raw),
       'price': price(raw),
+      if (text(raw['security_deposit']).isNotEmpty)
+        'security_deposit': text(raw['security_deposit']),
       'location': location(raw),
-      'type': resolved['type']!,
-      'listing_type': resolvedListingType,
+      'type': canonicalTower,
+      'listing_type': canonicalTower,
       'description': description(raw),
       'hostName': hostName(raw),
       'hostCity': hostCity(raw),
       'hostLanguage': hostLanguage(raw),
       'hostMotherTongue': hostMotherTongue(raw),
-      if (hostNativePlace(raw).isNotEmpty)
-        'hostNativePlace': hostNativePlace(raw),
       if (canonicalFood.isNotEmpty) ...{
         'hostFoodPreference': canonicalFood,
         'foodPreference': canonicalFood,
@@ -1652,12 +1722,20 @@ abstract final class ListingData {
         'property_sub_type': ProfileData.text(raw['property_sub_type']),
       if (ProfileData.text(raw['available_from']).isNotEmpty)
         'available_from': ProfileData.text(raw['available_from']),
+      if (ProfileData.text(raw[publishedAtKey]).isNotEmpty)
+        publishedAtKey: ProfileData.text(raw[publishedAtKey]),
+      if (raw[listingAuthorizationConfirmedKey] == true)
+        listingAuthorizationConfirmedKey: true,
       if (ProfileData.text(raw['sublet_duration_value']).isNotEmpty)
         'sublet_duration_value': ProfileData.text(raw['sublet_duration_value']),
       if (ProfileData.text(raw['sublet_duration_unit']).isNotEmpty)
         'sublet_duration_unit': ProfileData.text(raw['sublet_duration_unit']),
       if (raw['neighborhood_proximity'] is Map)
-        'neighborhood_proximity': raw['neighborhood_proximity'],
+        'neighborhood_proximity':
+            Map<String, dynamic>.from(raw['neighborhood_proximity'] as Map),
+      if (raw['neighborhood_lifestyle_tags'] is List)
+        'neighborhood_lifestyle_tags':
+            List<dynamic>.from(raw['neighborhood_lifestyle_tags'] as List),
       if (ProfileData.text(raw['shared_room_architecture']).isNotEmpty)
         'shared_room_architecture':
             ProfileData.text(raw['shared_room_architecture']),

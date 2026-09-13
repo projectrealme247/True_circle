@@ -7,6 +7,7 @@ import '../services/listings_storage_service.dart';
 import '../services/replacement_workflow_service.dart';
 import '../utils/numeric_bounds.dart';
 import 'profile_storage_service.dart';
+import 'qa_test_auth_service.dart';
 import 'user_session_store.dart';
 
 /// Unified marketplace viewport state: active space + derived workflows.
@@ -41,7 +42,9 @@ class MarketplaceContextNotifier extends ChangeNotifier {
         MarketplaceSpace.fromSession(_session);
 
     _ownedListings = await ListingsStorageService.ownedByCurrentUser(_session);
-    if (DublinMockData.useMockHarness && _ownedListings.isEmpty) {
+    if (DublinMockData.useMockHarness &&
+        QaTestAuthService.allowMockHostListings(_session) &&
+        _ownedListings.isEmpty) {
       _ownedListings = DublinMockData.ownedListingsForHost();
     }
     _replacementProgress =

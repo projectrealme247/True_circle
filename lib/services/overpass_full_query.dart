@@ -42,7 +42,10 @@ ${OverpassConfig.queryHeader(OverpassQueryType.full)};
 out center;
 ''';
 
-/// Reduced query when the full batch is slow or returns nothing useful.
+/// Reduced query when the full batch is slow, empty, or lifestyle-thin.
+///
+/// Lifestyle selectors are copied verbatim from [buildFullOverpassQuery] so the
+/// existing parser classifies them without new category logic.
 String buildEssentialsOverpassQuery(String latStr, String lonStr) => '''
 ${OverpassConfig.queryHeader(OverpassQueryType.essentials)};
 (
@@ -53,6 +56,18 @@ ${OverpassConfig.queryHeader(OverpassQueryType.essentials)};
   node["railway"~"tram_stop|station|halt"](around:3000,$latStr,$lonStr);
   node["highway"="bus_stop"](around:2500,$latStr,$lonStr);
   node["shop"~"asian|asian_supermarket|oriental"](around:2500,$latStr,$lonStr);
+  node["amenity"~"pub|bar|biergarten"](around:1200,$latStr,$lonStr);
+  node["amenity"="atm"](around:1000,$latStr,$lonStr);
+  node["amenity"="bank"](around:1000,$latStr,$lonStr);
+  node["shop"~"pizza"](around:1500,$latStr,$lonStr);
+  node["amenity"~"fast_food"](around:1500,$latStr,$lonStr);
+  node["leisure"~"fitness_centre|sports_centre"](around:1500,$latStr,$lonStr);
+  way["leisure"~"fitness_centre|sports_centre"](around:1500,$latStr,$lonStr);
+  node["leisure"="park"](around:1200,$latStr,$lonStr);
+  way["leisure"="park"](around:1200,$latStr,$lonStr);
+  node["amenity"="pharmacy"](around:1000,$latStr,$lonStr);
+  node["amenity"="cafe"](around:800,$latStr,$lonStr);
+  node["amenity"~"restaurant"](around:1000,$latStr,$lonStr);
 );
 out center;
 ''';

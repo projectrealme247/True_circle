@@ -1,39 +1,53 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
-import '../models/applicant_trust_tier.dart';
+import '../services/trust_service.dart';
 import '../theme/trust_tier_design.dart';
-import '../utils/viewer_profile.dart';
 
-/// Single source of truth for Just Landed / Grand / Sound trust badge pills.
+/// Seeker-facing verified-user chip — ✅ Verified User when contact unlock is met.
 class TrustBadge extends StatelessWidget {
   const TrustBadge({
     super.key,
-    required this.tier,
+    required this.isVerified,
     this.compact = false,
     this.tooltip,
-    this.labelSuffix = '',
     this.selected = false,
     this.onTap,
     this.showTooltip = true,
     this.outlined = false,
   });
 
-  final ApplicantTrustTier tier;
+  static const label = '✅ Verified User';
+  static const tooltipMessage = 'This profile has completed verification.';
+
+  final bool isVerified;
   final bool compact;
   final String? tooltip;
-  final String labelSuffix;
   final bool selected;
   final VoidCallback? onTap;
   final bool showTooltip;
   final bool outlined;
 
-  factory TrustBadge.fromTrustStage(
-    TrustStage stage, {
+  /// Host listings must not show Verified User from seeker/host trust stamps.
+  factory TrustBadge.fromHostTrustStage(
+    int hostTrustStage, {
+    Key? key,
+    bool compact = true,
+    bool hostVerifiedBadge = false,
+  }) {
+    return TrustBadge(
+      key: key,
+      isVerified: false,
+      compact: compact,
+    );
+  }
+
+  /// Session-based badge — same criteria as [TrustService.canContact].
+  factory TrustBadge.fromSession(
+    Map<String, dynamic>? session, {
     Key? key,
     bool compact = false,
     String? tooltip,
-    String labelSuffix = '',
     bool selected = false,
     VoidCallback? onTap,
     bool showTooltip = true,
@@ -41,10 +55,9 @@ class TrustBadge extends StatelessWidget {
   }) {
     return TrustBadge(
       key: key,
-      tier: TrustTierDesign.fromTrustStage(stage),
+      isVerified: TrustService.meetsContactVerification(session),
       compact: compact,
       tooltip: tooltip,
-      labelSuffix: labelSuffix,
       selected: selected,
       onTap: onTap,
       showTooltip: showTooltip,
@@ -52,56 +65,10 @@ class TrustBadge extends StatelessWidget {
     );
   }
 
-  factory TrustBadge.fromHostTrustStage(
-    int hostTrustStage, {
-    Key? key,
-    bool compact = true,
-    String labelSuffix = ' host',
-  }) {
-    return TrustBadge(
-      key: key,
-      tier: tierFromHostTrustStage(hostTrustStage),
-      compact: compact,
-      labelSuffix: labelSuffix,
-    );
-  }
-
-  static ApplicantTrustTier tierFromHostTrustStage(int hostTrustStage) =>
-      switch (hostTrustStage) {
-        3 => ApplicantTrustTier.sound,
-        2 => ApplicantTrustTier.grand,
-        _ => ApplicantTrustTier.justLanded,
-      };
-
-  static String labelFor(ApplicantTrustTier tier) =>
-      TrustTierDesign.labelFor(tier);
-
-  static String emojiLabelFor(ApplicantTrustTier tier) =>
-      TrustTierDesign.trustScaleEmojiLabel(tier);
-
-  static String tooltipFor(ApplicantTrustTier tier) => switch (tier) {
-        ApplicantTrustTier.justLanded =>
-          'Just Landed tier requires:\n'
-          'Verified arrival intent signal\n'
-          'Pre-arrival housing circle profile\n'
-          'Funding capacity token on file',
-        ApplicantTrustTier.grand =>
-          'Grand tier requires:\n'
-          'Active .ac.ie institutional domain check\n'
-          'Identity and document hash verification\n'
-          'On-campus student status confirmation',
-        ApplicantTrustTier.sound =>
-          'Sound tier requires:\n'
-          'Gov API identity match token\n'
-          'Income verified >3.5x rent target\n'
-          'Fully vouched by community references',
-      };
-
-  String get _label =>
-      '${TrustTierDesign.trustScaleEmojiLabel(tier)}$labelSuffix';
-
   @override
   Widget build(BuildContext context) {
+    if (!isVerified) return const SizedBox.shrink();
+
     const bg = TrustTierDesign.trustScaleCapsuleBg;
     const text = TrustTierDesign.trustScaleCapsuleText;
     final badge = Container(
@@ -117,7 +84,7 @@ class TrustBadge extends StatelessWidget {
                 : null),
       ),
       child: Text(
-        _label,
+        label,
         style: TrustTierDesign.trustScaleLabelStyle(
           compact: compact,
           color: text,
@@ -141,11 +108,10 @@ class TrustBadge extends StatelessWidget {
       );
     }
 
-    final message = tooltip ?? tooltipFor(tier);
     if (!showTooltip) return child;
 
     return Tooltip(
-      message: message,
+      message: tooltip ?? tooltipMessage,
       waitDuration: const Duration(milliseconds: 350),
       preferBelow: false,
       child: child,

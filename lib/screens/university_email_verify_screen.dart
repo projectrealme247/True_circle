@@ -7,10 +7,11 @@ import '../services/university_email_verify_service.dart';
 import '../theme/app_typography.dart';
 import '../theme/home_marketplace_theme.dart';
 import '../utils/irish_university_domains.dart';
-import '../utils/viewer_profile.dart';
+import '../utils/profile_data.dart';
 import '../widgets/narrow_form_scroll_body.dart';
+import 'auth_screen.dart';
 
-/// Track A — verify with Irish university email OTP → Stage 3.
+/// Track A — verify with Irish university email OTP.
 class UniversityEmailVerifyScreen extends StatefulWidget {
   const UniversityEmailVerifyScreen({super.key});
 
@@ -108,8 +109,10 @@ class _UniversityEmailVerifyScreenState
 
   @override
   Widget build(BuildContext context) {
-    final alreadyStage3 =
-        TrustService.currentStage().level >= TrustStage.idVerified.level;
+    final session = AuthScreen.currentUserSession;
+    final alreadyUniversityVerified =
+        session?['light_trust_verified'] == true ||
+            ProfileData.text(session?['verified_university_email']).isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -126,16 +129,16 @@ class _UniversityEmailVerifyScreenState
             const SizedBox(height: 8),
             Text(
               'Use your active .ac.ie or university inbox. This unlocks '
-              'Community Verified status and full contact access.',
+              'Verified User status and full contact access.',
               style: AppTypography.detail().copyWith(
                 color: HomeMarketplaceTheme.textSecondary,
               ),
             ),
             const SizedBox(height: 24),
-            if (alreadyStage3 || _verified) ...[
+            if (alreadyUniversityVerified || _verified) ...[
               const _SuccessCard(
-                title: 'Community Verified',
-                subtitle: 'You can contact hosts and publish with full trust.',
+                title: 'Verified User',
+                subtitle: 'You can contact hosts with university email verification.',
               ),
               const SizedBox(height: 16),
               FilledButton(

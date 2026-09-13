@@ -25,14 +25,17 @@ void main() {
   });
 
   group('MockApplicantSeeder', () {
-    test('shared living stream covers all trust tier blocks', () {
+    test('shared living stream is flat with mixed verification states', () {
       final stream = MockApplicantSeeder.sharedLivingStream();
-      expect(stream.blocks, hasLength(3));
-      expect(stream.blocks.map((b) => b.trustTier), [
-        ApplicantTrustTier.sound,
-        ApplicantTrustTier.grand,
-        ApplicantTrustTier.justLanded,
-      ]);
+      expect(stream.blocks, hasLength(1));
+      expect(
+        stream.flattenedApplicants.map((a) => a.trustTier).toSet(),
+        containsAll([
+          ApplicantTrustTier.sound,
+          ApplicantTrustTier.grand,
+          ApplicantTrustTier.justLanded,
+        ]),
+      );
       expect(
         stream.flattenedApplicants.first.customBioPitch,
         isNotEmpty,

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../navigation/home_explore_reset_notifier.dart';
+import '../navigation/home_primary_destination.dart';
 import '../navigation/navigate_after_identity.dart';
 import '../router/app_router.dart';
 
@@ -16,13 +17,18 @@ import '../debug/agent_log.dart';
 import '../debug/debug_session_log.dart';
 import '../services/auth_service.dart';
 import '../services/application_service.dart';
+import '../services/application_conversation_service.dart';
 import '../services/listings_storage_service.dart';
+import '../services/qa_test_auth_service.dart';
 import '../services/marketplace_context_notifier.dart';
 import '../services/profile_state_notifier.dart';
 import '../services/profile_onboarding_repository.dart';
 import '../services/profile_portal_inheritance_service.dart';
 import '../models/listing_application.dart';
+import '../models/applicant_application_status.dart';
 import '../models/marketplace_space.dart';
+import '../widgets/seeker_applications/seeker_application_queue_item.dart';
+import '../widgets/seeker_applications/seeker_application_workspace.dart';
 import '../utils/listing_data.dart';
 import '../utils/listing_match_engine.dart';
 import '../utils/listing_search_intent.dart';
@@ -97,10 +103,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _handledColdStartLanding = false;
   bool _handledListingAddedMessage = false;
   bool _handledPortalWelcome = false;
+  bool _portalWelcomeScheduled = false;
   bool _showWelcomeFeedBanner = false;
   bool _showFirstListingPrompt = false;
   bool _applicationsReady = false;
   int _applicationCount = 0;
+  int _seekerActiveApplicationCount = 0;
   double _averageMatchPercent = 0;
   _HomeTab _selectedTab = _HomeTab.explore;
   /// Guards against [onChanged] firing when text is set programmatically.
@@ -113,8 +121,13 @@ class _HomeScreenState extends State<HomeScreen> {
     profileStateNotifier.addListener(_onProfileStateChanged);
     marketplaceContextNotifier.addListener(_onMarketplaceContextChanged);
     homeExploreResetNotifier.addListener(_onHomeExploreResetRequested);
+    homePrimaryDestinationNotifier.addListener(_onHomePrimaryDestinationRequested);
     _ensureValidTowerSelection();
     _loadHomeData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _onHomePrimaryDestinationRequested();
+    });
     if (widget.authRequired) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -128,6 +141,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_selectedTab != _HomeTab.explore) {
       setState(() => _selectedTab = _HomeTab.explore);
     }
+    _closeSuggestions();
+  }
+
+  void _onHomePrimaryDestinationRequested() {
+    if (!mounted) return;
+    final destination = homePrimaryDestinationNotifier.value;
+    if (destination == HomePrimaryDestination.applications) {
+      _openApplicationsTab();
+    } else if (destination == HomePrimaryDestination.explore) {
+      _switchToExploreTab();
+    }
+  }
+
+  void _openApplicationsTab() {
+    if (_selectedTab != _HomeTab.applications) {
+      setState(() => _selectedTab = _HomeTab.applications);
+    }
+    unawaited(_refreshApplicationMetrics());
     _closeSuggestions();
   }
 
@@ -176,6 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
     profileStateNotifier.removeListener(_onProfileStateChanged);
     marketplaceContextNotifier.removeListener(_onMarketplaceContextChanged);
     homeExploreResetNotifier.removeListener(_onHomeExploreResetRequested);
+    homePrimaryDestinationNotifier.removeListener(_onHomePrimaryDestinationRequested);
     _removeSearchDropdownOverlay();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -219,6 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (space == _activeSpace) return;
     await marketplaceContextNotifier.setActiveSpace(space);
     if (!mounted) return;
+    // Clear previous marketplace results, then reload the selected tower only.
     if (!_activeFilters.isEmpty) {
       _runSearchWithFilters(
         _activeFilters,
@@ -231,6 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshApplicationMetrics() async {
     await applicationService.ensureLoaded();
+    await applicationConversationService.ensureLoaded();
     final owned = marketplaceContextNotifier.ownedListings;
     var totalScore = 0.0;
     var count = 0;
@@ -247,15 +281,29 @@ class _HomeScreenState extends State<HomeScreen> {
       _applicationCount = count;
       _averageMatchPercent = count > 0 ? totalScore / count : 0;
       _applicationsReady = true;
+      _seekerActiveApplicationCount = _countActiveSeekerApplications();
     });
   }
 
   List<ListingApplication> get _userApplicationsForActiveSpace {
-    final userId = AuthService.currentUser?.id ?? '';
+    final userId = AuthService.identityUserId();
     return [
       for (final application in applicationService.getUserApplications(userId))
         if (_applicationSpace(application) == _activeSpace) application,
     ];
+  }
+
+  int _countActiveSeekerApplications() {
+    final userId = AuthService.identityUserId();
+    if (userId.isEmpty) return 0;
+    var n = 0;
+    for (final application in applicationService.getUserApplications(userId)) {
+      final status = ApplicantApplicationStatus.parseOrDefault(
+        applicationService.rowById(application.id)?['status']?.toString(),
+      );
+      if (status != ApplicantApplicationStatus.declined) n++;
+    }
+    return n;
   }
 
   MarketplaceSpace? _applicationSpace(ListingApplication application) {
@@ -293,23 +341,40 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Listing unavailable';
   }
 
-  String _formatAppliedDate(DateTime date) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+  Map<String, dynamic>? _listingForApplication(ListingApplication application) {
+    for (final listing in _listings) {
+      if (ListingData.id(listing) == application.listingId) return listing;
+    }
+    return null;
+  }
+
+  String _hostNameForApplication(ListingApplication application) {
+    final listing = _listingForApplication(application);
+    if (listing == null) return 'Host';
+    final name = ListingData.hostName(listing);
+    return name.isEmpty ? 'Host' : name;
+  }
+
+  String _hostUserIdForApplication(ListingApplication application) {
+    final listing = _listingForApplication(application);
+    return ApplicationConversationService.hostUserIdFromListing(
+      listing ?? const {},
+    );
+  }
+
+  List<SeekerApplicationQueueItem> _seekerApplicationQueueItems(
+    List<ListingApplication> applications,
+  ) {
+    return [
+      for (final application in applications)
+        SeekerApplicationQueueItem.fromApplication(
+          application: application,
+          propertyTitle: _listingTitleForApplication(application),
+          hostName: _hostNameForApplication(application),
+          hostUserId: _hostUserIdForApplication(application),
+          listing: _listingForApplication(application),
+        ),
     ];
-    final month = months[date.month - 1];
-    return '$month ${date.day}, ${date.year}';
   }
 
   /// Mirrors global profile session into home widgets immediately.
@@ -587,7 +652,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _showSuggestions = false;
       _highlightedSuggestionIndex = -1;
-      _activeFilters = inheritedFilters;
+      // Profile-inherited defaults rank the feed but must not appear as
+      // active (user-applied) marketplace filters.
+      _activeFilters = const ListingSearchFilters();
       _pipelineResult = MarketplaceListingPipeline.runWithFilters(
         allListings: _listings,
         towerPropertyType: _selectedPropertyType,
@@ -630,8 +697,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Use GoRouter.of(context).state — NOT GoRouterState.of(context).
+    // During Demo Seeker entry, auth refresh + router.go rebuilds this screen
+    // while the RouteBase page association is not ready yet; GoRouterState.of
+    // throws and the exception propagates into AuthScreen's demo catch.
+    final routeState = GoRouter.of(context).state;
+
     if (!_handledListingAddedMessage) {
-      final extra = GoRouterState.of(context).extra;
+      final extra = routeState.extra;
       if (extra is Map && extra['listingAdded'] != null) {
         _handledListingAddedMessage = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -648,33 +721,29 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    if (!_handledPortalWelcome) {
-      final qp = GoRouterState.of(context).uri.queryParameters;
-      if (qp.containsKey('welcomeFeed') || qp.containsKey('promptFirstListing')) {
+    if (!_handledPortalWelcome && !_portalWelcomeScheduled) {
+      _portalWelcomeScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _handledPortalWelcome) return;
+        final qp = GoRouter.of(context).state.uri.queryParameters;
+        if (!qp.containsKey('welcomeFeed') &&
+            !qp.containsKey('promptFirstListing')) {
+          _portalWelcomeScheduled = false;
+          return;
+        }
         _handledPortalWelcome = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (qp['welcomeFeed'] == '1') {
-            final inherited = _inheritedFeedFilters(_activeUserSession);
-            if (!inherited.isEmpty) {
-              _runSearchWithFilters(
-                inherited,
-                pipelineQuery: inherited.pipelineQueryText(),
-              );
-            } else {
-              setState(() {
-                _showWelcomeFeedBanner = true;
-                _pipelineResult = _runDefaultPipeline();
-              });
-              return;
-            }
-            setState(() => _showWelcomeFeedBanner = true);
-          }
-          if (qp['promptFirstListing'] == '1') {
-            setState(() => _showFirstListingPrompt = true);
-          }
-        });
-      }
+        if (qp['welcomeFeed'] == '1') {
+          // Use default pipeline (inherits profile silently) — do not
+          // write seeker defaults into _activeFilters via _runSearchWithFilters.
+          setState(() {
+            _showWelcomeFeedBanner = true;
+            _pipelineResult = _runDefaultPipeline();
+          });
+        }
+        if (qp['promptFirstListing'] == '1') {
+          setState(() => _showFirstListingPrompt = true);
+        }
+      });
     }
   }
 
@@ -737,7 +806,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final session = _activeUserSession;
     final snapshot = ProfileOnboardingRepository.snapshotFromSession(session);
-    final prefill = snapshot.track.isLandlord
+    // Shared Living only — Independent Place starts blank (host name only).
+    final prefill = snapshot.track.isLandlord && snapshot.track.isSharedSpace
         ? ProfilePortalInheritanceService.listingPrefill(snapshot).toDraftMap()
         : null;
     context.push('/add-listing', extra: prefill == null ? null : {'listingDraft': prefill}).then((_) {
@@ -778,6 +848,53 @@ class _HomeScreenState extends State<HomeScreen> {
       icon: const Icon(Icons.add_rounded, size: 20),
       label: Text('Add Listing', style: AppTypography.button()),
       style: AppButtonStyles.primaryFilled,
+    );
+  }
+
+  Widget? _buildPrimaryNav({
+    required bool signedIn,
+    required Map<String, dynamic>? userSession,
+    required bool compact,
+  }) {
+    if (!signedIn) return null;
+    final caps = ActiveModeService.capabilities;
+    if (!caps.canSeek && !caps.canHost) return null;
+
+    final strongMatchCount =
+        SeekerStrongMatchCounter.count(_rankedVisibleListings);
+    final unread = ActiveModeService.unreadActivityFor(
+      session: userSession,
+      activeMode: ActiveModeService.current,
+      hostApplicantCount: _applicationCount,
+      seekerStrongMatchCount: strongMatchCount,
+    );
+
+    return ActiveModeSwitch(
+      current: ActiveModeService.current,
+      unread: unread,
+      canSeek: caps.canSeek,
+      canHost: caps.canHost,
+      compact: compact,
+      applicationsSelected: _selectedTab == _HomeTab.applications,
+      applicationsCount: _seekerActiveApplicationCount,
+      onApplicationsSelected: caps.canSeek
+          ? () {
+              requestHomeApplicationsTab();
+              _openApplicationsTab();
+            }
+          : null,
+      onModeSelected: (mode) async {
+        await ActiveModeService.recordUnreadBaselines(
+          hostApplicantCount: _applicationCount,
+          seekerStrongMatchCount: strongMatchCount,
+        );
+        if (!mounted) return;
+        if (mode == ActiveMode.explore) {
+          requestHomeExploreTab();
+          _switchToExploreTab();
+        }
+        await navigateForActiveMode(context, mode);
+      },
     );
   }
 
@@ -835,6 +952,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+                  if (signedIn) ...[
+                    const SizedBox(width: 16),
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: _buildPrimaryNav(
+                                signedIn: signedIn,
+                                userSession: userSession,
+                                compact: true,
+                              ) ??
+                              const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                  ],
                   const Spacer(),
                   _buildAddListingButton(compact: true),
                   const SizedBox(width: 10),
@@ -869,16 +1004,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (ProfileData.isMatchingReady(session)) {
                           context.go('/profile');
                         } else {
-                          context.go('/welcome', extra: session);
+                          context.go('/profile/edit', extra: session);
                         }
                       },
                       onLogout: () async {
                         await AuthService.signOut();
-                        if (mounted) {
-                          setState(() {
-                            _pipelineResult = null;
-                          });
-                        }
+                        if (!mounted) return;
+                        setState(() {
+                          _pipelineResult = null;
+                        });
+                        context.go('/');
                       },
                     ),
                 ],
@@ -965,23 +1100,25 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               _closeSuggestions();
             },
-            items: const [
-              BottomNavigationBarItem(
+            items: [
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.search_outlined),
                 activeIcon: Icon(Icons.search_rounded),
                 label: 'Search',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.favorite_border_rounded),
                 activeIcon: Icon(Icons.favorite_rounded),
                 label: 'Saved',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.description_outlined),
-                activeIcon: Icon(Icons.description),
-                label: 'Applications',
+                icon: const Icon(Icons.description_outlined),
+                activeIcon: const Icon(Icons.description),
+                label: ActiveModeSwitch.applicationsLabel(
+                  _seekerActiveApplicationCount,
+                ),
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.home_work_outlined),
                 activeIcon: Icon(Icons.home_work),
                 label: 'Listings',
@@ -1173,7 +1310,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Map<String, dynamic>> get _towerListings => [
         for (final item in _listings)
-          if (ListingData.propertyType(item) == _selectedPropertyType) item,
+          if (ListingData.listingType(item) == _selectedPropertyType) item,
       ];
 
   List<SearchSuggestionGroup> get _searchSuggestionGroups {
@@ -1296,16 +1433,6 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool signedIn,
     required double contentWidth,
   }) {
-    final caps = ActiveModeService.capabilities;
-    final strongMatchCount =
-        SeekerStrongMatchCounter.count(_rankedVisibleListings);
-    final unread = ActiveModeService.unreadActivityFor(
-      session: userSession,
-      activeMode: ActiveModeService.current,
-      hostApplicantCount: _applicationCount,
-      seekerStrongMatchCount: strongMatchCount,
-    );
-
     final profileMenu = _UserHeaderMenu(
       fullName: AuthService.displayName(userSession),
       compact: contentWidth < kHomeExploreMobileBreakpoint,
@@ -1314,34 +1441,16 @@ class _HomeScreenState extends State<HomeScreen> {
         if (ProfileData.isMatchingReady(session)) {
           context.go('/profile');
         } else {
-          context.go('/welcome', extra: session);
+          context.go('/profile/edit', extra: session);
         }
       },
       onLogout: () async {
         await AuthService.signOut();
-        if (mounted) {
-          setState(() => _pipelineResult = null);
-        }
+        if (!mounted) return;
+        setState(() => _pipelineResult = null);
+        context.go('/');
       },
     );
-
-    final modeSwitch = signedIn && caps.isDualCapable
-        ? ActiveModeSwitch(
-            current: ActiveModeService.current,
-            unread: unread,
-            canSeek: caps.canSeek,
-            canHost: caps.canHost,
-            compact: contentWidth < kHomeExploreMobileBreakpoint,
-            onModeSelected: (mode) async {
-              await ActiveModeService.recordUnreadBaselines(
-                hostApplicantCount: _applicationCount,
-                seekerStrongMatchCount: strongMatchCount,
-              );
-              if (!mounted) return;
-              await navigateForActiveMode(context, mode);
-            },
-          )
-        : null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 2, 0, 2),
@@ -1362,7 +1471,11 @@ class _HomeScreenState extends State<HomeScreen> {
           onClearAll: _clearAllFilters,
           onSignIn: () => _openSignIn(),
           onListSpace: _goAddListing,
-          modeSwitch: modeSwitch,
+          primaryNav: _buildPrimaryNav(
+            signedIn: signedIn,
+            userSession: userSession,
+            compact: contentWidth < kHomeExploreMobileBreakpoint,
+          ),
           profileTrailing: profileMenu,
           onMoreFiltersTap: _openAdvancedFiltersDrawer,
           moreFiltersActiveCount: MarketplaceFilterBar.drawerOnlyActiveCount(
@@ -1713,20 +1826,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final percent = ProfileProgress.seekerPercent(userSession);
 
     final VoidCallback onContinue = switch (state) {
-      HomeOnboardingBannerState.completeProfile => () {
+      HomeOnboardingBannerState.completeProfile ||
+      HomeOnboardingBannerState.continueProfile =>
+        () {
           final session = userSession;
           if (session != null && session.isNotEmpty) {
-            context.push('/welcome', extra: session);
+            context.push('/profile', extra: session);
           } else {
-            context.push('/welcome');
-          }
-        },
-      HomeOnboardingBannerState.continueProfile => () {
-          final session = userSession;
-          if (session != null && session.isNotEmpty) {
-            context.push('/profile/edit', extra: session);
-          } else {
-            context.push('/profile/edit');
+            context.push('/profile');
           }
         },
       HomeOnboardingBannerState.signInRequired ||
@@ -1862,26 +1969,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Applications', style: AppTypography.sectionTitle()),
-          const SizedBox(height: 4),
-          Text(
-            '${applications.length} pending in ${_activeSpace.label}',
-            style: AppTypography.sectionMeta(),
-          ),
-          const SizedBox(height: 16),
-          for (final application in applications)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _ApplicationTile(
-                title: _listingTitleForApplication(application),
-                statusLabel: 'Pending',
-                appliedLabel:
-                    'Applied ${_formatAppliedDate(application.createdAt)}',
-              ),
+          Expanded(
+            child: ListenableBuilder(
+              listenable: applicationConversationService,
+              builder: (context, _) {
+                return SeekerApplicationWorkspace(
+                  items: _seekerApplicationQueueItems(applications),
+                );
+              },
             ),
+          ),
         ],
       ),
     );
@@ -1950,6 +2050,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Map<String, dynamic>> get _ownedListingsForActiveSpace {
     final owned = DublinMockData.useMockHarness &&
+            QaTestAuthService.allowMockHostListings(_activeUserSession) &&
             marketplaceContextNotifier.ownedListings.isEmpty
         ? DublinMockData.ownedListingsForHost()
         : marketplaceContextNotifier.ownedListings;
@@ -2417,68 +2518,6 @@ class _UserHeaderMenuState extends State<_UserHeaderMenu> {
             ],
             ),
             const SizedBox(width: 4),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ApplicationTile extends StatelessWidget {
-  const _ApplicationTile({
-    required this.title,
-    required this.statusLabel,
-    required this.appliedLabel,
-  });
-
-  final String title;
-  final String statusLabel;
-  final String appliedLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: HomeMarketplaceTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: HomeMarketplaceTheme.border),
-        boxShadow: HomeMarketplaceTheme.cardShadowRest,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: AppTypography.cardTitle(),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: HomeMarketplaceTheme.searchSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: HomeMarketplaceTheme.border),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: AppTypography.detail().copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text(appliedLabel, style: AppTypography.detail()),
-              ],
-            ),
           ],
         ),
       ),

@@ -5,13 +5,12 @@ import '../services/linkedin_oauth_service.dart';
 import '../services/profile_state_notifier.dart';
 import '../services/trust_service.dart';
 import '../widgets/corporate_document_upload_card.dart';
-import '../utils/viewer_profile.dart';
 import 'auth_screen.dart';
 
 import '../core/theme/app_theme.dart';
 import '../theme/home_marketplace_theme.dart';
 
-/// Stage 2: Social verification via LinkedIn OpenID Connect.
+/// Social verification via LinkedIn OpenID Connect.
 class SocialVerificationScreen extends StatefulWidget {
   const SocialVerificationScreen({super.key});
 
@@ -38,7 +37,7 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
   }
 
   Future<void> _bootstrap() async {
-    final uri = GoRouterState.of(context).uri;
+    final uri = GoRouter.of(context).state.uri;
     final linkedinError = uri.queryParameters['linkedin_error'];
     if (linkedinError != null && linkedinError.isNotEmpty) {
       setState(() => _error = Uri.decodeComponent(linkedinError));
@@ -141,9 +140,9 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentStage = TrustService.currentStage();
-    final alreadyVerified =
-        currentStage.level >= TrustStage.socialVerified.level;
+    final linkedInVerified =
+        AuthScreen.currentUserSession?['linkedin_verified'] == true;
+    final alreadyVerified = linkedInVerified;
 
     return Scaffold(
       backgroundColor: HomeMarketplaceTheme.canvas,
@@ -203,7 +202,7 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   alreadyVerified || _verified
-                                      ? 'Stage 2 verified — 0.9× trust multiplier'
+                                      ? '✅ Verified User'
                                       : 'Connect LinkedIn, then confirm your role',
                                   style: const TextStyle(
                                     fontSize: 13,
@@ -393,7 +392,9 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                _buildTrustStageIndicator(currentStage),
+                _buildVerificationIndicator(
+                  linkedInVerified || _verified,
+                ),
               ],
             ),
           ),
@@ -402,9 +403,7 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
     );
   }
 
-  Widget _buildTrustStageIndicator(TrustStage current) {
-    final stage = _verified ? TrustStage.socialVerified : current;
-
+  Widget _buildVerificationIndicator(bool verified) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -412,59 +411,26 @@ class _SocialVerificationScreenState extends State<SocialVerificationScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: HomeMarketplaceTheme.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Text(
-            'Your trust level',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.secondaryText,
+          Icon(
+            verified ? Icons.check_circle_rounded : Icons.circle_outlined,
+            size: 22,
+            color: verified ? AppColors.trustMuted : AppColors.disabled,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              verified ? '✅ Verified User' : 'Verification pending',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: verified
+                    ? AppColors.primaryText
+                    : AppColors.secondaryText,
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          for (final s in TrustStage.values)
-            if (s != TrustStage.anonymous)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Icon(
-                      stage.level >= s.level
-                          ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
-                      size: 18,
-                      color: stage.level >= s.level
-                          ? AppColors.trustMuted
-                          : AppColors.disabled,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Stage ${s.level}: ${s.label}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight:
-                            stage == s ? FontWeight.w700 : FontWeight.w400,
-                        color: stage.level >= s.level
-                            ? AppColors.primaryText
-                            : AppColors.secondaryText,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${s.multiplier}x',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: stage.level >= s.level
-                            ? AppColors.trustMuted
-                            : AppColors.disabled,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
         ],
       ),
     );

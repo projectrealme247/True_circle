@@ -4,7 +4,6 @@ import 'applicant_trust_tier.dart';
 class ApplicantProfileMetrics {
   const ApplicantProfileMetrics({
     required this.trustTier,
-    required this.trustStage,
     required this.employmentVerified,
     required this.financialVerified,
     required this.profileCompletenessPercent,
@@ -14,7 +13,6 @@ class ApplicantProfileMetrics {
   });
 
   final ApplicantTrustTier trustTier;
-  final int trustStage;
   final bool employmentVerified;
   final bool financialVerified;
   final int profileCompletenessPercent;
@@ -24,7 +22,6 @@ class ApplicantProfileMetrics {
 
   Map<String, dynamic> toMap() => {
         'trust_tier': trustTier.displayToken,
-        'trust_stage': trustStage,
         'employment_verified': employmentVerified,
         'financial_verified': financialVerified,
         'profile_completeness_percent': profileCompletenessPercent,

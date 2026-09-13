@@ -85,7 +85,7 @@ abstract final class ListingCreationController {
     return ListingCreationPayloadBuilder.toLocalListingMap(draft);
   }
 
-  /// End-to-end publish: validate → geocode → trust stamp → Supabase insert.
+  /// End-to-end publish: validate → stamp published_at → geocode → trust → insert.
   static Future<ListingCreationPublishResult> publish(
     ListingCreationDraft draft, {
     Future<List<Location>> Function(String query)? geocodeForTests,
@@ -106,8 +106,9 @@ abstract final class ListingCreationController {
           : await resolveEircode(draft, geocodeForTests: geocodeForTests);
 
       final local = buildLocalPayload(resolved);
-      final stamped = Map<String, dynamic>.from(local);
-      TrustService.stampListingTrust(stamped);
+      final stamped = TrustService.stampListingTrust(
+        Map<String, dynamic>.from(local),
+      );
 
       final inserted = insertOverride != null
           ? await insertOverride(stamped)

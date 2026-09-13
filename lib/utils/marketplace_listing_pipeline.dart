@@ -184,7 +184,8 @@ abstract final class MarketplaceListingPipeline {
   }) {
     final afterTower = [
       for (final item in allListings)
-        if (ListingData.propertyType(item) == towerPropertyType) item,
+        // Marketplace Separation V1: Rent / Share / Buy inventories never mix.
+        if (ListingData.listingType(item) == towerPropertyType) item,
     ];
 
     final requestedIntent =

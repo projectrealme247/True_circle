@@ -70,7 +70,6 @@ abstract final class ApplicantDashboardPayloadBuilder {
 
       final sortScore = _dashboardSortScore(
         category: category,
-        profileMetrics: profileMetrics,
         compatibilityScore: compatibilityScore,
         sharedMatch: sharedMatch,
         independentMatch: independentMatch,
@@ -103,9 +102,6 @@ abstract final class ApplicantDashboardPayloadBuilder {
     applicants.sort((a, b) {
       final byScore = b.dashboardSortScore.compareTo(a.dashboardSortScore);
       if (byScore != 0) return byScore;
-      final byTrust = b.profileMetrics.trustTier.sortPriority
-          .compareTo(a.profileMetrics.trustTier.sortPriority);
-      if (byTrust != 0) return byTrust;
       return b.createdAt.compareTo(a.createdAt);
     });
 
@@ -154,7 +150,6 @@ abstract final class ApplicantDashboardPayloadBuilder {
     return {
       ApplicantFieldKeys.fullName: trustProfile['full_name'],
       ApplicantFieldKeys.trustTier: trustProfile['trust_tier'],
-      ApplicantFieldKeys.trustStage: trustProfile['trust_stage'],
       ApplicantFieldKeys.employmentVerified: trustProfile['employment_verified'],
       ApplicantFieldKeys.financialVerified: trustProfile['financial_verified'],
       ApplicantFieldKeys.verificationTrack: trustProfile['verification_track'],
@@ -189,17 +184,34 @@ abstract final class ApplicantDashboardPayloadBuilder {
     Map<String, dynamic> trustProfile, {
     HighSignalMatch? signal,
   }) {
-    final trustStage = session[ApplicantFieldKeys.trustStage] is int
-        ? session[ApplicantFieldKeys.trustStage] as int
-        : trustProfile['trust_stage'] is int
-            ? trustProfile['trust_stage'] as int
-            : int.tryParse(
-                  ProfileData.text(
-                    session[ApplicantFieldKeys.trustStage] ??
-                        trustProfile['trust_stage'],
-                  ),
-                ) ??
-                1;
+    final merged = {
+      ...session,
+      if (trustProfile.isNotEmpty) ...{
+        if (ProfileData.text(session[ApplicantFieldKeys.trustTier]).isEmpty)
+          ApplicantFieldKeys.trustTier: trustProfile['trust_tier'],
+        if (session[ApplicantFieldKeys.employmentVerified] != true)
+          ApplicantFieldKeys.employmentVerified:
+              trustProfile['employment_verified'],
+        if (session[ApplicantFieldKeys.financialVerified] != true)
+          ApplicantFieldKeys.financialVerified:
+              trustProfile['financial_verified'],
+        if (session['linkedin_verified'] != true)
+          'linkedin_verified': trustProfile['linkedin_verified'],
+        if (session['employment_letter_verified'] != true)
+          'employment_letter_verified':
+              trustProfile['employment_letter_verified'],
+        if (session['onboarding_letter_verified'] != true)
+          'onboarding_letter_verified':
+              trustProfile['onboarding_letter_verified'],
+        if (session['light_trust_verified'] != true)
+          'light_trust_verified': trustProfile['light_trust_verified'],
+        if (ProfileData.text(session['verified_university_email']).isEmpty)
+          'verified_university_email':
+              trustProfile['verified_university_email'],
+        if (ProfileData.text(session['occupant_type']).isEmpty)
+          'occupant_type': trustProfile['occupant_type'],
+      },
+    };
 
     final completenessRaw = session[ApplicantFieldKeys.profileCompletenessPercent];
     final completeness = completenessRaw is int
@@ -207,13 +219,7 @@ abstract final class ApplicantDashboardPayloadBuilder {
         : int.tryParse(ProfileData.text(completenessRaw)) ?? 0;
 
     return ApplicantProfileMetrics(
-      trustTier: ApplicantTrustTier.fromTrustProfile(
-        trustTier: ProfileData.text(
-          session[ApplicantFieldKeys.trustTier] ?? trustProfile['trust_tier'],
-        ),
-        trustStage: trustStage,
-      ),
-      trustStage: trustStage,
+      trustTier: ApplicantTrustTier.fromSession(merged),
       employmentVerified: session[ApplicantFieldKeys.employmentVerified] == true ||
           trustProfile['employment_verified'] == true,
       financialVerified: session[ApplicantFieldKeys.financialVerified] == true ||
@@ -332,7 +338,6 @@ abstract final class ApplicantDashboardPayloadBuilder {
 
   static int _dashboardSortScore({
     required ListingCreationCategory category,
-    required ApplicantProfileMetrics profileMetrics,
     required int compatibilityScore,
     required SharedLivingMatchMetrics? sharedMatch,
     required IndependentPlacesMatchMetrics? independentMatch,
@@ -342,17 +347,16 @@ abstract final class ApplicantDashboardPayloadBuilder {
       return NumericBounds.clampPercentInt(overallMatchScore);
     }
 
-    final trustBoost = profileMetrics.trustTier.sortPriority * 5;
     if (category.isShared) {
       final lifestyle = sharedMatch?.lifestyleAlignmentScore ?? 0;
       return NumericBounds.clampPercentInt(
-        (lifestyle * 0.55 + compatibilityScore * 0.35 + trustBoost).round(),
+        ((lifestyle * 0.55 + compatibilityScore * 0.35) / 0.90).round(),
       );
     }
 
     final independent = independentMatch?.independentMatchScore ?? 0;
     return NumericBounds.clampPercentInt(
-      (independent * 0.50 + compatibilityScore * 0.40 + trustBoost).round(),
+      ((independent * 0.50 + compatibilityScore * 0.40) / 0.90).round(),
     );
   }
 

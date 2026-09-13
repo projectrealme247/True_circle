@@ -18,6 +18,7 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
     required this.selectedSecondaryLanguages,
     required this.onToggleSecondaryLanguage,
     required this.onAddSecondaryLanguage,
+    this.additionalPrimaryLabel = 'Additional primary language',
   });
 
   final String primaryLanguage;
@@ -26,6 +27,8 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
   final Set<String> selectedSecondaryLanguages;
   final ValueChanged<String> onToggleSecondaryLanguage;
   final ValueChanged<String> onAddSecondaryLanguage;
+  /// Landlord Shared Spaces uses "Additional Languages"; seekers keep default.
+  final String additionalPrimaryLabel;
 
   bool _matchesPrimary(String language) =>
       primaryLanguage.isNotEmpty &&
@@ -74,7 +77,7 @@ class SeekerLanguageSelectionSection extends StatelessWidget {
           ),
           const SizedBox(height: OnboardingTokens.space8),
           ShadcnSelect(
-            label: 'Additional primary language',
+            label: additionalPrimaryLabel,
             value: primaryLanguage.isEmpty || _isEnglish(primaryLanguage)
                 ? ''
                 : primaryLanguage,

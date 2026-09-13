@@ -8,6 +8,7 @@ import '../core/theme/app_theme.dart';
 import '../services/corporate_document_verify_service.dart';
 
 /// Corporate Track document upload — streams to Dublin edge runtime (zero-retention).
+/// Phase 1: employment-status signal only — does not verify salary or affordability.
 class CorporateDocumentUploadCard extends StatefulWidget {
   const CorporateDocumentUploadCard({
     super.key,
@@ -114,7 +115,7 @@ class _CorporateDocumentUploadCardState extends State<CorporateDocumentUploadCar
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Corporate Verification',
+                        'Employment document',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -122,7 +123,7 @@ class _CorporateDocumentUploadCardState extends State<CorporateDocumentUploadCar
                         ),
                       ),
                       Text(
-                        'Upload contract or offer letter (PDF / image)',
+                        'Upload contract or offer letter (PDF / image). Confirms employment status only — not salary or rent affordability.',
                         style: AppTypography.caption.copyWith(height: 1.35),
                       ),
                     ],
@@ -132,7 +133,7 @@ class _CorporateDocumentUploadCardState extends State<CorporateDocumentUploadCar
             ),
             const SizedBox(height: 10),
             Text(
-              '🔒 Processed in-memory in our Dublin datacenter. Raw files are never stored.',
+              '🔒 Processed in-memory in our Dublin datacenter. Raw files are never stored. Salary figures are not extracted.',
               style: AppTypography.caption.copyWith(
                 fontSize: 11.5,
                 color: AppColors.secondaryText,
@@ -152,7 +153,7 @@ class _CorporateDocumentUploadCardState extends State<CorporateDocumentUploadCar
                       ),
                     )
                   : const Icon(Icons.upload_file_rounded),
-              label: Text(_busy ? 'Verifying…' : 'Upload employment document'),
+              label: Text(_busy ? 'Checking…' : 'Upload employment document'),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.accent,
                 foregroundColor: Colors.white,
@@ -176,7 +177,7 @@ class _CorporateDocumentUploadCardState extends State<CorporateDocumentUploadCar
             if (_successFileName != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Verified: $_successFileName · 👍 Grand tier active',
+                'Employment status check complete: $_successFileName',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,

@@ -9,6 +9,7 @@ void main() {
     'mother_tongue': 'English',
     'food_preference': 'Veg',
     'occupant_type': 'Students',
+    'budget_max': '900',
     'trust_stage': 2,
     'pre_arrival_contact_ready': true,
     'invite_code_verified': true,
@@ -21,6 +22,7 @@ void main() {
     'mother_tongue': 'English',
     'food_preference': 'Veg',
     'occupant_type': 'Students',
+    'budget_max': '900',
     'trust_stage': 3,
     'verified_university_email': 'r***@tcd.ie',
   };

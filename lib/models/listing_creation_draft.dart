@@ -12,7 +12,6 @@ class ListingCreationDraft {
     this.latitude,
     this.longitude,
     this.bedsCount,
-    this.rtbStatus,
     this.parkingAvailable,
     this.roomType,
     this.householdDynamic,
@@ -23,6 +22,7 @@ class ListingCreationDraft {
     this.hostLanguage = '',
     this.hostMotherTongue = '',
     this.hostFoodPreference = '',
+    this.listingAuthorizationConfirmed = false,
   });
 
   final ListingCreationCategory category;
@@ -35,7 +35,6 @@ class ListingCreationDraft {
 
   // Independent Places — wiped when switching to Shared Living.
   final int? bedsCount;
-  final ListingRtbStatus? rtbStatus;
   final bool? parkingAvailable;
 
   // Shared Living — wiped when switching to Independent Places.
@@ -49,6 +48,9 @@ class ListingCreationDraft {
   final String hostLanguage;
   final String hostMotherTongue;
   final String hostFoodPreference;
+
+  /// Required before publish — Shared Living and Entire Rental.
+  final bool listingAuthorizationConfirmed;
 
   bool get hasResolvedCoordinates =>
       latitude != null && longitude != null && latitude!.isFinite && longitude!.isFinite;
@@ -64,8 +66,6 @@ class ListingCreationDraft {
     bool clearCoordinates = false,
     int? bedsCount,
     bool clearBedsCount = false,
-    ListingRtbStatus? rtbStatus,
-    bool clearRtbStatus = false,
     bool? parkingAvailable,
     bool clearParkingAvailable = false,
     ListingShareRoomType? roomType,
@@ -80,6 +80,7 @@ class ListingCreationDraft {
     String? hostLanguage,
     String? hostMotherTongue,
     String? hostFoodPreference,
+    bool? listingAuthorizationConfirmed,
   }) {
     return ListingCreationDraft(
       category: category ?? this.category,
@@ -90,7 +91,6 @@ class ListingCreationDraft {
       latitude: clearCoordinates ? null : (latitude ?? this.latitude),
       longitude: clearCoordinates ? null : (longitude ?? this.longitude),
       bedsCount: clearBedsCount ? null : (bedsCount ?? this.bedsCount),
-      rtbStatus: clearRtbStatus ? null : (rtbStatus ?? this.rtbStatus),
       parkingAvailable: clearParkingAvailable
           ? null
           : (parkingAvailable ?? this.parkingAvailable),
@@ -106,6 +106,8 @@ class ListingCreationDraft {
       hostLanguage: hostLanguage ?? this.hostLanguage,
       hostMotherTongue: hostMotherTongue ?? this.hostMotherTongue,
       hostFoodPreference: hostFoodPreference ?? this.hostFoodPreference,
+      listingAuthorizationConfirmed: listingAuthorizationConfirmed ??
+          this.listingAuthorizationConfirmed,
     );
   }
 
@@ -117,7 +119,6 @@ class ListingCreationDraft {
       category: next,
       clearCoordinates: true,
       clearBedsCount: true,
-      clearRtbStatus: true,
       clearParkingAvailable: true,
       clearRoomType: true,
       clearHouseholdDynamic: true,
