@@ -96,6 +96,36 @@ abstract final class ListingCreationValidationService {
     }
   }
 
+  /// Blocks remote publish when the local payload is missing required fields.
+  static Map<String, String> validateRemotePublishPayload(
+    Map<String, dynamic> local,
+  ) {
+    final errors = <String, String>{};
+    final title = (local['title'] ?? '').toString().trim();
+    if (title.length < _minTitleLength) {
+      errors['title'] = 'Enter a title (at least $_minTitleLength characters).';
+    }
+
+    final priceText = (local['price'] ?? '').toString().trim();
+    if (priceText.isEmpty) {
+      errors['price'] = 'Enter a price (e.g. €2,100/month).';
+    } else if (!RegExp(r'^\d').hasMatch(priceText)) {
+      errors['price'] = 'Price should start with a number.';
+    }
+
+    final location = (local['location'] ?? '').toString().trim();
+    if (location.isEmpty) {
+      errors['location'] = 'Add a location before publishing.';
+    }
+
+    if (local[ListingCreationFieldKeys.listingAuthorizationConfirmed] != true) {
+      errors[ListingCreationFieldKeys.listingAuthorizationConfirmed] =
+          'Confirm you are authorised to advertise this listing before publishing.';
+    }
+
+    return errors;
+  }
+
   /// Strips deprecated kitchen utility keys from arbitrary maps.
   static Map<String, dynamic> stripForbiddenKeys(Map<String, dynamic> raw) {
     return Map<String, dynamic>.from(raw)

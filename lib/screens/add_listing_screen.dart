@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../services/auth_service.dart';
+import '../services/listing_creation_payload_builder.dart';
+import '../services/listing_creation_supabase_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/profile_onboarding_repository.dart';
 import '../services/profile_portal_inheritance_service.dart';
@@ -91,7 +94,9 @@ class _AddListingScreenState extends State<AddListingScreen> {
       final stamped = TrustService.stampListingTrust(payload);
 
       final Map<String, dynamic> saved;
-      if (_editingListingId != null) {
+      if (AuthService.isAuthenticated) {
+        saved = await _publishRemote(stamped);
+      } else if (_editingListingId != null) {
         saved = await ListingsStorageService.updateListing(
           _editingListingId!,
           stamped,
@@ -113,12 +118,44 @@ class _AddListingScreenState extends State<AddListingScreen> {
             : '/?refresh=${saved['id']}',
         extra: _editingListingId == null ? {'listingAdded': saved} : null,
       );
+    } on ListingCreationTransactionException catch (e) {
+      if (!mounted) return;
+      _showMessage(e.message);
     } catch (_) {
       if (!mounted) return;
       _showMessage('Could not save listing. Try again.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<Map<String, dynamic>> _publishRemote(
+    Map<String, dynamic> stamped,
+  ) async {
+    final editingId = _editingListingId;
+    final Map<String, dynamic> remote;
+    if (ListingCreationPayloadBuilder.isUuid(editingId)) {
+      remote = await ListingCreationSupabaseService.updateListing(
+        editingId!,
+        stamped,
+      );
+    } else {
+      remote = await ListingCreationSupabaseService.insertListing(stamped);
+    }
+
+    final remoteId = remote['id']?.toString() ?? '';
+    final withRemoteId = {...stamped, 'id': remoteId};
+
+    if (editingId != null &&
+        editingId.isNotEmpty &&
+        editingId != remoteId) {
+      await ListingsStorageService.deleteListing(editingId);
+      return ListingsStorageService.addListing(withRemoteId);
+    }
+    if (editingId != null) {
+      return ListingsStorageService.updateListing(editingId, withRemoteId);
+    }
+    return ListingsStorageService.addListing(withRemoteId);
   }
 
   void _showMessage(String text) {

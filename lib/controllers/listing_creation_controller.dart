@@ -114,10 +114,18 @@ abstract final class ListingCreationController {
           ? await insertOverride(stamped)
           : await ListingCreationSupabaseService.insertListing(stamped);
 
+      final listingId = inserted['id']?.toString() ?? '';
+      if (!ListingCreationPayloadBuilder.isUuid(listingId)) {
+        throw ListingCreationTransactionException(
+          'Remote listing did not return a UUID id.',
+          code: ListingCreationErrorCode.invalidRemoteId,
+        );
+      }
+
       return ListingCreationPublishResult(
-        listingId: inserted['id']?.toString() ?? '',
+        listingId: listingId,
         supabaseRow: inserted,
-        localListing: stamped,
+        localListing: {...stamped, 'id': listingId},
       );
     });
   }

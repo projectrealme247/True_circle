@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth_service.dart';
 import 'listing_creation_payload_builder.dart';
+import 'listing_creation_validation_service.dart';
 
 /// Atomic Supabase insert for Phase C listing creation.
 abstract final class ListingCreationSupabaseService {
@@ -24,11 +25,13 @@ abstract final class ListingCreationSupabaseService {
       );
     }
 
+    _assertRemotePublishAllowed(localPayload);
+
     final userId = AuthService.currentUser?.id;
     final row = ListingCreationPayloadBuilder.toSupabaseRow(
       localPayload,
       userId: userId,
-    );
+    )..removeWhere((key, _) => key == 'id');
 
     try {
       final response = await AuthService.client
@@ -38,7 +41,7 @@ abstract final class ListingCreationSupabaseService {
           .single()
           .timeout(const Duration(seconds: 30));
 
-      return Map<String, dynamic>.from(response);
+      return _requireUuidRow(response);
     } on PostgrestException catch (e) {
       debugPrint('ListingCreationSupabaseService insert failed: ${e.message}');
       throw ListingCreationTransactionException(
@@ -63,6 +66,93 @@ abstract final class ListingCreationSupabaseService {
     }
   }
 
+  static Future<Map<String, dynamic>> updateListing(
+    String listingId,
+    Map<String, dynamic> localPayload,
+  ) async {
+    if (!canWrite) {
+      throw ListingCreationTransactionException(
+        'Sign in to publish a listing.',
+        code: ListingCreationErrorCode.unauthenticated,
+      );
+    }
+    if (!ListingCreationPayloadBuilder.isUuid(listingId)) {
+      throw ListingCreationTransactionException(
+        'This listing cannot be updated remotely until it has a UUID id.',
+        code: ListingCreationErrorCode.invalidRemoteId,
+      );
+    }
+
+    _assertRemotePublishAllowed(localPayload);
+
+    final userId = AuthService.currentUser?.id;
+    final row = ListingCreationPayloadBuilder.toSupabaseRow(
+      localPayload,
+      userId: userId,
+    )..remove('id');
+
+    try {
+      final response = await AuthService.client
+          .from(_table)
+          .update(row)
+          .eq('id', listingId)
+          .select()
+          .single()
+          .timeout(const Duration(seconds: 30));
+
+      return _requireUuidRow(response);
+    } on PostgrestException catch (e) {
+      debugPrint('ListingCreationSupabaseService update failed: ${e.message}');
+      throw ListingCreationTransactionException(
+        _messageFromPostgrest(e),
+        code: ListingCreationErrorCode.database,
+        cause: e,
+      );
+    } on ListingCreationTransactionException {
+      rethrow;
+    } catch (e) {
+      debugPrint('ListingCreationSupabaseService update error: $e');
+      final isTimeout = e is TimeoutException;
+      throw ListingCreationTransactionException(
+        isTimeout
+            ? 'Publishing timed out. Check your connection and try again.'
+            : 'Could not publish your listing. Try again shortly.',
+        code: isTimeout
+            ? ListingCreationErrorCode.timeout
+            : ListingCreationErrorCode.network,
+        cause: e,
+      );
+    }
+  }
+
+  static void _assertRemotePublishAllowed(Map<String, dynamic> localPayload) {
+    final fieldErrors =
+        ListingCreationValidationService.validateRemotePublishPayload(
+      localPayload,
+    );
+    if (fieldErrors.isNotEmpty) {
+      throw ListingCreationTransactionException(
+        fieldErrors.values.first,
+        code: ListingCreationErrorCode.validation,
+        fieldErrors: fieldErrors,
+      );
+    }
+  }
+
+  static Map<String, dynamic> _requireUuidRow(dynamic response) {
+    final mapped = ListingCreationPayloadBuilder.fromSupabaseRow(
+      Map<String, dynamic>.from(response as Map),
+    );
+    final id = mapped['id']?.toString();
+    if (!ListingCreationPayloadBuilder.isUuid(id)) {
+      throw ListingCreationTransactionException(
+        'Remote listing did not return a UUID id.',
+        code: ListingCreationErrorCode.invalidRemoteId,
+      );
+    }
+    return mapped;
+  }
+
   static String _messageFromPostgrest(PostgrestException e) {
     final message = e.message.trim();
     if (message.isEmpty) {
@@ -83,6 +173,7 @@ enum ListingCreationErrorCode {
   network,
   timeout,
   duplicateSubmission,
+  invalidRemoteId,
 }
 
 class ListingCreationTransactionException implements Exception {
