@@ -107,10 +107,11 @@ abstract final class ListingCreationValidationService {
     }
 
     final priceText = (local['price'] ?? '').toString().trim();
-    if (priceText.isEmpty) {
+    final priceDigits = priceText.replaceAll(RegExp(r'[^\d]'), '');
+    if (priceText.isEmpty ||
+        priceDigits.isEmpty ||
+        (int.tryParse(priceDigits) ?? 0) <= 0) {
       errors['price'] = 'Enter a price (e.g. €2,100/month).';
-    } else if (!RegExp(r'^\d').hasMatch(priceText)) {
-      errors['price'] = 'Price should start with a number.';
     }
 
     final location = (local['location'] ?? '').toString().trim();
