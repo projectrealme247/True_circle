@@ -43,12 +43,54 @@ abstract final class ListingsSupabaseService {
     }
   }
 
+  static bool get _supabaseReadyForRead {
+    try {
+      return Supabase.instance.isInitialized;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static bool get _supabaseReadyForWrite {
     try {
       return Supabase.instance.isInitialized && canWrite;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Public read of published rows. Empty when Supabase is unavailable.
+  static Future<List<Map<String, dynamic>>> tryFetchListings() async {
+    if (!_supabaseReadyForRead) return const [];
+
+    try {
+      final response = await AuthService.client.from(_table).select();
+      if (response is! List) return const [];
+
+      return [
+        for (final row in response)
+          if (row is Map)
+            _mapFetchedRow(Map<String, dynamic>.from(row)),
+      ];
+    } on PostgrestException catch (e) {
+      debugPrint('ListingsSupabaseService fetch failed: ${e.message}');
+      return const [];
+    } catch (e) {
+      debugPrint('ListingsSupabaseService fetch error: $e');
+      return const [];
+    }
+  }
+
+  static Map<String, dynamic> _mapFetchedRow(Map<String, dynamic> row) {
+    final mapped = ListingCreationPayloadBuilder.fromSupabaseRow(row);
+    final published = mapped['published_at']?.toString().trim() ?? '';
+    if (published.isEmpty) {
+      final created = row['created_at']?.toString().trim() ?? '';
+      if (created.isNotEmpty) {
+        mapped['published_at'] = created;
+      }
+    }
+    return mapped;
   }
 
   /// Inserts a listing row; returns app-shaped map or null when skipped/failed.

@@ -19,6 +19,7 @@ import '../services/auth_service.dart';
 import '../services/application_service.dart';
 import '../services/application_conversation_service.dart';
 import '../services/listings_storage_service.dart';
+import '../services/listings_supabase_service.dart';
 import '../services/qa_test_auth_service.dart';
 import '../services/marketplace_context_notifier.dart';
 import '../services/profile_state_notifier.dart';
@@ -771,7 +772,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _listingsLoading = true);
     }
     try {
-      final listings = await ListingsStorageService.load();
+      final listings = await _loadExploreFeedListings();
       if (!mounted) return;
       await marketplaceContextNotifier.refresh();
       if (!mounted) return;
@@ -796,6 +797,43 @@ class _HomeScreenState extends State<HomeScreen> {
         _listingsLoading = false;
       });
     }
+  }
+
+  /// Local seed/cache plus public Supabase rows. Remote is not written to
+  /// [ListingsStorageService] (dashboard stays local-only).
+  Future<List<Map<String, dynamic>>> _loadExploreFeedListings() async {
+    final local = await ListingsStorageService.load();
+    final remote = await ListingsSupabaseService.tryFetchListings();
+    return _mergeExploreFeed(local, remote);
+  }
+
+  static List<Map<String, dynamic>> _mergeExploreFeed(
+    List<Map<String, dynamic>> local,
+    List<Map<String, dynamic>> remote,
+  ) {
+    final byId = <String, Map<String, dynamic>>{};
+    final order = <String>[];
+
+    void upsert(Map<String, dynamic> raw, {required bool replaceExisting}) {
+      final item = ListingData.normalizeItem(raw);
+      final id = item['id']?.toString() ?? '';
+      if (id.isEmpty) return;
+      if (byId.containsKey(id)) {
+        if (replaceExisting) byId[id] = item;
+        return;
+      }
+      byId[id] = item;
+      order.add(id);
+    }
+
+    for (final item in remote) {
+      upsert(item, replaceExisting: true);
+    }
+    for (final item in local) {
+      upsert(item, replaceExisting: false);
+    }
+
+    return [for (final id in order) byId[id]!];
   }
 
   void _goAddListing() {
