@@ -6,6 +6,31 @@ import 'listing_creation_validation_service.dart';
 
 /// Maps a validated [ListingCreationDraft] / local listing map to app + Supabase shapes.
 abstract final class ListingCreationPayloadBuilder {
+  /// Live `public.listings` columns. Inserts must not send anything else.
+  static const liveListingsColumns = <String>{
+    'id',
+    'created_at',
+    'user_id',
+    'title',
+    'description',
+    'price',
+    'listing_type',
+    'property_type',
+    'room_configuration',
+    'latitude',
+    'longitude',
+    'is_active',
+    'eircode',
+    'location_geom',
+    'marketplace_category',
+    'beds_count',
+    'rtb_status',
+    'rtb_registered',
+    'parking_available',
+    'household_dynamic',
+    'kitchen_culture',
+  };
+
   static final _uuidPattern = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   );
@@ -64,6 +89,7 @@ abstract final class ListingCreationPayloadBuilder {
     final languages = local[ListingCreationFieldKeys.languagesSpoken] ??
         local['languages_spoken'];
     final localId = local['id']?.toString();
+    final bedsCount = _bedsCountForRow(local);
 
     final row = <String, dynamic>{
       if (userId != null) 'user_id': userId,
@@ -114,9 +140,8 @@ abstract final class ListingCreationPayloadBuilder {
           ListingData.tenantTrackPreference(local).dbValue,
       if (local[ListingCreationFieldKeys.listingAuthorizationConfirmed] == true)
         ListingCreationFieldKeys.listingAuthorizationConfirmed: true,
-      if (local[ListingCreationFieldKeys.bedsCount] != null)
-        ListingCreationFieldKeys.bedsCount:
-            local[ListingCreationFieldKeys.bedsCount],
+      if (bedsCount != null) ListingCreationFieldKeys.bedsCount: bedsCount,
+      'is_active': true,
       if (local[ListingCreationFieldKeys.parkingAvailable] != null)
         ListingCreationFieldKeys.parkingAvailable:
             local[ListingCreationFieldKeys.parkingAvailable],
@@ -153,7 +178,26 @@ abstract final class ListingCreationPayloadBuilder {
       'metadata': _metadataOverflow(local),
     };
 
-    return ListingCreationValidationService.stripForbiddenKeys(row);
+    return _liveListingsRow(row);
+  }
+
+  static Map<String, dynamic> _liveListingsRow(Map<String, dynamic> row) {
+    return ListingCreationValidationService.stripForbiddenKeys(row)
+      ..removeWhere((key, _) => !liveListingsColumns.contains(key));
+  }
+
+  static int? _bedsCountForRow(Map<String, dynamic> local) {
+    final raw = local[ListingCreationFieldKeys.bedsCount];
+    if (raw is int && raw >= 1) return raw;
+    if (raw is num) {
+      final value = raw.toInt();
+      if (value >= 1) return value;
+    }
+    final parsed = int.tryParse(raw?.toString() ?? '');
+    if (parsed != null && parsed >= 1) return parsed;
+    final fromDisplay = ListingData.bedCount(local);
+    if (fromDisplay != null && fromDisplay >= 1) return fromDisplay;
+    return null;
   }
 
   static Map<String, dynamic> fromSupabaseRow(Map<String, dynamic> row) {

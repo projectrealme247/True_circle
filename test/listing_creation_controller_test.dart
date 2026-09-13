@@ -149,8 +149,12 @@ void main() {
 
       expect(local['kitchen_usage_timing'], isNull);
       expect(local[ListingCreationFieldKeys.listingAuthorizationConfirmed], true);
-      expect(row[ListingCreationFieldKeys.listingAuthorizationConfirmed], true);
+      expect(row.containsKey(ListingCreationFieldKeys.listingAuthorizationConfirmed),
+          isFalse);
       expect(row[ListingCreationFieldKeys.bedsCount], 1);
+      expect(row['is_active'], isTrue);
+      expect(row.containsKey('bedrooms'), isFalse);
+      expect(row.containsKey('metadata'), isFalse);
       expect(row[ListingCreationFieldKeys.locationGeom], isNotNull);
       final geom = row[ListingCreationFieldKeys.locationGeom] as Map;
       expect(geom['type'], 'Point');
