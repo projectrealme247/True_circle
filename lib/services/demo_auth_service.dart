@@ -14,6 +14,7 @@ import 'marketplace_context_notifier.dart';
 import 'profile_onboarding_repository.dart';
 import 'profile_state_notifier.dart';
 import 'profile_storage_service.dart';
+import 'qa_test_auth_service.dart';
 import 'user_session_store.dart';
 
 abstract final class DemoAuthService {
@@ -114,13 +115,20 @@ abstract final class DemoAuthService {
     await _persistSession(session);
   }
 
+  static const newSeekerEmail = 'new.seeker@test.truecircle.ie';
+  static const newHostEmail = 'new.host@test.truecircle.ie';
+
   static Future<void> enterAsNewSeeker() async {
     assert(kDebugMode, 'DemoAuthService must never be called in production');
+    await AuthService.signInWithEmail(
+      email: newSeekerEmail,
+      password: QaTestAuthService.signInPassword,
+    );
+    final identity = QaTestAuthService.authenticatedIdentity(newSeekerEmail);
     final session = <String, dynamic>{
       UserRole.sessionKey: UserRole.seeker.storageToken,
       'onboarding_intent': 'seeker',
-      'supabase_user_id': 'new-seeker-uuid',
-      'email': 'new.seeker@truecircle.dev',
+      ...identity,
       'demo_mode': true,
       // No name, no budget, no commute, no languages
       // This forces onboarding to run all steps
@@ -130,11 +138,15 @@ abstract final class DemoAuthService {
 
   static Future<void> enterAsNewLandlord() async {
     assert(kDebugMode, 'DemoAuthService must never be called in production');
+    await AuthService.signInWithEmail(
+      email: newHostEmail,
+      password: QaTestAuthService.signInPassword,
+    );
+    final identity = QaTestAuthService.authenticatedIdentity(newHostEmail);
     final session = <String, dynamic>{
       UserRole.sessionKey: UserRole.landlord.storageToken,
       'onboarding_intent': 'provider',
-      'supabase_user_id': 'new-landlord-uuid',
-      'email': 'new.landlord@truecircle.dev',
+      ...identity,
       'demo_mode': true,
       // Independent Place — skip dedicated host profile; name collected on listing.
       'profile_onboarding_track':

@@ -15,33 +15,28 @@ import 'profile_state_notifier.dart';
 import 'profile_storage_service.dart';
 import 'user_session_store.dart';
 
-/// Persistent one-click QA identities (debug only). No password.
+/// Persistent one-click QA identities (debug only).
 enum QaTestAccount {
   landlordIndependent(
     'landlord.independent',
-    'qa-landlord-independent-uuid',
-    'landlord.independent@truecircle.qa',
+    'host.independent@test.truecircle.ie',
   ),
   landlordShared(
     'landlord.shared',
-    'qa-landlord-shared-uuid',
-    'landlord.shared@truecircle.qa',
+    'host.shared@test.truecircle.ie',
   ),
   seekerIndependent(
     'seeker.independent',
-    'qa-seeker-independent-uuid',
-    'seeker.independent@truecircle.qa',
+    'seeker.independent@test.truecircle.ie',
   ),
   seekerShared(
     'seeker.shared',
-    'qa-seeker-shared-uuid',
-    'seeker.shared@truecircle.qa',
+    'seeker.shared@test.truecircle.ie',
   );
 
-  const QaTestAccount(this.id, this.userId, this.email);
+  const QaTestAccount(this.id, this.email);
 
   final String id;
-  final String userId;
   final String email;
 
   bool get isLandlord =>
@@ -60,11 +55,17 @@ enum QaTestAccount {
 abstract final class QaTestAuthService {
   static bool get isEnabled => kDebugMode;
 
+  /// Shared password for debug QA / first-time test users.
+  static const signInPassword = 'Truecircle123!';
+
   static bool isQaSession(Map<String, dynamic>? session) {
     if (session == null || session.isEmpty) return false;
     if (session['qa_mode'] == true) return true;
-    final userId = session['supabase_user_id']?.toString();
-    return QaTestAccount.values.any((account) => account.userId == userId);
+    final email = session['email']?.toString().trim().toLowerCase();
+    if (email == null || email.isEmpty) return false;
+    return QaTestAccount.values.any(
+      (account) => account.email.toLowerCase() == email,
+    );
   }
 
   static bool isQaSeekerSession(Map<String, dynamic>? session) {
@@ -79,9 +80,29 @@ abstract final class QaTestAuthService {
 
   static Future<void> enter(QaTestAccount account) async {
     assert(kDebugMode, 'QaTestAuthService must never be called in production');
+    await AuthService.signInWithEmail(
+      email: account.email,
+      password: signInPassword,
+    );
+    final identity = authenticatedIdentity(account.email);
     final storedSlot = await ProfileStorageService.loadSlot(account.slotKey);
-    final session = mergeAccountSession(account, storedSlot);
+    final session = {
+      ...mergeAccountSession(account, storedSlot),
+      ...identity,
+    };
     await _persistSession(account, session);
+  }
+
+  @visibleForTesting
+  static Map<String, String> authenticatedIdentity(String fallbackEmail) {
+    final user = AuthService.currentUser;
+    if (user == null) {
+      throw StateError('QA sign-in did not produce a Supabase user.');
+    }
+    return {
+      'supabase_user_id': user.id,
+      'email': user.email ?? fallbackEmail,
+    };
   }
 
   @visibleForTesting
@@ -91,7 +112,8 @@ abstract final class QaTestAuthService {
   ) {
     final defaults = defaultsFor(account);
     final sameIdentity = existing != null &&
-        existing['supabase_user_id']?.toString() == account.userId;
+        existing['email']?.toString().trim().toLowerCase() ==
+            account.email.toLowerCase();
     if (!sameIdentity) {
       return Map<String, dynamic>.from(defaults);
     }
@@ -121,7 +143,6 @@ abstract final class QaTestAuthService {
     return {
       UserRole.sessionKey: role.storageToken,
       'email': account.email,
-      'supabase_user_id': account.userId,
       'qa_account_id': account.id,
       'qa_mode': true,
       'demo_mode': true,

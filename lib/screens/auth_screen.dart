@@ -1081,7 +1081,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              'QA sessions run locally — no password or Supabase sign-in.',
+              'QA buttons sign in to Supabase with the shared test password.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _AuthPalette.textSecondary,
