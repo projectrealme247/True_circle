@@ -7,6 +7,25 @@ abstract final class ListingMedia {
   static const maxBytesPerImage = 10485760; // 10 MB
   static const maxBytesPerVideo = 31457280; // 30 MB
 
+  static bool isDataUri(String raw) {
+    return raw.trim().toLowerCase().startsWith('data:');
+  }
+
+  static bool isHttpUrl(String raw) {
+    final value = raw.trim().toLowerCase();
+    return value.startsWith('https://') || value.startsWith('http://');
+  }
+
+  static String extensionFromMime(String mime) {
+    return switch (mime.trim().toLowerCase()) {
+      'image/png' => 'png',
+      'image/webp' => 'webp',
+      'image/gif' => 'gif',
+      'image/heic' => 'heic',
+      _ => 'jpg',
+    };
+  }
+
   static String? mimeFromDataUri(String dataUri) {
     final match = RegExp(r'^data:([^;]+);base64,').firstMatch(dataUri.trim());
     return match?.group(1);

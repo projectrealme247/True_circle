@@ -1,6 +1,8 @@
 import '../models/listing_creation_draft.dart';
 import '../models/listing_creation_field_keys.dart';
+import '../models/listing_creation_category.dart';
 import '../utils/listing_data.dart';
+import '../utils/listing_media.dart';
 import '../utils/student_track_preference.dart';
 import 'listing_creation_validation_service.dart';
 
@@ -21,7 +23,6 @@ abstract final class ListingCreationPayloadBuilder {
     'longitude',
     'is_active',
     'eircode',
-    'location_geom',
     'marketplace_category',
     'beds_count',
     'rtb_status',
@@ -29,6 +30,7 @@ abstract final class ListingCreationPayloadBuilder {
     'parking_available',
     'household_dynamic',
     'kitchen_culture',
+    'image_urls',
   };
 
   static final _uuidPattern = RegExp(
@@ -90,6 +92,9 @@ abstract final class ListingCreationPayloadBuilder {
         local['languages_spoken'];
     final localId = local['id']?.toString();
     final bedsCount = _bedsCountForRow(local);
+    final price = _priceForRow(local);
+    final marketplaceCategory = _marketplaceCategoryForRow(local, listingType);
+    final imageUrls = httpImageUrls(local);
 
     final row = <String, dynamic>{
       if (userId != null) 'user_id': userId,
@@ -97,9 +102,7 @@ abstract final class ListingCreationPayloadBuilder {
       'title': ListingData.title(local).isNotEmpty
           ? ListingData.title(local)
           : local['title'],
-      'price': ListingData.price(local).isNotEmpty
-          ? ListingData.price(local)
-          : local['price'],
+      if (price != null) 'price': price,
       'location': ListingData.location(local).isNotEmpty
           ? ListingData.location(local)
           : local['location'],
@@ -109,8 +112,7 @@ abstract final class ListingCreationPayloadBuilder {
       'listing_type': listingType.isNotEmpty
           ? listingType
           : (local['listing_type'] ?? local['type']),
-      ListingCreationFieldKeys.marketplaceCategory:
-          local[ListingCreationFieldKeys.marketplaceCategory],
+      ListingCreationFieldKeys.marketplaceCategory: marketplaceCategory,
       if (local[ListingCreationFieldKeys.eircode] != null)
         ListingCreationFieldKeys.eircode: local[ListingCreationFieldKeys.eircode],
       'property_type': ListingData.text(local['property_type']).isNotEmpty
@@ -120,11 +122,6 @@ abstract final class ListingCreationPayloadBuilder {
             ),
       if (lat is num) 'latitude': lat.toDouble(),
       if (lng is num) 'longitude': lng.toDouble(),
-      if (lat is num && lng is num)
-        ListingCreationFieldKeys.locationGeom: {
-          'type': 'Point',
-          'coordinates': [lng.toDouble(), lat.toDouble()],
-        },
       'host_name': ListingData.hostName(local).isNotEmpty
           ? ListingData.hostName(local)
           : (local['host_name'] ?? local['hostName']),
@@ -142,6 +139,7 @@ abstract final class ListingCreationPayloadBuilder {
         ListingCreationFieldKeys.listingAuthorizationConfirmed: true,
       if (bedsCount != null) ListingCreationFieldKeys.bedsCount: bedsCount,
       'is_active': true,
+      if (imageUrls.isNotEmpty) 'image_urls': imageUrls,
       if (local[ListingCreationFieldKeys.parkingAvailable] != null)
         ListingCreationFieldKeys.parkingAvailable:
             local[ListingCreationFieldKeys.parkingAvailable],
@@ -200,6 +198,52 @@ abstract final class ListingCreationPayloadBuilder {
     return null;
   }
 
+  static int? _priceForRow(Map<String, dynamic> local) {
+    final raw = ListingData.price(local).isNotEmpty
+        ? ListingData.price(local)
+        : (local['price'] ?? '').toString();
+    final digits = raw.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.isEmpty) return null;
+    return int.tryParse(digits);
+  }
+
+  /// HTTPS listing photos only — never data URIs.
+  static List<String> httpImageUrls(Map<String, dynamic> local) {
+    return _httpUrlsFrom(local['image_urls'] ?? local['images']);
+  }
+
+  static List<String> _imageUrlsFromRow(Map<String, dynamic> row) {
+    return _httpUrlsFrom(row['image_urls'] ?? row['images']);
+  }
+
+  static List<String> _httpUrlsFrom(dynamic raw) {
+    if (raw is! List) return const [];
+    return [
+      for (final item in raw)
+        if (item != null && ListingMedia.isHttpUrl(item.toString()))
+          item.toString().trim(),
+    ];
+  }
+
+  /// Live CHECK: independent_places | shared_living.
+  static String _marketplaceCategoryForRow(
+    Map<String, dynamic> local,
+    String listingType,
+  ) {
+    final raw = ListingData.text(
+      local[ListingCreationFieldKeys.marketplaceCategory],
+    ).toLowerCase();
+    final type = listingType.toLowerCase();
+    if (raw == 'shared_living' ||
+        raw == 'shared_space' ||
+        raw == 'shared' ||
+        raw == 'share' ||
+        type == 'share') {
+      return ListingCreationCategory.sharedLiving.storageToken;
+    }
+    return ListingCreationCategory.independentPlaces.storageToken;
+  }
+
   static Map<String, dynamic> fromSupabaseRow(Map<String, dynamic> row) {
     final metadata = row['metadata'];
     final meta = metadata is Map
@@ -242,6 +286,7 @@ abstract final class ListingCreationPayloadBuilder {
               .dbValue,
       if (meta['foodPreference'] != null) 'foodPreference': meta['foodPreference'],
       ...meta,
+      if (_imageUrlsFromRow(row).isNotEmpty) 'images': _imageUrlsFromRow(row),
       if (ListingData.text(row[ListingData.publishedAtKey]).isNotEmpty)
         ListingData.publishedAtKey:
             ListingData.text(row[ListingData.publishedAtKey]),

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_service.dart';
 import 'listing_creation_payload_builder.dart';
 import 'listing_creation_validation_service.dart';
+import 'listing_image_storage_service.dart';
 
 /// Atomic Supabase insert for Phase C listing creation.
 abstract final class ListingCreationSupabaseService {
@@ -31,7 +32,9 @@ abstract final class ListingCreationSupabaseService {
     final row = ListingCreationPayloadBuilder.toSupabaseRow(
       localPayload,
       userId: userId,
-    )..removeWhere((key, _) => key == 'id');
+    )
+      ..removeWhere((key, _) => key == 'id')
+      ..remove('image_urls');
 
     try {
       final response = await AuthService.client
@@ -41,7 +44,8 @@ abstract final class ListingCreationSupabaseService {
           .single()
           .timeout(const Duration(seconds: 30));
 
-      return _requireUuidRow(response);
+      final inserted = _requireUuidRow(response);
+      return _attachUploadedImages(inserted, localPayload);
     } on PostgrestException catch (e) {
       debugPrint('ListingCreationSupabaseService insert failed: ${e.message}');
       throw ListingCreationTransactionException(
@@ -89,7 +93,9 @@ abstract final class ListingCreationSupabaseService {
     final row = ListingCreationPayloadBuilder.toSupabaseRow(
       localPayload,
       userId: userId,
-    )..remove('id');
+    )
+      ..remove('id')
+      ..remove('image_urls');
 
     try {
       final response = await AuthService.client
@@ -100,7 +106,8 @@ abstract final class ListingCreationSupabaseService {
           .single()
           .timeout(const Duration(seconds: 30));
 
-      return _requireUuidRow(response);
+      final updated = _requireUuidRow(response);
+      return _attachUploadedImages(updated, localPayload);
     } on PostgrestException catch (e) {
       debugPrint('ListingCreationSupabaseService update failed: ${e.message}');
       throw ListingCreationTransactionException(
@@ -151,6 +158,47 @@ abstract final class ListingCreationSupabaseService {
       );
     }
     return mapped;
+  }
+
+  static Future<Map<String, dynamic>> _attachUploadedImages(
+    Map<String, dynamic> remoteListing,
+    Map<String, dynamic> localPayload,
+  ) async {
+    final listingId = remoteListing['id']?.toString() ?? '';
+    final List<String> urls;
+    try {
+      urls = await ListingImageStorageService.uploadListingImages(
+        listingId: listingId,
+        images: localPayload['images'],
+      );
+    } on ListingImageUploadException catch (e) {
+      throw ListingCreationTransactionException(
+        e.message,
+        code: ListingCreationErrorCode.network,
+        cause: e.cause ?? e,
+      );
+    }
+    if (urls.isEmpty) return remoteListing;
+
+    try {
+      final response = await AuthService.client
+          .from(_table)
+          .update({'image_urls': urls})
+          .eq('id', listingId)
+          .select()
+          .single()
+          .timeout(const Duration(seconds: 30));
+      return _requireUuidRow(response);
+    } on PostgrestException catch (e) {
+      debugPrint(
+        'ListingCreationSupabaseService image_urls update failed: ${e.message}',
+      );
+      throw ListingCreationTransactionException(
+        'Listing was saved but photos could not be stored. Try editing the listing.',
+        code: ListingCreationErrorCode.database,
+        cause: e,
+      );
+    }
   }
 
   static String _messageFromPostgrest(PostgrestException e) {
