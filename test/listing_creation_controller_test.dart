@@ -155,10 +155,14 @@ void main() {
       expect(row['is_active'], isTrue);
       expect(row.containsKey('bedrooms'), isFalse);
       expect(row.containsKey('metadata'), isFalse);
-      expect(row[ListingCreationFieldKeys.locationGeom], isNotNull);
-      final geom = row[ListingCreationFieldKeys.locationGeom] as Map;
-      expect(geom['type'], 'Point');
-      expect(geom['coordinates'], [-6.248, 53.333]);
+      expect(row.containsKey(ListingCreationFieldKeys.locationGeom), isFalse);
+      expect(row['latitude'], 53.333);
+      expect(row['longitude'], -6.248);
+      expect(row['price'], 2100);
+      expect(
+        row[ListingCreationFieldKeys.marketplaceCategory],
+        ListingCreationCategory.independentPlaces.storageToken,
+      );
     });
 
     test('maps shared draft with kitchen culture not utility timing', () {

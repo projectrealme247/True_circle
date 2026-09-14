@@ -10,4 +10,4 @@ if (-not (Test-Path $config)) {
 }
 
 Set-Location $root
-flutter run -d chrome --dart-define-from-file=env.dev.json
+flutter run -d chrome --dart-define-from-file=env.dev.json --web-port=5173 --web-browser-flag="--user-data-dir=C:\Users\keepm\flutter-chrome-truecircle"

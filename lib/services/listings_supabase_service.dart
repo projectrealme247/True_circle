@@ -61,22 +61,45 @@ abstract final class ListingsSupabaseService {
 
   /// Public read of published rows. Empty when Supabase is unavailable.
   static Future<List<Map<String, dynamic>>> tryFetchListings() async {
-    if (!_supabaseReadyForRead) return const [];
+    print('[P0 FeedFetch] ENTERED REMOTE FETCH');
+    if (!_supabaseReadyForRead) {
+      print('[P0 FeedFetch] supabase not ready — returning 0 rows');
+      return const [];
+    }
 
     try {
       final response = await AuthService.client.from(_table).select();
-      if (response is! List) return const [];
+      if (response is! List) {
+        print(
+          '[P0 FeedFetch] unexpected response type=${response.runtimeType} — returning 0 rows',
+        );
+        return const [];
+      }
 
-      return [
+      print('[P0 FeedFetch] supabase raw rows=${response.length}');
+      final mapped = [
         for (final row in response)
           if (row is Map)
             _mapFetchedRow(Map<String, dynamic>.from(row)),
       ];
+      print('[P0 FeedFetch] mapped rows=${mapped.length}');
+      final preview = mapped.take(5);
+      for (final item in preview) {
+        print(
+          '[P0 FeedFetch] first5 id=${item['id']} title=${item['title']}',
+        );
+      }
+      if (mapped.isEmpty) {
+        print('[P0 FeedFetch] first5 (none)');
+      }
+      return mapped;
     } on PostgrestException catch (e) {
-      debugPrint('ListingsSupabaseService fetch failed: ${e.message}');
+      print(
+        '[P0 FeedFetch] SWALLOWED PostgrestException: ${e.message} code=${e.code}',
+      );
       return const [];
     } catch (e) {
-      debugPrint('ListingsSupabaseService fetch error: $e');
+      print('[P0 FeedFetch] SWALLOWED fetch error: $e');
       return const [];
     }
   }

@@ -16,8 +16,8 @@ void main() {
   test('defaults lock identity, role, and marketplace space', () {
     final independentHost =
         QaTestAuthService.defaultsFor(QaTestAccount.landlordIndependent);
-    expect(independentHost['email'], 'landlord.independent@truecircle.qa');
-    expect(independentHost['supabase_user_id'], 'qa-landlord-independent-uuid');
+    expect(independentHost['email'], 'host.independent@test.truecircle.ie');
+    expect(independentHost.containsKey('supabase_user_id'), isFalse);
     expect(independentHost['role'], UserRole.landlord.storageToken);
     expect(independentHost['qa_mode'], isTrue);
     expect(independentHost['demo_mode'], isTrue);
@@ -51,14 +51,14 @@ void main() {
     );
     expect(merged['budget_max'], 3200);
     expect(merged['full_name'], 'Edited Independent Seeker');
-    expect(merged['supabase_user_id'], 'qa-seeker-independent-uuid');
+    expect(merged['email'], QaTestAccount.seekerIndependent.email);
     expect(merged['qa_mode'], isTrue);
 
     final crossed = QaTestAuthService.mergeAccountSession(
       QaTestAccount.seekerIndependent,
       QaTestAuthService.defaultsFor(QaTestAccount.landlordShared),
     );
-    expect(crossed['supabase_user_id'], 'qa-seeker-independent-uuid');
+    expect(crossed['email'], QaTestAccount.seekerIndependent.email);
     expect(crossed['role'], UserRole.seeker.storageToken);
     expect(crossed['budget_max'], 2800);
   });
@@ -83,8 +83,8 @@ void main() {
 
     expect(await ProfileStorageService.load(), isNull);
     final slot = await ProfileStorageService.loadSlot(account.slotKey);
-    expect(slot?['supabase_user_id'], account.userId);
     expect(slot?['email'], account.email);
+    expect(slot?['qa_mode'], isTrue);
   });
 
   test('QA seekers meet contact verification', () {

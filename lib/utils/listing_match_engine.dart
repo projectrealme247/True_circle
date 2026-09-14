@@ -17,6 +17,8 @@ import 'profile_data.dart';
 import 'student_track_preference.dart';
 import 'weighted_listing_matcher.dart';
 
+const _p0TrackId = '6ab066eb-2750-42ce-a5c1-dee8cdf2b28c';
+
 enum MatchTower { rent, buy, share }
 
 /// Result of tower-specific match scoring for one listing.
@@ -112,6 +114,13 @@ abstract final class ListingMatchEngine {
   }) {
     final viewer = ViewerProfile.fromSession(viewerSession);
     if (viewer?.needsOnboarding == true) {
+      final inPool = listings.any(
+        (item) => item['id']?.toString() == _p0TrackId,
+      );
+      print(
+        '[P0 Track] afterRanking: Missing '
+        'rank skipped needsOnboarding=true inPool=$inPool',
+      );
       // #region agent log
       agentLog(
         'A',
@@ -144,6 +153,12 @@ abstract final class ListingMatchEngine {
         appliedSearchIntent: appliedSearchIntent,
         filtersWereRelaxed: filtersWereRelaxed,
       );
+      if (listing['id']?.toString() == _p0TrackId) {
+        print(
+          '[P0 Track] rank.evaluate excluded=${match.excluded} '
+          'label=${match.label} pct=${match.percentage}',
+        );
+      }
       if (match.excluded) {
         excludedCount++;
       }
@@ -469,6 +484,9 @@ abstract final class ListingMatchEngine {
     Map<String, dynamic>? viewerSession,
   }) {
     if (viewer?.needsOnboarding == true) {
+      if (listing['id']?.toString() == _p0TrackId) {
+        print('[P0 Track] evaluate drop: needsOnboarding');
+      }
       return ListingMatchResult.onboardingRequired;
     }
 
@@ -477,6 +495,9 @@ abstract final class ListingMatchEngine {
     if (tower == MatchTower.share &&
         viewer != null &&
         _isFamilyOccupant(viewer)) {
+      if (listing['id']?.toString() == _p0TrackId) {
+        print('[P0 Track] evaluate drop: family on Share tower');
+      }
       return ListingMatchResult(
         score: 0,
         maxScore: _maxFor(tower),
@@ -492,6 +513,9 @@ abstract final class ListingMatchEngine {
     final skipHard = skipProfileHardFilters || hasSearch;
 
     if (viewer != null && _studentTrackConflict(viewer, listing)) {
+      if (listing['id']?.toString() == _p0TrackId) {
+        print('[P0 Track] evaluate drop: studentTrackConflict');
+      }
       return ListingMatchResult(
         score: 0,
         maxScore: _maxFor(tower),
@@ -507,6 +531,9 @@ abstract final class ListingMatchEngine {
     if (viewer != null &&
         !skipHard &&
         _failsHardFilter(listing, viewer, tower)) {
+      if (listing['id']?.toString() == _p0TrackId) {
+        print('[P0 Track] evaluate drop: failsHardFilter tower=$tower');
+      }
       return ListingMatchResult(
         score: 0,
         maxScore: _maxFor(tower),
