@@ -152,16 +152,35 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
             listing: item,
           ).finalScore;
 
-    await ListingApplicationsService.submit(
-      listingId: widget.listingId,
-      session: enrichedSession,
-      space: _listingSpace,
-      compatibilityScore: NumericBounds.clampPercentInt(score),
-    );
+    final compatibilityScore = NumericBounds.clampPercentInt(score);
+    try {
+      await ListingApplicationsService.submit(
+        listingId: widget.listingId,
+        session: enrichedSession,
+        space: _listingSpace,
+        compatibilityScore: compatibilityScore,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Could not send your application. Try again.',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: AppColors.accent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      return;
+    }
     await ListingContactService.notifyHost(
       listing: item,
       applicantSession: enrichedSession,
-      compatibilityScore: NumericBounds.clampPercentInt(score),
+      compatibilityScore: compatibilityScore,
     );
     if (!mounted) return;
     await _refreshApplicationState();
