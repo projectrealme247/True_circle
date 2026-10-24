@@ -76,6 +76,7 @@ enum _HomeTab { explore, saved, applications, listings }
 class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _listings = [];
   bool _listingsLoading = true;
+  String? _exploreLoadError;
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
 
@@ -729,6 +730,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       _listings = listings;
       _listingsLoading = false;
+      _exploreLoadError = null;
       await _refreshApplicationMetrics();
 
       if (!_activeFilters.isEmpty) {
@@ -746,13 +748,20 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _listings = [];
         _listingsLoading = false;
+        _exploreLoadError = AuthService.isAuthenticated
+            ? 'Could not load listings. Try again.'
+            : null;
       });
     }
   }
 
-  /// Local seed/cache plus public Supabase rows. Remote is not written to
-  /// [ListingsStorageService] (dashboard stays local-only).
+  /// Signed-in Explore uses active Supabase rows only.
+  /// Signed-out and unsigned demo sessions keep the local seed, plus remote
+  /// rows when that public read succeeds.
   Future<List<Map<String, dynamic>>> _loadExploreFeedListings() async {
+    if (AuthService.isAuthenticated) {
+      return ListingsSupabaseService.fetchActiveListings();
+    }
     final local = await ListingsStorageService.load();
     final remote = await ListingsSupabaseService.tryFetchListings();
     return _mergeExploreFeed(local, remote);
@@ -1263,6 +1272,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         )
+      else if (_exploreLoadError != null)
+        SliverToBoxAdapter(child: _buildExploreLoadError())
       else if (_listings.isEmpty)
         SliverToBoxAdapter(child: _buildListingsEmptyState())
       else if (_familyViewerOnSharedLivingTab)
@@ -2296,6 +2307,47 @@ class _HomeScreenState extends State<HomeScreen> {
             'Try another tab or add a new listing',
             textAlign: TextAlign.center,
             style: AppTypography.detail(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExploreLoadError() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+      decoration: BoxDecoration(
+        color: HomeMarketplaceTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+        boxShadow: HomeMarketplaceTheme.cardShadowRest,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            size: 44,
+            color: HomeMarketplaceTheme.textMuted,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Could not load listings',
+            style: AppTypography.sectionTitle()
+                .copyWith(fontSize: AppTypography.textMd),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _exploreLoadError ?? 'Try again.',
+            textAlign: TextAlign.center,
+            style: AppTypography.detail(),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: _loadListingsFromStorage,
+            style: AppButtonStyles.primaryFilled,
+            child: Text('Try again', style: AppTypography.button()),
           ),
         ],
       ),

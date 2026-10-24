@@ -59,24 +59,30 @@ abstract final class ListingsSupabaseService {
     }
   }
 
+  /// Public read of active rows. Throws when Supabase is unavailable or the query fails.
+  static Future<List<Map<String, dynamic>>> fetchActiveListings() async {
+    if (!_supabaseReadyForRead) {
+      throw StateError('Supabase is required to load listings.');
+    }
+
+    final response = await AuthService.client
+        .from(_table)
+        .select()
+        .eq('is_active', true);
+    if (response is! List) {
+      throw StateError('Unexpected listings response.');
+    }
+
+    return [
+      for (final row in response)
+        if (row is Map) _mapFetchedRow(Map<String, dynamic>.from(row)),
+    ];
+  }
+
   /// Public read of published rows. Empty when Supabase is unavailable.
   static Future<List<Map<String, dynamic>>> tryFetchListings() async {
-    if (!_supabaseReadyForRead) return const [];
-
     try {
-      final response = await AuthService.client
-          .from(_table)
-          .select()
-          .eq('is_active', true);
-      if (response is! List) return const [];
-
-      return [
-        for (final row in response)
-          if (row is Map)
-            _mapFetchedRow(Map<String, dynamic>.from(row)),
-      ];
-    } on PostgrestException {
-      return const [];
+      return await fetchActiveListings();
     } catch (_) {
       return const [];
     }
