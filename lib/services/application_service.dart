@@ -94,6 +94,22 @@ class ApplicationService {
     return null;
   }
 
+  /// Drops a seeker's cached row after a remote read confirms it is gone.
+  Future<void> forgetListingUser({
+    required String listingId,
+    required String userId,
+  }) async {
+    await ensureLoaded();
+    if (listingId.isEmpty || userId.isEmpty) return;
+    final rows = [
+      for (final row in _rows)
+        if (row['listing_id']?.toString() != listingId ||
+            _rowUserId(row) != userId)
+          row,
+    ];
+    await _saveAll(rows);
+  }
+
   /// Existing application for a seeker on a listing, if any.
   Map<String, dynamic>? rowForListingUser({
     required String listingId,

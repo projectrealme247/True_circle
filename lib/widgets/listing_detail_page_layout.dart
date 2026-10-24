@@ -18,6 +18,8 @@ class ListingDetailPageLayout extends StatelessWidget {
     required this.space,
     required this.hasApplied,
     this.applicationStateLabel,
+    this.applicationLoadError,
+    this.onRetryApplicationState,
     required this.isOwned,
     required this.displayPrice,
     required this.displayTitle,
@@ -39,6 +41,8 @@ class ListingDetailPageLayout extends StatelessWidget {
   final bool hasApplied;
   /// When set, replaces the Pitch CTA with a disabled lifecycle state label.
   final String? applicationStateLabel;
+  final String? applicationLoadError;
+  final VoidCallback? onRetryApplicationState;
   final bool isOwned;
   final String displayPrice;
   final String displayTitle;
@@ -81,6 +85,8 @@ class ListingDetailPageLayout extends StatelessWidget {
           space: space,
           hasApplied: hasApplied,
           applicationStateLabel: applicationStateLabel,
+          applicationLoadError: applicationLoadError,
+          onRetryApplicationState: onRetryApplicationState,
           isOwned: isOwned,
           displayPrice: displayPrice,
           depositLabel: depositLabel,
@@ -448,6 +454,8 @@ class _ActionDashboardPanel extends StatelessWidget {
     required this.space,
     required this.hasApplied,
     this.applicationStateLabel,
+    this.applicationLoadError,
+    this.onRetryApplicationState,
     required this.isOwned,
     required this.displayPrice,
     required this.depositLabel,
@@ -462,6 +470,8 @@ class _ActionDashboardPanel extends StatelessWidget {
   final MarketplaceSpace space;
   final bool hasApplied;
   final String? applicationStateLabel;
+  final String? applicationLoadError;
+  final VoidCallback? onRetryApplicationState;
   final bool isOwned;
   final String displayPrice;
   final String? depositLabel;
@@ -535,6 +545,21 @@ class _ActionDashboardPanel extends StatelessWidget {
                   label: const Text('Start lease replacement'),
                 ),
               ],
+            ] else if (applicationLoadError != null) ...[
+              Text(
+                applicationLoadError!,
+                textAlign: TextAlign.center,
+                style: ListingDetailTokens.body,
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 52,
+                child: FilledButton(
+                  onPressed: onRetryApplicationState,
+                  style: AppButtonStyles.primaryFilled,
+                  child: const Text('Try again'),
+                ),
+              ),
             ] else if (hasApplied || applicationStateLabel != null) ...[
               SizedBox(
                 height: 52,

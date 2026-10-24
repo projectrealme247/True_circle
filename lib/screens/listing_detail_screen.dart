@@ -47,6 +47,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   bool _startedLoad = false;
   /// Non-null when the current seeker already applied to this listing.
   String? _applicationStateLabel;
+  String? _applicationLoadError;
 
   @override
   void initState() {
@@ -76,7 +77,26 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   Future<void> _refreshApplicationState() async {
     final session = AuthScreen.currentUserSession;
     if (session == null) {
-      if (mounted) setState(() => _applicationStateLabel = null);
+      if (mounted) {
+        setState(() {
+          _applicationStateLabel = null;
+          _applicationLoadError = null;
+        });
+      }
+      return;
+    }
+    final userId = AuthService.identityUserId(session);
+    try {
+      await ListingApplicationsService.forListingUser(
+        listingId: widget.listingId,
+        applicantUserId: userId,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _applicationStateLabel = null;
+        _applicationLoadError = ListingApplicationsService.detailLoadErrorMessage;
+      });
       return;
     }
     await applicationService.ensureLoaded();
@@ -84,10 +104,13 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     if (!mounted) return;
     final label = SeekerApplicationPipeline.listingDetailStateLabel(
       listingId: widget.listingId,
-      userId: AuthService.identityUserId(session),
+      userId: userId,
     );
     if (!mounted) return;
-    setState(() => _applicationStateLabel = label);
+    setState(() {
+      _applicationStateLabel = label;
+      _applicationLoadError = null;
+    });
   }
 
   Future<void> _resolveListing() async {
@@ -328,6 +351,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       space: _listingSpace,
       hasApplied: _applicationStateLabel != null,
       applicationStateLabel: _applicationStateLabel,
+      applicationLoadError: _applicationLoadError,
+      onRetryApplicationState: _refreshApplicationState,
       isOwned: ListingActionBar.isOwnedListing(item, userSession),
       displayPrice: ListingDetailCopy.displayPrice(item),
       displayTitle: ListingDetailCopy.displayTitle(item),
@@ -348,7 +373,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   void _handlePitch(Map<String, dynamic> item) {
-    if (_applicationStateLabel != null) return;
+    if (_applicationLoadError != null || _applicationStateLabel != null) return;
     final session = AuthScreen.currentUserSession;
     if (session == null) {
       _showSignInBottomSheet();

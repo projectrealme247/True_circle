@@ -14,6 +14,7 @@ class LandlordDecisionWorkspace extends StatelessWidget {
     required this.selectedListingIndex,
     required this.onListingSelected,
     required this.applicants,
+    this.applicantsEmptyLabel,
     required this.selectedApplicantId,
     required this.onApplicantSelected,
     required this.onInvite,
@@ -30,6 +31,7 @@ class LandlordDecisionWorkspace extends StatelessWidget {
   final int selectedListingIndex;
   final ValueChanged<int> onListingSelected;
   final List<LandlordApplicantCardModel> applicants;
+  final String? applicantsEmptyLabel;
   final String? selectedApplicantId;
   final ValueChanged<LandlordApplicantCardModel> onApplicantSelected;
   final ValueChanged<LandlordApplicantCardModel> onInvite;
@@ -82,6 +84,7 @@ class LandlordDecisionWorkspace extends StatelessWidget {
                   selectedListingIndex: selectedListingIndex,
                   onListingSelected: onListingSelected,
                   applicants: applicants,
+                  applicantsEmptyLabel: applicantsEmptyLabel,
                   selectedApplicantId: selectedApplicantId,
                   onApplicantSelected: onApplicantSelected,
                   selected: _selected,
@@ -108,6 +111,7 @@ class LandlordDecisionWorkspace extends StatelessWidget {
                     applicants: applicants,
                     selectedId: _selected?.applicationId,
                     onSelect: onApplicantSelected,
+                    emptyLabel: applicantsEmptyLabel,
                   ),
                   Expanded(
                     child: LandlordDecisionPane(
@@ -139,6 +143,7 @@ class _NarrowWorkspace extends StatelessWidget {
     required this.onListingSelected,
     required this.applicants,
     required this.selectedApplicantId,
+    this.applicantsEmptyLabel,
     required this.onApplicantSelected,
     required this.selected,
     required this.onInvite,
@@ -156,6 +161,7 @@ class _NarrowWorkspace extends StatelessWidget {
   final ValueChanged<int> onListingSelected;
   final List<LandlordApplicantCardModel> applicants;
   final String? selectedApplicantId;
+  final String? applicantsEmptyLabel;
   final ValueChanged<LandlordApplicantCardModel> onApplicantSelected;
   final LandlordApplicantCardModel? selected;
   final ValueChanged<LandlordApplicantCardModel> onInvite;
@@ -188,6 +194,7 @@ class _NarrowWorkspace extends StatelessWidget {
                 applicants: applicants,
                 selectedId: selected?.applicationId,
                 onSelect: onApplicantSelected,
+                emptyLabel: applicantsEmptyLabel,
               ),
               Expanded(
                 child: LandlordDecisionPane(

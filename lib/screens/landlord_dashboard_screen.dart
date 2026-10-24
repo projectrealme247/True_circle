@@ -62,6 +62,7 @@ class _ListingStreamPayload {
     this.shared,
     required this.noiseDeflected,
     required this.metrics,
+    this.applicantsError,
   });
 
   final ListingCreationCategory category;
@@ -69,6 +70,7 @@ class _ListingStreamPayload {
   final SharedLivingApplicantStream? shared;
   final int noiseDeflected;
   final LandlordStreamMetrics metrics;
+  final String? applicantsError;
 }
 
 class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
@@ -171,8 +173,9 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     await applicationService.ensureLoaded();
     var applicantCount = 0;
     for (final listing in listings) {
-      applicantCount +=
-          applicationService.rowsForListing(ListingData.id(listing)).length;
+      final id = ListingData.id(listing);
+      if (_payloadsByListingId[id]?.applicantsError != null) continue;
+      applicantCount += applicationService.rowsForListing(id).length;
     }
     final strongMatches = await SeekerStrongMatchAggregator.countForSession(
       profileStateNotifier.session,
@@ -279,8 +282,12 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
   ) async {
     final listingId = listing['id']?.toString() ?? '';
     final category = LandlordDashboardHelpers.categoryForListing(listing);
-    final rawApplications =
-        await ListingApplicationsService.forListing(listingId);
+    final List<Map<String, dynamic>> rawApplications;
+    try {
+      rawApplications = await ListingApplicationsService.forListing(listingId);
+    } catch (_) {
+      return _applicantsUnavailable(category: category, listingId: listingId);
+    }
     final hasRealApps = rawApplications.isNotEmpty;
     final useSeeded = LocalApplicantStreamService.useSeededFallback(
       listingId: listingId,
@@ -358,6 +365,49 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     );
   }
 
+  _ListingStreamPayload _applicantsUnavailable({
+    required ListingCreationCategory category,
+    required String listingId,
+  }) {
+    if (category.isShared) {
+      final stream = SharedLivingApplicantStream(
+        listingId: listingId,
+        marketplaceCategory: SharedLivingApplicantStream.categoryToken,
+        blocks: [],
+        totalCount: 0,
+      );
+      return _ListingStreamPayload(
+        category: category,
+        shared: stream,
+        noiseDeflected: 0,
+        metrics: LandlordDashboardHelpers.metricsFromShared(
+          stream: stream,
+          noiseDeflected: 0,
+          archivedIds: const {},
+        ),
+        applicantsError: ListingApplicationsService.listingLoadErrorMessage,
+      );
+    }
+
+    final stream = IndependentPlacesApplicantStream(
+      listingId: listingId,
+      marketplaceCategory: IndependentPlacesApplicantStream.categoryToken,
+      blocks: [],
+      totalCount: 0,
+    );
+    return _ListingStreamPayload(
+      category: category,
+      independent: stream,
+      noiseDeflected: 0,
+      metrics: LandlordDashboardHelpers.metricsFromIndependent(
+        stream: stream,
+        noiseDeflected: 0,
+        archivedIds: const {},
+      ),
+      applicantsError: ListingApplicationsService.listingLoadErrorMessage,
+    );
+  }
+
   _ListingStreamPayload? get _currentPayload {
     if (_listings.isEmpty) return null;
     final id = _listings[_selectedIndex]['id']?.toString();
@@ -372,6 +422,8 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     String listingId,
     _ListingStreamPayload payload,
   ) {
+    if (payload.applicantsError != null) return const [];
+
     final List<LandlordApplicantCardModel> all;
     if (payload.category.isShared && payload.shared != null) {
       all = LandlordApplicantCardModel.fromSharedStream(payload.shared!);
@@ -459,6 +511,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
         shared: payload.shared,
         noiseDeflected: payload.noiseDeflected,
         metrics: metrics,
+        applicantsError: payload.applicantsError,
       );
     });
   }
@@ -794,6 +847,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
             selectedListingIndex: _selectedIndex,
             onListingSelected: (index) => setState(() => _selectedIndex = index),
             applicants: applicants,
+            applicantsEmptyLabel: payload?.applicantsError,
             selectedApplicantId: selectedId,
             onApplicantSelected: (a) => _selectApplicant(listingId, a),
             onInvite: _inviteApplicant,

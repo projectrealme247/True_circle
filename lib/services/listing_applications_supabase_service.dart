@@ -13,7 +13,34 @@ abstract final class ListingApplicationsSupabaseService {
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   );
 
+  @visibleForTesting
+  static bool? debugIsReadyOverride;
+
+  @visibleForTesting
+  static Future<List<Map<String, dynamic>>> Function()?
+      debugFetchForCurrentApplicant;
+
+  @visibleForTesting
+  static Future<List<Map<String, dynamic>>> Function(String listingId)?
+      debugFetchForListing;
+
+  @visibleForTesting
+  static Future<Map<String, dynamic>?> Function({
+    required String listingId,
+    required String applicantUserId,
+  })? debugFetchForListingUser;
+
+  @visibleForTesting
+  static void resetDebugHooks() {
+    debugIsReadyOverride = null;
+    debugFetchForCurrentApplicant = null;
+    debugFetchForListing = null;
+    debugFetchForListingUser = null;
+  }
+
   static bool get isReady {
+    final override = debugIsReadyOverride;
+    if (override != null) return override;
     try {
       return Supabase.instance.isInitialized && AuthService.isAuthenticated;
     } catch (_) {
@@ -28,6 +55,8 @@ abstract final class ListingApplicationsSupabaseService {
   static Future<List<Map<String, dynamic>>> fetchForListing(
     String listingId,
   ) async {
+    final override = debugFetchForListing;
+    if (override != null) return override(listingId);
     if (listingId.trim().isEmpty) return const [];
 
     final response = await AuthService.client
@@ -45,6 +74,9 @@ abstract final class ListingApplicationsSupabaseService {
 
   /// Signed-in seeker's applications. RLS still limits rows to this user.
   static Future<List<Map<String, dynamic>>> fetchForCurrentApplicant() async {
+    final override = debugFetchForCurrentApplicant;
+    if (override != null) return override();
+
     final applicantUserId = AuthService.currentUser?.id?.trim() ?? '';
     if (applicantUserId.isEmpty) {
       throw StateError('Authenticated Supabase user id is required.');
@@ -122,6 +154,13 @@ abstract final class ListingApplicationsSupabaseService {
     required String listingId,
     required String applicantUserId,
   }) async {
+    final override = debugFetchForListingUser;
+    if (override != null) {
+      return override(
+        listingId: listingId,
+        applicantUserId: applicantUserId,
+      );
+    }
     if (listingId.isEmpty || applicantUserId.isEmpty) return null;
 
     final row = await AuthService.client

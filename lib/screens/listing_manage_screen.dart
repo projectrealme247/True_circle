@@ -26,6 +26,7 @@ class ListingManageScreen extends StatefulWidget {
 class _ListingManageScreenState extends State<ListingManageScreen> {
   Map<String, dynamic>? _listing;
   List<Map<String, dynamic>> _applications = const [];
+  String? _applicationsError;
   bool _loading = true;
 
   @override
@@ -36,12 +37,19 @@ class _ListingManageScreenState extends State<ListingManageScreen> {
 
   Future<void> _load() async {
     final listing = await ListingsStorageService.getById(widget.listingId);
-    final applications =
-        await ListingApplicationsService.forListing(widget.listingId);
+    List<Map<String, dynamic>> applications = const [];
+    String? applicationsError;
+    try {
+      applications =
+          await ListingApplicationsService.forListing(widget.listingId);
+    } catch (_) {
+      applicationsError = ListingApplicationsService.listingLoadErrorMessage;
+    }
     if (!mounted) return;
     setState(() {
       _listing = listing;
-      _applications = applications;
+      _applications = applicationsError == null ? applications : const [];
+      _applicationsError = applicationsError;
       _loading = false;
     });
   }
@@ -144,7 +152,30 @@ class _ListingManageScreenState extends State<ListingManageScreen> {
           ),
         ],
         const SizedBox(height: 16),
-        if (ranked.isEmpty)
+        if (_applicationsError != null)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: HomeMarketplaceTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: HomeMarketplaceTheme.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_applicationsError!, style: AppTypography.detail()),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _loading = true);
+                    _load();
+                  },
+                  child: const Text('Try again'),
+                ),
+              ],
+            ),
+          )
+        else if (ranked.isEmpty)
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(

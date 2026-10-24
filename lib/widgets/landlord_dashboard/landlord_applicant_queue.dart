@@ -17,11 +17,13 @@ class LandlordApplicantQueue extends StatelessWidget {
     required this.applicants,
     required this.selectedId,
     required this.onSelect,
+    this.emptyLabel,
   });
 
   final List<LandlordApplicantCardModel> applicants;
   final String? selectedId;
   final ValueChanged<LandlordApplicantCardModel> onSelect;
+  final String? emptyLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +67,7 @@ class LandlordApplicantQueue extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Text(
-                        'No applicants yet.',
+                        emptyLabel ?? 'No applicants yet.',
                         textAlign: TextAlign.center,
                         style: AppTypography.withEmojiFallback(
                           const TextStyle(

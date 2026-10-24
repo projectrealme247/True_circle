@@ -109,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showWelcomeFeedBanner = false;
   bool _showFirstListingPrompt = false;
   bool _applicationsReady = false;
+  String? _applicationsLoadError;
   int _applicationCount = 0;
   int _seekerActiveApplicationCount = 0;
   double _averageMatchPercent = 0;
@@ -265,7 +266,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshApplicationMetrics() async {
-    await ListingApplicationsService.refreshForCurrentSeeker();
+    try {
+      await ListingApplicationsService.refreshForCurrentSeeker();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _applicationsLoadError = ListingApplicationsService.seekerLoadErrorMessage;
+        _applicationsReady = true;
+      });
+      return;
+    }
     await applicationConversationService.ensureLoaded();
     final owned = marketplaceContextNotifier.ownedListings;
     var totalScore = 0.0;
@@ -280,6 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     if (!mounted) return;
     setState(() {
+      _applicationsLoadError = null;
       _applicationCount = count;
       _averageMatchPercent = count > 0 ? totalScore / count : 0;
       _applicationsReady = true;
@@ -1948,8 +1959,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildApplicationsTab() {
-    final applications = _userApplicationsForActiveSpace;
-
     if (!_applicationsReady) {
       return const SafeArea(
         child: Center(
@@ -1957,6 +1966,24 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+
+    if (_applicationsLoadError != null) {
+      return _HomeDashboardEmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'Could not load your applications',
+        subtitle: _applicationsLoadError!,
+        actionLabel: 'Try again',
+        onAction: () {
+          setState(() {
+            _applicationsLoadError = null;
+            _applicationsReady = false;
+          });
+          unawaited(_refreshApplicationMetrics());
+        },
+      );
+    }
+
+    final applications = _userApplicationsForActiveSpace;
 
     if (applications.isEmpty) {
       return _HomeDashboardEmptyState(
