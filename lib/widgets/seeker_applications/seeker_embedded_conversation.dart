@@ -19,6 +19,8 @@ class SeekerEmbeddedConversation extends StatelessWidget {
     required this.sending,
     required this.onSend,
     this.unlocked = true,
+    this.loadError,
+    this.onRetryLoad,
   });
 
   final List<ApplicationMessage> messages;
@@ -27,6 +29,8 @@ class SeekerEmbeddedConversation extends StatelessWidget {
   final bool sending;
   final VoidCallback onSend;
   final bool unlocked;
+  final String? loadError;
+  final VoidCallback? onRetryLoad;
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +56,33 @@ class SeekerEmbeddedConversation extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: HomeMarketplaceTheme.border),
               ),
-              child: !unlocked || messages.isEmpty
+              child: loadError != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              loadError!,
+                              textAlign: TextAlign.center,
+                              style: AppTypography.detail().copyWith(
+                                color: HomeMarketplaceTheme.textSecondary,
+                                height: 1.45,
+                              ),
+                            ),
+                            if (onRetryLoad != null) ...[
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: onRetryLoad,
+                                child: const Text('Try again'),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    )
+                  : !unlocked || messages.isEmpty
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),

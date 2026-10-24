@@ -35,6 +35,7 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
   bool _loading = false;
   bool _sending = false;
   bool _accepting = false;
+  String? _loadError;
   ApplicationConversation? _conversation;
   String? _bootstrappedId;
 
@@ -77,33 +78,62 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
       setState(() {
         _conversation = null;
         _loading = false;
+        _loadError = null;
         _bootstrappedId = null;
       });
       return;
     }
 
-    if (_bootstrappedId == current.applicationId && _conversation != null) {
+    if (_bootstrappedId == current.applicationId &&
+        _conversation != null &&
+        _loadError == null) {
       return;
     }
 
-    setState(() => _loading = true);
-    await applicationConversationService.ensureLoaded();
-    final conversation =
-        applicationConversationService.peek(current.applicationId);
-    if (conversation != null) {
-      await applicationConversationService.markRead(
-        applicationId: current.applicationId,
-        role: ApplicationParticipantRole.applicant,
-      );
-    }
-    if (!mounted || item?.applicationId != current.applicationId) return;
     setState(() {
-      _conversation =
-          applicationConversationService.peek(current.applicationId) ??
-              conversation;
-      _loading = false;
-      _bootstrappedId = current.applicationId;
+      _loading = true;
+      _loadError = null;
     });
+    try {
+      await applicationConversationService.ensureLoaded();
+      final conversation =
+          applicationConversationService.peek(current.applicationId);
+      if (conversation != null) {
+        try {
+          await applicationConversationService.markRead(
+            applicationId: current.applicationId,
+            role: ApplicationParticipantRole.applicant,
+          );
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content:
+                    Text(ApplicationConversationService.markReadErrorMessage),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      }
+      if (!mounted || item?.applicationId != current.applicationId) return;
+      setState(() {
+        _conversation =
+            applicationConversationService.peek(current.applicationId) ??
+                conversation;
+        _loading = false;
+        _loadError = null;
+        _bootstrappedId = current.applicationId;
+      });
+    } catch (_) {
+      if (!mounted || item?.applicationId != current.applicationId) return;
+      setState(() {
+        _conversation = null;
+        _loading = false;
+        _loadError = ApplicationConversationService.loadErrorMessage;
+        _bootstrappedId = current.applicationId;
+      });
+    }
   }
 
   Future<void> _send() async {
@@ -126,10 +156,21 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
         senderRole: ApplicationParticipantRole.applicant,
         body: body,
       );
-      await applicationConversationService.markRead(
-        applicationId: current.applicationId,
-        role: ApplicationParticipantRole.applicant,
-      );
+      try {
+        await applicationConversationService.markRead(
+          applicationId: current.applicationId,
+          role: ApplicationParticipantRole.applicant,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(ApplicationConversationService.markReadErrorMessage),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
       _controller.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
@@ -271,6 +312,14 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
                     messageController: _controller,
                     sending: _sending,
                     unlocked: unlocked,
+                    loadError: _loadError,
+                    onRetryLoad: () {
+                      setState(() {
+                        _bootstrappedId = null;
+                        _loadError = null;
+                      });
+                      _bootstrapIfNeeded();
+                    },
                     onSend: _send,
                   ),
                 ),

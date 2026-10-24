@@ -25,6 +25,7 @@ class _LandlordNotificationsButtonState
   final _menuController = MenuController();
   List<HostConversationNotification> _items = const [];
   bool _loadingPanel = false;
+  String? _loadError;
 
   String get _hostUserId => AuthService.identityUserId();
 
@@ -55,22 +56,43 @@ class _LandlordNotificationsButtonState
   }
 
   Future<void> _warm() async {
-    await applicationConversationService.ensureLoaded();
-    if (mounted) setState(() {});
+    try {
+      await applicationConversationService.ensureLoaded();
+      if (mounted) setState(() => _loadError = null);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadError = ApplicationConversationService.loadErrorMessage;
+        });
+      }
+    }
   }
 
   Future<void> _reloadPanel() async {
-    setState(() => _loadingPanel = true);
-    final items =
-        await applicationConversationService.hostUnreadNotificationsWithTitles(
-      hostUserId: _hostUserId,
-      ownedListingIds: widget.ownedListingIds,
-    );
-    if (!mounted) return;
     setState(() {
-      _items = items;
-      _loadingPanel = false;
+      _loadingPanel = true;
+      _loadError = null;
     });
+    try {
+      final items = await applicationConversationService
+          .hostUnreadNotificationsWithTitles(
+        hostUserId: _hostUserId,
+        ownedListingIds: widget.ownedListingIds,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loadingPanel = false;
+        _loadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _items = const [];
+        _loadingPanel = false;
+        _loadError = ApplicationConversationService.loadErrorMessage;
+      });
+    }
   }
 
   Future<void> _openConversation(HostConversationNotification item) async {
@@ -103,8 +125,10 @@ class _LandlordNotificationsButtonState
           width: 340,
           child: _NotificationsPanel(
             loading: _loadingPanel,
+            loadError: _loadError,
             items: _items,
             onOpen: _openConversation,
+            onRetry: _reloadPanel,
           ),
         ),
       ],
@@ -146,11 +170,15 @@ class _NotificationsPanel extends StatelessWidget {
     required this.loading,
     required this.items,
     required this.onOpen,
+    this.loadError,
+    this.onRetry,
   });
 
   final bool loading;
+  final String? loadError;
   final List<HostConversationNotification> items;
   final ValueChanged<HostConversationNotification> onOpen;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +208,30 @@ class _NotificationsPanel extends StatelessWidget {
                 height: 22,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
+            ),
+          )
+        else if (loadError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+            child: Column(
+              children: [
+                Text(
+                  loadError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'PlusJakartaSans',
+                    fontSize: 13,
+                    color: LandlordDashboardTheme.textMuted,
+                  ),
+                ),
+                if (onRetry != null) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: onRetry,
+                    child: const Text('Try again'),
+                  ),
+                ],
+              ],
             ),
           )
         else if (items.isEmpty)
@@ -289,12 +341,16 @@ extension on BuildContext {
     HostConversationNotification item,
   ) async {
     final hostUserId = AuthService.identityUserId();
-    await applicationConversationService.ensureConversation(
-      applicationId: item.applicationId,
-      listingId: item.listingId,
-      applicantUserId: item.applicantUserId,
-      hostUserId: hostUserId.isNotEmpty ? hostUserId : item.hostUserId,
-    );
+    try {
+      await applicationConversationService.ensureConversation(
+        applicationId: item.applicationId,
+        listingId: item.listingId,
+        applicantUserId: item.applicantUserId,
+        hostUserId: hostUserId.isNotEmpty ? hostUserId : item.hostUserId,
+      );
+    } catch (_) {
+      // Conversation screen bootstrap will surface the load error.
+    }
     if (!mounted) return;
     await ApplicationConversationScreen.openFromHostArgs(
       this,

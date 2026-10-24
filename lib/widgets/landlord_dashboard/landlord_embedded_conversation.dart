@@ -27,6 +27,8 @@ class _LandlordEmbeddedConversationState
     extends State<LandlordEmbeddedConversation> {
   late final TextEditingController _controller;
   bool _sending = false;
+  bool _loading = true;
+  String? _loadError;
 
   String get _applicationId => widget.applicant.applicationId;
 
@@ -59,16 +61,46 @@ class _LandlordEmbeddedConversationState
   }
 
   Future<void> _bootstrap() async {
-    await applicationConversationService.ensureConversation(
-      applicationId: _applicationId,
-      listingId: widget.applicant.listingId,
-      applicantUserId: widget.applicant.applicantUserId,
-      hostUserId: AuthService.identityUserId(),
-    );
-    await applicationConversationService.markRead(
-      applicationId: _applicationId,
-      role: ApplicationParticipantRole.host,
-    );
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      await applicationConversationService.ensureConversation(
+        applicationId: _applicationId,
+        listingId: widget.applicant.listingId,
+        applicantUserId: widget.applicant.applicantUserId,
+        hostUserId: AuthService.identityUserId(),
+      );
+      try {
+        await applicationConversationService.markRead(
+          applicationId: _applicationId,
+          role: ApplicationParticipantRole.host,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(ApplicationConversationService.markReadErrorMessage),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = ApplicationConversationService.loadErrorMessage;
+      });
+    }
   }
 
   Future<void> _send() async {
@@ -85,10 +117,21 @@ class _LandlordEmbeddedConversationState
         senderRole: ApplicationParticipantRole.host,
         body: body,
       );
-      await applicationConversationService.markRead(
-        applicationId: _applicationId,
-        role: ApplicationParticipantRole.host,
-      );
+      try {
+        await applicationConversationService.markRead(
+          applicationId: _applicationId,
+          role: ApplicationParticipantRole.host,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(ApplicationConversationService.markReadErrorMessage),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
       _controller.clear();
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -113,7 +156,40 @@ class _LandlordEmbeddedConversationState
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: messages.isEmpty
+          child: _loading
+              ? const Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : _loadError != null
+                  ? Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 280),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _loadError!,
+                              textAlign: TextAlign.center,
+                              style: LandlordDashboardTheme.cardSubtext().copyWith(
+                                fontSize: 14,
+                                height: 1.45,
+                                color: LandlordDashboardTheme.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: _bootstrap,
+                              child: const Text('Try again'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+              : messages.isEmpty
               ? Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 280),

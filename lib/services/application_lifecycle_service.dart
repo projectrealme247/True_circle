@@ -80,12 +80,16 @@ abstract final class ApplicationLifecycleService {
     final applicantUserId = row['user_id']?.toString() ??
         row['applicant_user_id']?.toString() ??
         '';
-    await applicationConversationService.ensureConversation(
-      applicationId: applicationId,
-      listingId: listingId,
-      applicantUserId: applicantUserId,
-      hostUserId: hostUserId,
-    );
+    try {
+      await applicationConversationService.ensureConversation(
+        applicationId: applicationId,
+        listingId: listingId,
+        applicantUserId: applicantUserId,
+        hostUserId: hostUserId,
+      );
+    } catch (_) {
+      // Status is already saved. Timeline send must still proceed.
+    }
     if (hostUserId.isEmpty) return;
     await applicationConversationService.sendMessage(
       applicationId: applicationId,

@@ -276,7 +276,11 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       return;
     }
-    await applicationConversationService.ensureLoaded();
+    try {
+      await applicationConversationService.ensureLoaded();
+    } catch (_) {
+      // Messaging load failures must not block Applications readiness.
+    }
     final owned = marketplaceContextNotifier.ownedListings;
     var totalScore = 0.0;
     var count = 0;

@@ -100,7 +100,11 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       return;
     }
     await applicationService.ensureLoaded();
-    await applicationConversationService.ensureLoaded();
+    try {
+      await applicationConversationService.ensureLoaded();
+    } catch (_) {
+      // Messaging load failures must not block the apply-state label.
+    }
     if (!mounted) return;
     final label = SeekerApplicationPipeline.listingDetailStateLabel(
       listingId: widget.listingId,

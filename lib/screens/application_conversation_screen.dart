@@ -126,6 +126,7 @@ class _ApplicationConversationScreenState
   final _scrollController = ScrollController();
   bool _loading = true;
   bool _sending = false;
+  String? _loadError;
   ApplicationConversation? _conversation;
   Map<String, dynamic>? _seekerListing;
 
@@ -210,23 +211,44 @@ class _ApplicationConversationScreenState
 
   Future<void> _bootstrap() async {
     final args = widget.args;
-    final conversation =
-        await applicationConversationService.ensureConversation(
-      applicationId: widget.applicationId,
-      listingId: args?.listingId ?? '',
-      applicantUserId: args?.applicantUserId ?? '',
-      hostUserId: args?.hostUserId ?? '',
-    );
-    await applicationConversationService.markRead(
-      applicationId: widget.applicationId,
-      role: _role,
-    );
-    if (!mounted) return;
-    setState(() {
-      _conversation = applicationConversationService.peek(widget.applicationId) ??
-          conversation;
-      _loading = false;
-    });
+    try {
+      final conversation =
+          await applicationConversationService.ensureConversation(
+        applicationId: widget.applicationId,
+        listingId: args?.listingId ?? '',
+        applicantUserId: args?.applicantUserId ?? '',
+        hostUserId: args?.hostUserId ?? '',
+      );
+      try {
+        await applicationConversationService.markRead(
+          applicationId: widget.applicationId,
+          role: _role,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(ApplicationConversationService.markReadErrorMessage),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _conversation =
+            applicationConversationService.peek(widget.applicationId) ??
+                conversation;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = ApplicationConversationService.loadErrorMessage;
+      });
+    }
   }
 
   Future<void> _send() async {
@@ -244,10 +266,21 @@ class _ApplicationConversationScreenState
         senderRole: _role,
         body: body,
       );
-      await applicationConversationService.markRead(
-        applicationId: widget.applicationId,
-        role: _role,
-      );
+      try {
+        await applicationConversationService.markRead(
+          applicationId: widget.applicationId,
+          role: _role,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(ApplicationConversationService.markReadErrorMessage),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
       _controller.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
@@ -320,6 +353,34 @@ class _ApplicationConversationScreenState
           ? const Center(
               child: CircularProgressIndicator(color: core.AppColors.accent),
             )
+          : _loadError != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _loadError!,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.detail(),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: () {
+                            setState(() {
+                              _loading = true;
+                              _loadError = null;
+                            });
+                            _bootstrap();
+                          },
+                          style: core.AppButtonStyles.primaryFilled,
+                          child: const Text('Try again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

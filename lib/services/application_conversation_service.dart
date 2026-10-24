@@ -1,56 +1,63 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/application_conversation.dart';
 import '../models/application_message.dart';
 import '../models/host_conversation_notification.dart';
 import '../utils/listing_data.dart';
 import '../utils/profile_data.dart';
+import 'application_messages_supabase_service.dart';
 import 'application_service.dart';
 import 'listings_storage_service.dart';
 
-/// Local store — one conversation per application.
+/// Application messaging — Supabase is the source of truth when authenticated.
+///
+/// Tests and unauthenticated sessions use an in-memory store (not SharedPreferences).
 class ApplicationConversationService extends ChangeNotifier {
   ApplicationConversationService._();
 
   static final ApplicationConversationService instance =
       ApplicationConversationService._();
 
-  static const _storageKey = 'circlekey_application_conversations';
   static const maxBodyLength = 4000;
+  static const loadErrorMessage = 'Could not load messages. Try again.';
+  static const markReadErrorMessage =
+      'Could not update read status. Try again.';
 
   final Map<String, ApplicationConversation> _byApplicationId = {};
+  final Map<String, ApplicationConversation> _localSource = {};
   bool _loaded = false;
 
   @visibleForTesting
-  void resetForTest() {
+  bool get isLoadedForTest => _loaded;
+
+  @visibleForTesting
+  void resetForTest({bool clearLocalSource = true}) {
     _byApplicationId.clear();
     _loaded = false;
+    if (clearLocalSource) _localSource.clear();
   }
 
+  /// Loads the messaging inbox. A failed remote read throws and does not
+  /// clear the cache or lock `_loaded`.
   Future<void> ensureLoaded() async {
     if (_loaded) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_storageKey);
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          for (final item in decoded) {
-            if (item is! Map) continue;
-            final conversation = ApplicationConversation.fromMap(
-              Map<String, dynamic>.from(item),
-            );
-            if (conversation.applicationId.isEmpty) continue;
-            _byApplicationId[conversation.applicationId] = conversation;
-          }
-        }
-      }
-    } catch (_) {
-      _byApplicationId.clear();
+    if (ApplicationMessagesSupabaseService.isReady) {
+      final remote =
+          await ApplicationMessagesSupabaseService.fetchAccessibleConversations();
+      _byApplicationId
+        ..clear()
+        ..addEntries([
+          for (final conversation in remote)
+            if (conversation.applicationId.isNotEmpty)
+              MapEntry(conversation.applicationId, conversation),
+        ]);
+      _loaded = true;
+      return;
     }
+
+    _byApplicationId
+      ..clear()
+      ..addEntries(_localSource.entries);
     _loaded = true;
   }
 
@@ -230,6 +237,9 @@ class ApplicationConversationService extends ChangeNotifier {
   }
 
   /// Creates the conversation on first open. Identity is [applicationId].
+  ///
+  /// A failed authenticated remote read throws and does not invent an empty
+  /// thread. Signed-out / local ids still create an empty conversation.
   Future<ApplicationConversation> ensureConversation({
     required String applicationId,
     String listingId = '',
@@ -262,7 +272,16 @@ class ApplicationConversationService extends ChangeNotifier {
       resolvedHost = hostUserIdFromListing(listing);
     }
 
-    final existing = _byApplicationId[applicationId];
+    final useRemote = ApplicationMessagesSupabaseService.isReady &&
+        ApplicationMessagesSupabaseService.isRemoteId(applicationId);
+    final remote = await ApplicationMessagesSupabaseService.fetchConversation(
+      applicationId,
+      listingId: resolvedListing,
+      applicantUserId: resolvedApplicant,
+      hostUserId: resolvedHost,
+    );
+
+    final existing = remote ?? _byApplicationId[applicationId];
     if (existing != null) {
       final merged = existing.copyWith(
         listingId:
@@ -273,14 +292,16 @@ class ApplicationConversationService extends ChangeNotifier {
         hostUserId:
             existing.hostUserId.isEmpty ? resolvedHost : existing.hostUserId,
       );
-      if (merged.listingId != existing.listingId ||
-          merged.applicantUserId != existing.applicantUserId ||
-          merged.hostUserId != existing.hostUserId) {
-        _byApplicationId[applicationId] = merged;
-        await _persist();
-        notifyListeners();
-      }
-      return _byApplicationId[applicationId]!;
+      _byApplicationId[applicationId] = merged;
+      _mirrorLocal(merged);
+      notifyListeners();
+      return merged;
+    }
+
+    if (useRemote) {
+      // Authenticated UUID reads return a conversation or throw. Reaching here
+      // means the remote path returned null unexpectedly.
+      throw StateError(loadErrorMessage);
     }
 
     final created = ApplicationConversation(
@@ -290,7 +311,7 @@ class ApplicationConversationService extends ChangeNotifier {
       hostUserId: resolvedHost,
     );
     _byApplicationId[applicationId] = created;
-    await _persist();
+    _mirrorLocal(created);
     notifyListeners();
     return created;
   }
@@ -309,29 +330,60 @@ class ApplicationConversationService extends ChangeNotifier {
       throw ArgumentError.value(senderUserId, 'senderUserId', 'must not be empty');
     }
 
-    final conversation = await ensureConversation(applicationId: applicationId);
+    // Status writes may already have succeeded. A failed thread read must not
+    // block the subsequent insertMessage for authenticated UUID applications.
+    ApplicationConversation conversation;
+    try {
+      conversation = await ensureConversation(applicationId: applicationId);
+    } catch (_) {
+      final useRemote = ApplicationMessagesSupabaseService.isReady &&
+          ApplicationMessagesSupabaseService.isRemoteId(applicationId);
+      if (!useRemote) rethrow;
+      conversation = _byApplicationId[applicationId] ??
+          ApplicationConversation(
+            applicationId: applicationId,
+            listingId: '',
+            applicantUserId: '',
+            hostUserId: '',
+          );
+      _byApplicationId[applicationId] = conversation;
+    }
+
     final clipped = trimmed.length > maxBodyLength
         ? trimmed.substring(0, maxBodyLength)
         : trimmed;
 
-    final message = ApplicationMessage(
-      id: 'msg-${DateTime.now().microsecondsSinceEpoch}',
-      applicationId: applicationId,
-      senderUserId: senderUserId,
-      senderRole: senderRole,
-      body: clipped,
-      createdAt: DateTime.now(),
-    );
+    final ApplicationMessage message;
+    if (ApplicationMessagesSupabaseService.isReady &&
+        ApplicationMessagesSupabaseService.isRemoteId(applicationId)) {
+      message = await ApplicationMessagesSupabaseService.insertMessage(
+        applicationId: applicationId,
+        senderUserId: senderUserId,
+        senderRole: senderRole,
+        body: clipped,
+      );
+    } else {
+      message = ApplicationMessage(
+        id: 'msg-${DateTime.now().microsecondsSinceEpoch}',
+        applicationId: applicationId,
+        senderUserId: senderUserId,
+        senderRole: senderRole,
+        body: clipped,
+        createdAt: DateTime.now(),
+      );
+    }
 
     final next = conversation.copyWith(
       messages: [...conversation.messages, message],
     );
     _byApplicationId[applicationId] = next;
-    await _persist();
+    _mirrorLocal(next);
     notifyListeners();
     return message;
   }
 
+  /// Advances the local unread cursor for demo/local ids, or after a successful
+  /// remote mark-read. A failed remote mark-read throws and leaves unread intact.
   Future<void> markRead({
     required String applicationId,
     required ApplicationParticipantRole role,
@@ -340,21 +392,24 @@ class ApplicationConversationService extends ChangeNotifier {
     final conversation = _byApplicationId[applicationId];
     if (conversation == null) return;
 
+    final useRemote = ApplicationMessagesSupabaseService.isReady &&
+        ApplicationMessagesSupabaseService.isRemoteId(applicationId);
+    if (useRemote) {
+      await ApplicationMessagesSupabaseService.markRead(applicationId);
+    }
+
     final now = DateTime.now();
     final next = role == ApplicationParticipantRole.host
         ? conversation.copyWith(hostLastReadAt: now)
         : conversation.copyWith(applicantLastReadAt: now);
     _byApplicationId[applicationId] = next;
-    await _persist();
+    _mirrorLocal(next);
     notifyListeners();
   }
 
-  Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = jsonEncode([
-      for (final conversation in _byApplicationId.values) conversation.toMap(),
-    ]);
-    await prefs.setString(_storageKey, encoded);
+  void _mirrorLocal(ApplicationConversation conversation) {
+    if (ApplicationMessagesSupabaseService.isReady) return;
+    _localSource[conversation.applicationId] = conversation;
   }
 }
 

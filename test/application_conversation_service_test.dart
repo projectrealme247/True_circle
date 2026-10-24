@@ -107,7 +107,7 @@ void main() {
         body: 'Viewing at 6pm',
       );
 
-      applicationConversationService.resetForTest();
+      applicationConversationService.resetForTest(clearLocalSource: false);
       await applicationConversationService.ensureLoaded();
 
       final conversation = applicationConversationService.peek('app-1');
