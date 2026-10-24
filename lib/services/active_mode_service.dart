@@ -3,7 +3,7 @@ import '../models/onboarding_user_role.dart';
 import '../models/profile_onboarding_models.dart';
 import '../screens/auth_screen.dart';
 import '../utils/profile_data.dart';
-import 'listings_storage_service.dart';
+import 'host_inventory_service.dart';
 import 'marketplace_context_notifier.dart';
 import 'profile_state_notifier.dart';
 import 'profile_storage_service.dart';
@@ -289,17 +289,18 @@ abstract final class ActiveModeService {
   static Future<int> _ownedListingCountAsync(
     Map<String, dynamic>? session,
   ) async {
-    var listings = await ListingsStorageService.ownedByCurrentUser(session);
-    if (listings.isEmpty && _useMockHostListings(session)) {
-      listings = DublinMockData.ownedListingsForHost();
+    try {
+      final listings = await HostInventoryService.loadOwned(session);
+      return listings.length;
+    } catch (_) {
+      return 0;
     }
-    return listings.length;
   }
 
   static int _ownedListingCountSync(Map<String, dynamic>? session) {
     final fromNotifier = marketplaceContextNotifier.ownedListingCount;
     if (fromNotifier > 0) return fromNotifier;
-    if (_useMockHostListings(session)) {
+    if (!HostInventoryService.usesRemote && _useMockHostListings(session)) {
       return DublinMockData.ownedListingsForHost().length;
     }
     return 0;

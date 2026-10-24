@@ -61,47 +61,91 @@ abstract final class ListingsSupabaseService {
 
   /// Public read of published rows. Empty when Supabase is unavailable.
   static Future<List<Map<String, dynamic>>> tryFetchListings() async {
-    print('[P0 FeedFetch] ENTERED REMOTE FETCH');
-    if (!_supabaseReadyForRead) {
-      print('[P0 FeedFetch] supabase not ready — returning 0 rows');
-      return const [];
-    }
+    if (!_supabaseReadyForRead) return const [];
 
     try {
-      final response = await AuthService.client.from(_table).select();
-      if (response is! List) {
-        print(
-          '[P0 FeedFetch] unexpected response type=${response.runtimeType} — returning 0 rows',
-        );
-        return const [];
-      }
+      final response = await AuthService.client
+          .from(_table)
+          .select()
+          .eq('is_active', true);
+      if (response is! List) return const [];
 
-      print('[P0 FeedFetch] supabase raw rows=${response.length}');
-      final mapped = [
+      return [
         for (final row in response)
           if (row is Map)
             _mapFetchedRow(Map<String, dynamic>.from(row)),
       ];
-      print('[P0 FeedFetch] mapped rows=${mapped.length}');
-      final preview = mapped.take(5);
-      for (final item in preview) {
-        print(
-          '[P0 FeedFetch] first5 id=${item['id']} title=${item['title']}',
-        );
-      }
-      if (mapped.isEmpty) {
-        print('[P0 FeedFetch] first5 (none)');
-      }
-      return mapped;
-    } on PostgrestException catch (e) {
-      print(
-        '[P0 FeedFetch] SWALLOWED PostgrestException: ${e.message} code=${e.code}',
-      );
+    } on PostgrestException {
       return const [];
-    } catch (e) {
-      print('[P0 FeedFetch] SWALLOWED fetch error: $e');
+    } catch (_) {
       return const [];
     }
+  }
+
+  /// Listings owned by the signed-in host (`listings.user_id = auth.uid()`).
+  ///
+  /// Throws when the query fails. Returns an empty list when the host has
+  /// no remote listings.
+  static Future<List<Map<String, dynamic>>> fetchOwnedByCurrentUser() async {
+    if (!_supabaseReadyForWrite) {
+      throw StateError('Supabase auth is required to load host listings.');
+    }
+
+    final userId = AuthService.currentUser?.id?.trim() ?? '';
+    if (userId.isEmpty) {
+      throw StateError('Authenticated Supabase user id is required.');
+    }
+
+    final response = await AuthService.client
+        .from(_table)
+        .select()
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('created_at', ascending: false)
+        .timeout(const Duration(seconds: 20));
+
+    return [
+      for (final row in response as List)
+        if (row is Map) mapOwnedListingRow(Map<String, dynamic>.from(row)),
+    ];
+  }
+
+  /// Marks an owned listing inactive. The row stays in the database.
+  ///
+  /// Returns false when [listingId] is not a remote UUID (local/demo id).
+  /// Throws when the signed-in host cannot update the row.
+  static Future<bool> deactivateOwnedListing(String listingId) async {
+    if (!ListingCreationPayloadBuilder.isUuid(listingId)) return false;
+    if (!_supabaseReadyForWrite) {
+      throw StateError('Supabase auth is required to deactivate a listing.');
+    }
+
+    final response = await AuthService.client
+        .from(_table)
+        .update({'is_active': false})
+        .eq('id', listingId)
+        .select('id')
+        .timeout(const Duration(seconds: 20));
+
+    if (response.isEmpty) {
+      throw StateError('Listing could not be deactivated.');
+    }
+    return true;
+  }
+
+  /// App-shaped listing whose `id` is the database UUID.
+  static Map<String, dynamic> mapOwnedListingRow(Map<String, dynamic> row) {
+    final mapped = _mapFetchedRow(row);
+    final id = row['id']?.toString().trim() ?? '';
+    final userId = row['user_id']?.toString().trim() ?? '';
+    final category = row['marketplace_category']?.toString().trim() ?? '';
+    if (id.isNotEmpty) mapped['id'] = id;
+    if (userId.isNotEmpty) {
+      mapped['user_id'] = userId;
+      mapped['owner_user_id'] = userId;
+    }
+    if (category.isNotEmpty) mapped['marketplace_category'] = category;
+    return mapped;
   }
 
   static Map<String, dynamic> _mapFetchedRow(Map<String, dynamic> row) {

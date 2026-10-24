@@ -17,8 +17,10 @@ import '../navigation/navigate_after_identity.dart';
 import '../services/active_mode_service.dart';
 import '../services/application_service.dart';
 import '../services/auth_service.dart';
+import '../services/host_inventory_service.dart';
 import '../services/listing_applications_service.dart';
 import '../services/listings_storage_service.dart';
+import '../services/listings_supabase_service.dart';
 import '../services/qa_test_auth_service.dart';
 import '../services/local_applicant_stream_service.dart';
 import '../services/profile_onboarding_repository.dart';
@@ -107,15 +109,16 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
 
     try {
       final session = profileStateNotifier.session;
-      var listings =
-          await ListingsStorageService.ownedByCurrentUser(session);
-      if (listings.isEmpty &&
+      var listings = await HostInventoryService.loadOwned(session);
+      if (!HostInventoryService.usesRemote &&
+          listings.isEmpty &&
           DublinMockData.useMockHarness &&
           QaTestAuthService.allowMockHostListings(session)) {
         listings = DublinMockData.ownedListingsForHost();
       }
       final initialId = widget.initialListingId;
-      if (DublinMockData.useMockHarness &&
+      if (!HostInventoryService.usesRemote &&
+          DublinMockData.useMockHarness &&
           QaTestAuthService.allowMockHostListings(session) &&
           initialId == DublinMockData.listingId &&
           !listings.any((l) => l['id']?.toString() == DublinMockData.listingId)) {
@@ -149,8 +152,18 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = e.toString();
+        _loadError = HostInventoryService.usesRemote
+            ? HostInventoryService.loadErrorMessage
+            : e.toString();
       });
+    }
+  }
+
+  bool get _remoteHostListingsReady {
+    try {
+      return ListingsSupabaseService.canWrite;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -686,6 +699,9 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
 
     setState(() => _actionLoadingId = listingId);
     try {
+      if (_remoteHostListingsReady) {
+        await ListingsSupabaseService.deactivateOwnedListing(listingId);
+      }
       await ListingsStorageService.deleteListing(listingId);
       if (!mounted) return;
       setState(() {

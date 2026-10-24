@@ -1,13 +1,11 @@
 ﻿import 'package:flutter/foundation.dart';
 
-import '../data/dublin_mock_data.dart';
 import '../models/marketplace_space.dart';
 import '../models/profile_onboarding_models.dart';
-import '../services/listings_storage_service.dart';
-import '../services/replacement_workflow_service.dart';
 import '../utils/numeric_bounds.dart';
+import 'host_inventory_service.dart';
 import 'profile_storage_service.dart';
-import 'qa_test_auth_service.dart';
+import 'replacement_workflow_service.dart';
 import 'user_session_store.dart';
 
 /// Unified marketplace viewport state: active space + derived workflows.
@@ -15,6 +13,7 @@ class MarketplaceContextNotifier extends ChangeNotifier {
   MarketplaceSpace _activeSpace = MarketplaceSpace.fullRental;
   Map<String, dynamic>? _session;
   List<Map<String, dynamic>> _ownedListings = const [];
+  String? _ownedListingsError;
   Set<MarketplaceWorkflow> _activeWorkflows = {MarketplaceWorkflow.browsing};
   ReplacementWorkflow? _replacementProgress;
 
@@ -26,6 +25,7 @@ class MarketplaceContextNotifier extends ChangeNotifier {
 
   Map<String, dynamic>? get session => _session;
   List<Map<String, dynamic>> get ownedListings => _ownedListings;
+  String? get ownedListingsError => _ownedListingsError;
   Set<MarketplaceWorkflow> get activeWorkflows => _activeWorkflows;
   ReplacementWorkflow? get replacementProgress => _replacementProgress;
 
@@ -41,11 +41,12 @@ class MarketplaceContextNotifier extends ChangeNotifier {
     _activeSpace = _readStoredSpace(_session) ??
         MarketplaceSpace.fromSession(_session);
 
-    _ownedListings = await ListingsStorageService.ownedByCurrentUser(_session);
-    if (DublinMockData.useMockHarness &&
-        QaTestAuthService.allowMockHostListings(_session) &&
-        _ownedListings.isEmpty) {
-      _ownedListings = DublinMockData.ownedListingsForHost();
+    _ownedListingsError = null;
+    try {
+      _ownedListings = await HostInventoryService.loadOwned(_session);
+    } catch (_) {
+      _ownedListings = const [];
+      _ownedListingsError = HostInventoryService.loadErrorMessage;
     }
     _replacementProgress =
         await ReplacementWorkflowService.activeForUser(_session);

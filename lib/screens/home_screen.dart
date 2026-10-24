@@ -13,10 +13,10 @@ import '../router/app_router.dart';
 import '../navigation/space_gateway_navigation.dart';
 import '../services/active_mode_service.dart';
 import '../data/dublin_mock_data.dart';
-import '../debug/agent_log.dart';
-import '../debug/debug_session_log.dart';
 import '../services/auth_service.dart';
+import '../services/host_inventory_service.dart';
 import '../services/application_service.dart';
+import '../services/listing_applications_service.dart';
 import '../services/application_conversation_service.dart';
 import '../services/listings_storage_service.dart';
 import '../services/listings_supabase_service.dart';
@@ -74,19 +74,6 @@ class HomeScreen extends StatefulWidget {
 enum _HomeTab { explore, saved, applications, listings }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const _p0TrackId = '6ab066eb-2750-42ce-a5c1-dee8cdf2b28c';
-
-  bool _p0PresentIn(Iterable<dynamic> items) {
-    for (final item in items) {
-      if (item is ScoredListing &&
-          item.listing['id']?.toString() == _p0TrackId) {
-        return true;
-      }
-      if (item is Map && item['id']?.toString() == _p0TrackId) return true;
-    }
-    return false;
-  }
-
   List<Map<String, dynamic>> _listings = [];
   bool _listingsLoading = true;
   final _searchController = TextEditingController();
@@ -277,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshApplicationMetrics() async {
-    await applicationService.ensureLoaded();
+    await ListingApplicationsService.refreshForCurrentSeeker();
     await applicationConversationService.ensureLoaded();
     final owned = marketplaceContextNotifier.ownedListings;
     var totalScore = 0.0;
@@ -484,23 +471,6 @@ class _HomeScreenState extends State<HomeScreen> {
             _activeUserSession != null &&
             !needsOnboarding);
     if (shouldRefresh) {
-      // #region agent log
-      agentLog(
-        'C',
-        'home_screen.dart:_currentPipeline',
-        'pipeline cache refresh',
-        {
-          'reason': cached == null
-              ? 'null_cache'
-              : cached.requiresOnboarding != needsOnboarding
-                  ? 'onboarding_mismatch'
-                  : 'zero_pct_with_session',
-          'cachedRequiresOnboarding': cached?.requiresOnboarding ?? false,
-          'sessionNeedsOnboarding': needsOnboarding,
-          'cachedRankedCount': cached?.ranked.length ?? 0,
-        },
-      );
-      // #endregion
       _pipelineResult = _runDefaultPipeline();
     }
     return _pipelineResult!;
@@ -511,56 +481,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   MarketplaceListingPipelineResult _runDefaultPipeline() {
     final inheritedFilters = _inheritedFeedFilters(_activeUserSession);
-    // #region agent log
-    debugSessionLog(
-      location: 'home_screen.dart:_runDefaultPipeline',
-      message: 'pipeline invoke',
-      hypothesisId: 'A,D,E',
-      data: {
-        'tower': _selectedPropertyType,
-        'activeSpace': _activeSpace.storageToken,
-        'sessionOccupant': _activeUserSession?['occupant_type'],
-        'inheritedOccupant': inheritedFilters.occupantType,
-        'inheritedBudgetMax': inheritedFilters.budgetMax,
-        'pipelineQuery': inheritedFilters.pipelineQueryText(),
-        'listingCount': _listings.length,
-      },
-    );
-    // #endregion
-    final result = MarketplaceListingPipeline.runWithFilters(
+    return MarketplaceListingPipeline.runWithFilters(
       allListings: _listings,
       towerPropertyType: _selectedPropertyType,
       filters: inheritedFilters,
       userSession: _activeUserSession,
     );
-    // #region agent log
-    agentLog(
-      'D',
-      'home_screen.dart:_runDefaultPipeline',
-      'pipeline run complete',
-      {
-        'rankedCount': result.ranked.length,
-        'firstPct':
-            result.ranked.isEmpty ? null : result.ranked.first.match.percentage,
-        'requiresOnboarding': result.requiresOnboarding,
-        'sessionKeyCount': _activeUserSession?.keys.length ?? 0,
-        'sessionNeedsOnboarding': _sessionNeedsOnboarding,
-      },
-    );
-    // #endregion
-    final visibleHas = result.ranked.isNotEmpty
-        ? _p0PresentIn(result.ranked)
-        : (result.requiresOnboarding || _sessionNeedsOnboarding) &&
-            _p0PresentIn(result.afterFilters);
-    print(
-      '[P0 Track] afterRanking: '
-      '${_p0PresentIn(result.ranked) ? 'Present' : 'Missing'} '
-      'requiresOnboarding=${result.requiresOnboarding}',
-    );
-    print(
-      '[P0 Track] visibleList: ${visibleHas ? 'Present' : 'Missing'}',
-    );
-    return result;
   }
 
   ListingSearchFilters _inheritedFeedFilters(Map<String, dynamic>? session) {
@@ -803,27 +729,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       _listings = listings;
       _listingsLoading = false;
-      final tower = _selectedPropertyType;
-      final afterTower = listings
-          .where((item) => ListingData.listingType(item) == tower)
-          .length;
-      print(
-        '[P0 FeedFetch] after merge=${listings.length} '
-        'after tower ($tower)=$afterTower',
-      );
-      Map<String, dynamic>? tracked;
-      for (final item in listings) {
-        if (item['id']?.toString() == _p0TrackId) {
-          tracked = item;
-          break;
-        }
-      }
-      print(
-        '[P0 Track] afterTower(home): '
-        '${tracked != null && ListingData.listingType(tracked) == tower ? 'Present' : 'Missing'} '
-        'listingType=${tracked == null ? 'not-in-merge' : ListingData.listingType(tracked)} '
-        'expected=$tower',
-      );
       await _refreshApplicationMetrics();
 
       if (!_activeFilters.isEmpty) {
@@ -836,8 +741,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _pipelineResult = _runDefaultPipeline();
         });
       }
-    } catch (e) {
-      print('[P0 FeedFetch] SWALLOWED home load error: $e');
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _listings = [];
@@ -849,20 +753,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Local seed/cache plus public Supabase rows. Remote is not written to
   /// [ListingsStorageService] (dashboard stays local-only).
   Future<List<Map<String, dynamic>>> _loadExploreFeedListings() async {
-    print('[P0 FeedFetch] ENTERED HOME EXPLORE LOAD');
     final local = await ListingsStorageService.load();
     final remote = await ListingsSupabaseService.tryFetchListings();
-    final merged = _mergeExploreFeed(local, remote);
-    print(
-      '[P0 FeedFetch] local=${local.length} remote=${remote.length} '
-      'after merge=${merged.length}',
-    );
-    print(
-      '[P0 Track] afterMerge: '
-      '${_p0PresentIn(merged) ? 'Present' : 'Missing'} '
-      '(inRemote=${_p0PresentIn(remote)} inLocal=${_p0PresentIn(local)})',
-    );
-    return merged;
+    return _mergeExploreFeed(local, remote);
   }
 
   static List<Map<String, dynamic>> _mergeExploreFeed(
@@ -875,12 +768,7 @@ class _HomeScreenState extends State<HomeScreen> {
     void upsert(Map<String, dynamic> raw, {required bool replaceExisting}) {
       final item = ListingData.normalizeItem(raw);
       final id = item['id']?.toString() ?? '';
-      if (id.isEmpty) {
-        if (raw['id']?.toString() == _p0TrackId) {
-          print('[P0 Track] afterMerge: Missing normalize dropped id');
-        }
-        return;
-      }
+      if (id.isEmpty) return;
       if (byId.containsKey(id)) {
         if (replaceExisting) byId[id] = item;
         return;
@@ -2089,6 +1977,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildListingsTab({required double bodyPadding}) {
+    final loadError = marketplaceContextNotifier.ownedListingsError;
+    if (loadError != null) {
+      return _HomeDashboardEmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'Could not load your listings',
+        subtitle: loadError,
+        actionLabel: 'Try again',
+        onAction: () {
+          unawaited(marketplaceContextNotifier.refresh());
+        },
+      );
+    }
+
     final spaceListings = _ownedListingsForActiveSpace;
 
     if (spaceListings.isEmpty) {
@@ -2150,7 +2051,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Map<String, dynamic>> get _ownedListingsForActiveSpace {
-    final owned = DublinMockData.useMockHarness &&
+    final owned = !HostInventoryService.usesRemote &&
+            DublinMockData.useMockHarness &&
             QaTestAuthService.allowMockHostListings(_activeUserSession) &&
             marketplaceContextNotifier.ownedListings.isEmpty
         ? DublinMockData.ownedListingsForHost()
