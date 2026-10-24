@@ -9,16 +9,25 @@ import '../models/listing_applicant_dashboard.dart';
 import '../models/shared_living_applicant_stream.dart';
 import '../models/high_signal_match.dart';
 import '../repositories/tenant_profile_repository.dart';
+import '../utils/viewing_invitation.dart';
 import 'applicant_dashboard_payload_builder.dart';
 import 'applicant_status_transition_service.dart';
 import 'applicant_stream_payload_builder.dart';
 import 'auth_service.dart';
+import 'listing_applications_supabase_service.dart';
 
 /// Supabase read/write layer for host applicant management (Phase C Step 3).
 abstract final class ApplicantManagementSupabaseService {
   static const _applicationsTable = 'listing_applications';
   static const _listingsTable = 'listings';
   static const _trustProfilesTable = 'user_trust_profiles';
+  static const _acceptViewingRpc = 'accept_application_viewing';
+
+  static const _viewingExtraKeys = {
+    ViewingInvitation.dateKey,
+    ViewingInvitation.timeKey,
+    ViewingInvitation.locationKey,
+  };
 
   static bool get canQuery => AuthService.isAuthenticated;
 
@@ -134,16 +143,26 @@ abstract final class ApplicantManagementSupabaseService {
     }
   }
 
-  /// Atomically updates a single application status for a listing host.
+  /// Updates application status (+ optional viewing fields) remotely.
+  ///
+  /// Host paths use table UPDATE (RLS owner). Applicant accept uses
+  /// [accept_application_viewing] RPC (no general applicant UPDATE policy).
   static Future<Map<String, dynamic>> updateApplicationStatus({
     required String applicationId,
     required ApplicantApplicationStatus nextStatus,
     ApplicantApplicationStatus? currentStatus,
+    Map<String, dynamic>? extras,
   }) async {
     _requireAuth();
     if (applicationId.trim().isEmpty) {
       throw ApplicantManagementException(
         'Application id is required.',
+        code: ApplicantManagementErrorCode.validation,
+      );
+    }
+    if (!ListingApplicationsSupabaseService.isRemoteId(applicationId)) {
+      throw ApplicantManagementException(
+        'Application id is not a remote UUID.',
         code: ApplicantManagementErrorCode.validation,
       );
     }
@@ -190,12 +209,42 @@ abstract final class ApplicantManagementSupabaseService {
         );
       }
 
+      final applicantUserId =
+          existing['applicant_user_id']?.toString() ?? '';
+      final isApplicantAccept =
+          nextStatus == ApplicantApplicationStatus.viewingScheduled &&
+              applicantUserId.isNotEmpty &&
+              applicantUserId == (AuthService.currentUser?.id ?? '');
+
+      if (isApplicantAccept) {
+        final response = await AuthService.client
+            .rpc(
+              _acceptViewingRpc,
+              params: {'p_application_id': applicationId},
+            )
+            .timeout(const Duration(seconds: 20));
+        if (response is Map) {
+          return Map<String, dynamic>.from(response);
+        }
+        // Some clients return a single-row list for RETURNS row types.
+        if (response is List && response.isNotEmpty && response.first is Map) {
+          return Map<String, dynamic>.from(response.first as Map);
+        }
+        throw ApplicantManagementException(
+          'Could not accept viewing invitation.',
+          code: ApplicantManagementErrorCode.database,
+        );
+      }
+
+      final patch = <String, dynamic>{
+        'status': nextStatus.storageToken,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        ..._viewingExtrasPatch(extras),
+      };
+
       final response = await AuthService.client
           .from(_applicationsTable)
-          .update({
-            'status': nextStatus.storageToken,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
+          .update(patch)
           .eq('id', applicationId)
           .select()
           .single()
@@ -228,6 +277,14 @@ abstract final class ApplicantManagementSupabaseService {
         cause: e,
       );
     }
+  }
+
+  static Map<String, dynamic> _viewingExtrasPatch(Map<String, dynamic>? extras) {
+    if (extras == null || extras.isEmpty) return const {};
+    return {
+      for (final entry in extras.entries)
+        if (_viewingExtraKeys.contains(entry.key)) entry.key: entry.value,
+    };
   }
 
   static Future<Map<String, dynamic>> _fetchListing(String listingId) async {

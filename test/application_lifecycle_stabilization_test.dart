@@ -105,9 +105,10 @@ void main() {
       ApplicantApplicationStatus.viewingScheduled.storageToken,
     );
 
-    // Simulate restart — wipe memory and reload from SharedPreferences.
+    // Simulate restart — applications reload from prefs; messages from in-memory
+    // store when Supabase is not initialized (unit tests).
     applicationService.resetForTest();
-    applicationConversationService.resetForTest();
+    applicationConversationService.resetForTest(clearLocalSource: false);
     await applicationService.ensureLoaded();
     await applicationConversationService.ensureLoaded();
 
@@ -129,6 +130,25 @@ void main() {
     expect(
       applicationConversationService.peek(applicationId)!.messages.first.body,
       ViewingInvitation.sentTimelineBody,
+    );
+  });
+
+  test('UUID application stays local when Supabase is not ready', () async {
+    const applicationId = '6ab066eb-2750-42ce-a5c1-dee8cdf2b28c';
+    await applicationService.cacheRemoteRow({
+      'id': applicationId,
+      'listing_id': listingId,
+      'applicant_user_id': userId,
+      'status': ApplicantApplicationStatus.pending.storageToken,
+    });
+
+    await ApplicationLifecycleService.declineApplicant(
+      applicationId: applicationId,
+    );
+
+    expect(
+      applicationService.rowById(applicationId)?['status'],
+      ApplicantApplicationStatus.declined.storageToken,
     );
   });
 

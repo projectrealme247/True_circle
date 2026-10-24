@@ -4,10 +4,12 @@ import '../services/application_conversation_service.dart';
 import '../services/application_service.dart';
 import '../services/applicant_management_supabase_service.dart';
 import '../services/applicant_status_transition_service.dart';
-import '../services/auth_service.dart';
+import '../services/listing_applications_supabase_service.dart';
 import '../utils/viewing_invitation.dart';
 
-/// Local-first application status updates with optional Supabase sync.
+/// Remote status updates for signed-in UUID applications.
+///
+/// Local updates remain for offline/demo sessions and non-UUID application ids.
 abstract final class ApplicationLifecycleService {
   ApplicationLifecycleService._();
 
@@ -39,39 +41,29 @@ abstract final class ApplicationLifecycleService {
       }
     }
 
+    final useRemote = ListingApplicationsSupabaseService.isReady &&
+        ListingApplicationsSupabaseService.isRemoteId(applicationId);
+
+    if (useRemote) {
+      final remote =
+          await ApplicantManagementSupabaseService.updateApplicationStatus(
+        applicationId: applicationId,
+        nextStatus: nextStatus,
+        currentStatus: resolvedCurrent,
+        extras: extras,
+      );
+      return applicationService.cacheRemoteRow(remote);
+    }
+
     if (localRow != null) {
       await applicationService.updateApplicationStatus(
         applicationId: applicationId,
         nextStatus: nextStatus,
         extras: extras,
       );
+      return applicationService.rowById(applicationId) ?? localRow;
     }
 
-    var authenticated = false;
-    try {
-      authenticated = AuthService.isAuthenticated;
-    } catch (_) {
-      authenticated = false;
-    }
-
-    if (authenticated) {
-      try {
-        return await ApplicantManagementSupabaseService.updateApplicationStatus(
-          applicationId: applicationId,
-          nextStatus: nextStatus,
-          currentStatus: resolvedCurrent,
-        );
-      } on ApplicantManagementException {
-        if (localRow != null) {
-          return applicationService.rowById(applicationId) ?? localRow;
-        }
-        rethrow;
-      }
-    }
-
-    final updated = applicationService.rowById(applicationId);
-    if (updated != null) return updated;
-    if (localRow != null) return localRow;
     throw ApplicantManagementException(
       'Application not found.',
       code: ApplicantManagementErrorCode.notFound,
