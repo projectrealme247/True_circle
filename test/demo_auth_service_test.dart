@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:true_circle/models/onboarding_user_role.dart';
 import 'package:true_circle/services/demo_auth_service.dart';
@@ -105,5 +106,20 @@ void main() {
         isFalse,
       );
     });
+  });
+
+  test('demo sign-in guard fails outside debug and stays open in debug', () {
+    expect(kDebugMode, isTrue);
+    expect(
+      () => DemoAuthService.rejectUnlessDebug(false),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'DemoAuthService must never be called in production',
+        ),
+      ),
+    );
+    expect(() => DemoAuthService.rejectUnlessDebug(kDebugMode), returnsNormally);
   });
 }

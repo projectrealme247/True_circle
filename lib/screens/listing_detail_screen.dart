@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
 import '../services/auth_service.dart';
-import '../services/listings_storage_service.dart';
+import '../services/listings_supabase_service.dart';
 import '../services/trust_service.dart';
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_data.dart';
@@ -29,6 +29,7 @@ import '../widgets/listing_detail/pitch_your_story_sheet.dart';
 import '../widgets/listing_detail_page_layout.dart';
 import '../widgets/listing_detail_tokens.dart';
 import '../widgets/report_listing_bottom_sheet.dart';
+import '../widgets/truecircle_logo.dart';
 import 'auth_screen.dart';
 
 class ListingDetailScreen extends StatefulWidget {
@@ -44,7 +45,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   Map<String, dynamic>? _listing;
   bool _loading = true;
   bool _notFound = false;
+  bool _loadFailed = false;
   bool _startedLoad = false;
+  int _resolveGeneration = 0;
+
   /// Non-null when the current seeker already applied to this listing.
   String? _applicationStateLabel;
   String? _applicationLoadError;
@@ -95,7 +99,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       if (!mounted) return;
       setState(() {
         _applicationStateLabel = null;
-        _applicationLoadError = ListingApplicationsService.detailLoadErrorMessage;
+        _applicationLoadError =
+            ListingApplicationsService.detailLoadErrorMessage;
       });
       return;
     }
@@ -118,25 +123,53 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   Future<void> _resolveListing() async {
+    final generation = ++_resolveGeneration;
     final extra = GoRouter.of(context).state.extra;
     if (extra is Map) {
-      if (!mounted) return;
+      if (!mounted || generation != _resolveGeneration) return;
       setState(() {
         _listing = ListingData.normalizeItem(Map<String, dynamic>.from(extra));
         _loading = false;
+        _notFound = false;
+        _loadFailed = false;
       });
       await _refreshApplicationState();
       return;
     }
 
-    final stored = await ListingsStorageService.getById(widget.listingId);
-    if (!mounted) return;
+    if (!mounted || generation != _resolveGeneration) return;
+    setState(() {
+      _loading = true;
+      _notFound = false;
+      _loadFailed = false;
+    });
+
+    final Map<String, dynamic>? stored;
+    try {
+      final remote =
+          await ListingsSupabaseService.fetchListingById(widget.listingId);
+      stored = remote == null ? null : ListingData.normalizeItem(remote);
+    } catch (_) {
+      if (!mounted || generation != _resolveGeneration) return;
+      setState(() {
+        _listing = null;
+        _loading = false;
+        _notFound = false;
+        _loadFailed = true;
+      });
+      return;
+    }
+
+    if (!mounted || generation != _resolveGeneration) return;
     setState(() {
       _listing = stored;
       _loading = false;
       _notFound = stored == null;
+      _loadFailed = false;
     });
-    await _refreshApplicationState();
+    if (stored != null) {
+      await _refreshApplicationState();
+    }
   }
 
   MarketplaceSpace get _listingSpace {
@@ -199,7 +232,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
             ),
             backgroundColor: AppColors.accent,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       return;
@@ -223,7 +257,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           ),
           backgroundColor: const Color(0xFF42B72A),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
   }
@@ -264,17 +299,14 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         scrolledUnderElevation: 0.5,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: ListingDetailTokens.charcoal),
+          icon: const Icon(Icons.arrow_back_rounded,
+              color: ListingDetailTokens.charcoal),
           onPressed: () => context.canPop() ? context.pop() : context.go('/'),
         ),
-        title: const Text(
-          'Listing details',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 17,
-            color: ListingDetailTokens.charcoal,
-            letterSpacing: -0.3,
-          ),
+        titleSpacing: 12,
+        title: const Align(
+          alignment: Alignment.centerLeft,
+          child: TrueCircleHomeLogoButton(markSize: 26),
         ),
         actions: [
           if (!_loading && !_notFound && _listing != null)
@@ -305,17 +337,48 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.accent),
             )
-          : _notFound
-              ? _buildNotFound()
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    return _buildUnifiedLayout(
-                      item: _listing!,
-                      userSession: userSession,
-                      viewportWidth: constraints.maxWidth,
-                    );
-                  },
-                ),
+          : _loadFailed
+              ? _buildLoadError()
+              : _notFound
+                  ? _buildNotFound()
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        return _buildUnifiedLayout(
+                          item: _listing!,
+                          userSession: userSession,
+                          viewportWidth: constraints.maxWidth,
+                        );
+                      },
+                    ),
+    );
+  }
+
+  Widget _buildLoadError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              size: 48,
+              color: Color(0xFF8D949E),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Could not load this listing.',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _resolveListing,
+              style: AppButtonStyles.primaryFilled,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -326,7 +389,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.search_off_rounded, size: 48, color: Color(0xFF8D949E)),
+            const Icon(Icons.search_off_rounded,
+                size: 48, color: Color(0xFF8D949E)),
             const SizedBox(height: 16),
             const Text(
               'Listing not found',
@@ -429,7 +493,6 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     return const [];
   }
 
-
   List<Widget> _buildMediaExtras(List<String> images, bool hasVideo) {
     return [
       if (hasVideo) ...[
@@ -463,7 +526,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.favorite_outline, size: 44, color: AppColors.accent),
+            const Icon(Icons.favorite_outline,
+                size: 44, color: AppColors.accent),
             const SizedBox(height: 16),
             const Text(
               'Sign in to pitch your story',
@@ -515,7 +579,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           ),
           backgroundColor: AppColors.accent,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           action: SnackBarAction(
             label: 'Sign in',
             textColor: Colors.white,
@@ -557,8 +622,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   void _showStudentContactGate() {
-    final lightTrust =
-        MarketConfig.current.trustVerificationKind == TrustVerificationKind.lightTrust;
+    final lightTrust = MarketConfig.current.trustVerificationKind ==
+        TrustVerificationKind.lightTrust;
 
     _showLegacyVerificationSheet(
       body: lightTrust
@@ -587,7 +652,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.verified_user_rounded, size: 48, color: AppColors.accent),
+            const Icon(Icons.verified_user_rounded,
+                size: 48, color: AppColors.accent),
             const SizedBox(height: 16),
             const Text(
               'Verification required',
@@ -597,7 +663,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
             Text(
               body,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280), height: 1.5),
+              style: const TextStyle(
+                  fontSize: 14, color: Color(0xFF6B7280), height: 1.5),
             ),
             if (showStudentPathChoices) ...[
               const SizedBox(height: 12),
@@ -681,11 +748,13 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
               SnackBar(
                 content: Text(
                   'Viewing requested for ${_formatDate(date)} at $timeSlot — host notified.',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 backgroundColor: const Color(0xFF42B72A),
                 behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             );
         },
@@ -695,8 +764,18 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
 
   String _formatDate(DateTime date) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]}';
@@ -835,12 +914,23 @@ class _ScheduleViewingSheetState extends State<_ScheduleViewingSheet> {
     return !day.isBefore(first) && !day.isAfter(last);
   }
 
-  int _daysInMonth(DateTime month) => DateTime(month.year, month.month + 1, 0).day;
+  int _daysInMonth(DateTime month) =>
+      DateTime(month.year, month.month + 1, 0).day;
 
   String _monthYearLabel(DateTime month) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return '${months[month.month - 1]} ${month.year}';
   }
@@ -862,7 +952,8 @@ class _ScheduleViewingSheetState extends State<_ScheduleViewingSheet> {
   }
 
   bool get _canGoNextMonth {
-    final nextMonthStart = DateTime(_focusedMonth.year, _focusedMonth.month + 1);
+    final nextMonthStart =
+        DateTime(_focusedMonth.year, _focusedMonth.month + 1);
     final last = DateTime(
       _lastBookable.year,
       _lastBookable.month,
@@ -968,7 +1059,8 @@ class _ScheduleViewingSheetState extends State<_ScheduleViewingSheet> {
                     '$day',
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
                       color: isSelected
                           ? Colors.white
                           : bookable
@@ -1016,7 +1108,8 @@ class _ScheduleViewingSheetState extends State<_ScheduleViewingSheet> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Icon(Icons.calendar_month_rounded, size: 24, color: HomeMarketplaceTheme.primary),
+                Icon(Icons.calendar_month_rounded,
+                    size: 24, color: HomeMarketplaceTheme.primary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -1060,7 +1153,8 @@ class _ScheduleViewingSheetState extends State<_ScheduleViewingSheet> {
                   onTap: () => setState(() => _selectedTimeSlot = slot),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppColors.accent
@@ -1077,7 +1171,8 @@ class _ScheduleViewingSheetState extends State<_ScheduleViewingSheet> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: isSelected ? Colors.white : const Color(0xFF374151),
+                        color:
+                            isSelected ? Colors.white : const Color(0xFF374151),
                       ),
                     ),
                   ),
@@ -1116,7 +1211,8 @@ class _ScheduleViewingSheetState extends State<_ScheduleViewingSheet> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                  borderSide:
+                      const BorderSide(color: AppColors.accent, width: 1.5),
                 ),
               ),
             ),

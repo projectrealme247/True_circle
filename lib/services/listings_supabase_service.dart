@@ -27,7 +27,8 @@ abstract final class ListingsSupabaseService {
             'reason': report['reason'],
             'details': report['details'] ?? '',
             'status': report['status'] ?? 'open',
-            if (report['created_at'] != null) 'created_at': report['created_at'],
+            if (report['created_at'] != null)
+              'created_at': report['created_at'],
           })
           .select()
           .maybeSingle();
@@ -65,10 +66,8 @@ abstract final class ListingsSupabaseService {
       throw StateError('Supabase is required to load listings.');
     }
 
-    final response = await AuthService.client
-        .from(_table)
-        .select()
-        .eq('is_active', true);
+    final response =
+        await AuthService.client.from(_table).select().eq('is_active', true);
     if (response is! List) {
       throw StateError('Unexpected listings response.');
     }
@@ -77,6 +76,29 @@ abstract final class ListingsSupabaseService {
       for (final row in response)
         if (row is Map) _mapFetchedRow(Map<String, dynamic>.from(row)),
     ];
+  }
+
+  /// Public read of one active listing by primary key.
+  ///
+  /// Returns null when [id] is empty or no active row exists.
+  /// Throws when Supabase is unavailable or the query fails.
+  static Future<Map<String, dynamic>?> fetchListingById(String id) async {
+    final listingId = id.trim();
+    if (listingId.isEmpty) return null;
+    if (!_supabaseReadyForRead) {
+      throw StateError('Supabase is required to load listings.');
+    }
+
+    final response = await AuthService.client
+        .from(_table)
+        .select()
+        .eq('id', listingId)
+        .eq('is_active', true)
+        .maybeSingle()
+        .timeout(const Duration(seconds: 20));
+
+    if (response == null) return null;
+    return _mapFetchedRow(Map<String, dynamic>.from(response));
   }
 
   /// Public read of published rows. Empty when Supabase is unavailable.
@@ -174,11 +196,8 @@ abstract final class ListingsSupabaseService {
 
     try {
       final row = _toSupabaseRow(local);
-      final response = await AuthService.client
-          .from(_table)
-          .insert(row)
-          .select()
-          .single();
+      final response =
+          await AuthService.client.from(_table).insert(row).select().single();
 
       return ListingCreationPayloadBuilder.fromSupabaseRow(
         Map<String, dynamic>.from(response),

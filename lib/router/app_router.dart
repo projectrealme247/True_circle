@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../screens/add_listing_screen.dart';
@@ -116,8 +116,7 @@ final GoRouter appRouter = GoRouter(
           if (id != null && id.isNotEmpty) {
             return AddListingScreen(editingListing: extra);
           }
-          if (extra.containsKey('location') ||
-              extra.containsKey('eircode')) {
+          if (extra.containsKey('location') || extra.containsKey('eircode')) {
             return AddListingScreen(draftListing: extra);
           }
           return AddListingScreen(editingListing: extra);

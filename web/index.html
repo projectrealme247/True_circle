@@ -104,6 +104,18 @@
     <strong>TrueCircle</strong>
     <p>Loading marketplace…</p>
   </div>
+  <script>
+    (function () {
+      function dismissTrueCircleLoading() {
+        var el = document.getElementById('truecircle-loading');
+        if (el) el.remove();
+      }
+      // Engine paints the first Flutter frame.
+      window.addEventListener('flutter-first-frame', dismissTrueCircleLoading, { once: true });
+      // DWDS / debug loader ready signal (fallback if first-frame already passed).
+      window.addEventListener('dart-app-ready', dismissTrueCircleLoading, { once: true });
+    })();
+  </script>
   <!-- Required by supabase_flutter 2.15+ / passkeys_web on Chrome -->
   <script src="https://github.com/corbado/flutter-passkeys/releases/download/2.4.0/bundle.js"></script>
   <script src="flutter_bootstrap.js" async></script>

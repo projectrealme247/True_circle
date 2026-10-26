@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:true_circle/models/marketplace_space.dart';
@@ -100,5 +101,20 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('QA sign-in guard fails outside debug and stays open in debug', () {
+    expect(kDebugMode, isTrue);
+    expect(
+      () => QaTestAuthService.rejectUnlessDebug(false),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'QaTestAuthService must never be called in production',
+        ),
+      ),
+    );
+    expect(() => QaTestAuthService.rejectUnlessDebug(kDebugMode), returnsNormally);
   });
 }

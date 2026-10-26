@@ -2435,7 +2435,7 @@ class _HomeScreenState extends State<HomeScreen> {
       activeSpace: _activeSpace,
       onTap: () {
         if (listingId.isEmpty) return;
-        context.push('/listing/$listingId', extra: item);
+        context.go('/listing/$listingId', extra: item);
       },
     );
   }

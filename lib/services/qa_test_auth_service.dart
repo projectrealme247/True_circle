@@ -78,8 +78,16 @@ abstract final class QaTestAuthService {
     return !isQaSession(session);
   }
 
+  /// Release builds always throw. Debug builds throw only when [debugMode] is false.
+  @visibleForTesting
+  static void rejectUnlessDebug(bool debugMode) {
+    if (kReleaseMode || !debugMode) {
+      throw StateError('QaTestAuthService must never be called in production');
+    }
+  }
+
   static Future<void> enter(QaTestAccount account) async {
-    assert(kDebugMode, 'QaTestAuthService must never be called in production');
+    rejectUnlessDebug(kDebugMode);
     await AuthService.signInWithEmail(
       email: account.email,
       password: signInPassword,

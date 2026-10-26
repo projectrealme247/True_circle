@@ -81,11 +81,19 @@ class _AppBootstrapState extends State<_AppBootstrap> {
 
     final app = _app;
     if (app == null) {
-      return MaterialApp(
-        theme: AppTheme.light,
-        home: const Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
+      // No Navigator/MaterialApp here — that would claim engine navigation and
+      // reset the platform route to "/" before GoRouter reads /listing/:id.
+      // Full-viewport opaque surface so the HTML loader is covered once painted.
+      return const Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox.expand(
+          child: ColoredBox(
+            color: Color(0xFFFFFFFF),
+            child: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFFFF5A5F),
+              ),
+            ),
           ),
         ),
       );

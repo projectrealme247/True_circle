@@ -84,6 +84,12 @@ class _AddListingScreenState extends State<AddListingScreen> {
       return;
     }
 
+    // P0-2: never local-only publish — require a live Supabase session.
+    if (!AuthService.isAuthenticated) {
+      _showMessage('Please sign in to publish a listing.');
+      return;
+    }
+
     setState(() => _saving = true);
 
     try {
@@ -93,17 +99,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
       final payload = await form.buildPayload(host, profile);
       final stamped = TrustService.stampListingTrust(payload);
 
-      final Map<String, dynamic> saved;
-      if (AuthService.isAuthenticated) {
-        saved = await _publishRemote(stamped);
-      } else if (_editingListingId != null) {
-        saved = await ListingsStorageService.updateListing(
-          _editingListingId!,
-          stamped,
-        );
-      } else {
-        saved = await ListingsStorageService.addListing(stamped);
-      }
+      final saved = await _publishRemote(stamped);
 
       await ProfileSyncBoundaryService.syncFromListingPublish(
         currentProfile: profile,

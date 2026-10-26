@@ -23,6 +23,14 @@ abstract final class DemoAuthService {
 
   static bool get isEnabled => kDebugMode;
 
+  /// Release builds always throw. Debug builds throw only when [debugMode] is false.
+  @visibleForTesting
+  static void rejectUnlessDebug(bool debugMode) {
+    if (kReleaseMode || !debugMode) {
+      throw StateError('DemoAuthService must never be called in production');
+    }
+  }
+
   /// True when [session] is an in-progress demo seeker profile for this identity.
   static bool isDemoSeekerSession(Map<String, dynamic>? session) {
     if (session == null || session.isEmpty) return false;
@@ -34,7 +42,7 @@ abstract final class DemoAuthService {
   }
 
   static Future<void> enterAsDemoLandlord() async {
-    assert(kDebugMode, 'DemoAuthService must never be called in production');
+    rejectUnlessDebug(kDebugMode);
     final now = DateTime.now().toUtc().toIso8601String();
     // Role first — routing must never see a landlord session without it.
     final session = <String, dynamic>{
@@ -107,7 +115,7 @@ abstract final class DemoAuthService {
   }
 
   static Future<void> enterAsDemoSeeker() async {
-    assert(kDebugMode, 'DemoAuthService must never be called in production');
+    rejectUnlessDebug(kDebugMode);
     final inMemory = AuthScreen.currentUserSession;
     final stored = inMemory == null ? await ProfileStorageService.load() : null;
     final existing = inMemory ?? stored;
@@ -119,7 +127,7 @@ abstract final class DemoAuthService {
   static const newHostEmail = 'new.host@test.truecircle.ie';
 
   static Future<void> enterAsNewSeeker() async {
-    assert(kDebugMode, 'DemoAuthService must never be called in production');
+    rejectUnlessDebug(kDebugMode);
     await AuthService.signInWithEmail(
       email: newSeekerEmail,
       password: QaTestAuthService.signInPassword,
@@ -137,7 +145,7 @@ abstract final class DemoAuthService {
   }
 
   static Future<void> enterAsNewLandlord() async {
-    assert(kDebugMode, 'DemoAuthService must never be called in production');
+    rejectUnlessDebug(kDebugMode);
     await AuthService.signInWithEmail(
       email: newHostEmail,
       password: QaTestAuthService.signInPassword,

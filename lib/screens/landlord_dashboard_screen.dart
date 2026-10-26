@@ -161,14 +161,6 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     }
   }
 
-  bool get _remoteHostListingsReady {
-    try {
-      return ListingsSupabaseService.canWrite;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Future<void> _refreshCrossModeBadges(List<Map<String, dynamic>> listings) async {
     await applicationService.ensureLoaded();
     var applicantCount = 0;
@@ -750,11 +742,25 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     );
     if (confirmed != true || !mounted) return;
 
+    // P0-3: never local-only delete — require live Supabase session + remote deactivate.
+    if (!AuthService.isAuthenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in to delete a listing.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     setState(() => _actionLoadingId = listingId);
     try {
-      if (_remoteHostListingsReady) {
-        await ListingsSupabaseService.deactivateOwnedListing(listingId);
+      final deactivated =
+          await ListingsSupabaseService.deactivateOwnedListing(listingId);
+      if (!deactivated) {
+        throw StateError('Listing could not be deactivated.');
       }
+
       await ListingsStorageService.deleteListing(listingId);
       if (!mounted) return;
       setState(() {
