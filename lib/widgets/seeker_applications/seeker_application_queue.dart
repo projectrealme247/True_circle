@@ -104,12 +104,22 @@ class _QueueRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final archived = item.isArchived;
+    final titleColor = archived
+        ? HomeMarketplaceTheme.textMuted
+        : HomeMarketplaceTheme.textPrimary;
+    final secondaryColor = archived
+        ? HomeMarketplaceTheme.textMuted
+        : HomeMarketplaceTheme.textSecondary;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Material(
         color: selected
-            ? HomeMarketplaceTheme.accentSurface.withValues(alpha: 0.35)
-            : Colors.transparent,
+            ? (archived
+                ? const Color(0xFFF3F4F6)
+                : HomeMarketplaceTheme.accentSurface.withValues(alpha: 0.35))
+            : (archived ? const Color(0xFFF9FAFB) : Colors.transparent),
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
@@ -121,7 +131,9 @@ class _QueueRow extends StatelessWidget {
               border: Border(
                 left: BorderSide(
                   color: selected
-                      ? HomeMarketplaceTheme.primary
+                      ? (archived
+                          ? HomeMarketplaceTheme.textMuted
+                          : HomeMarketplaceTheme.primary)
                       : Colors.transparent,
                   width: 3,
                 ),
@@ -137,6 +149,7 @@ class _QueueRow extends StatelessWidget {
                   style: AppTypography.cardTitle().copyWith(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
+                    color: titleColor,
                   ),
                 ),
                 if (item.locationLabel.isNotEmpty) ...[
@@ -147,7 +160,7 @@ class _QueueRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.detail().copyWith(
                       fontSize: 11,
-                      color: HomeMarketplaceTheme.textSecondary,
+                      color: secondaryColor,
                       height: 1.3,
                     ),
                   ),
@@ -161,6 +174,7 @@ class _QueueRow extends StatelessWidget {
                     style: AppTypography.detail().copyWith(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
+                      color: titleColor,
                       height: 1.3,
                     ),
                   ),
@@ -172,6 +186,7 @@ class _QueueRow extends StatelessWidget {
                     AppTypography.detail().copyWith(
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
+                      color: secondaryColor,
                     ),
                   ),
                 ),
@@ -184,7 +199,7 @@ class _QueueRow extends StatelessWidget {
                     style: core.AppTypography.withEmojiFallback(
                       AppTypography.detail().copyWith(
                         fontSize: 12,
-                        color: HomeMarketplaceTheme.textSecondary,
+                        color: secondaryColor,
                       ),
                     ),
                   ),

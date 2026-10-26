@@ -17,6 +17,7 @@ class SeekerApplicationQueueItem {
     this.propertyKindLabel = '',
     this.unreadCount = 0,
     this.lastFromHost = false,
+    this.listingIsActive = true,
   });
 
   final ListingApplication application;
@@ -32,11 +33,17 @@ class SeekerApplicationQueueItem {
   final int unreadCount;
   final bool lastFromHost;
 
+  /// False when the listing is inactive (`is_active = false`) or unavailable.
+  final bool listingIsActive;
+
+  bool get isArchived => !listingIsActive;
+
   String get applicationId => application.id;
   String get listingId => application.listingId;
   String get applicantUserId => application.userId;
 
   String get queueActivityLine {
+    if (isArchived) return 'Conversation archived';
     if (unreadCount > 0) {
       return lastFromHost ? '💬 Host replied' : '💬 New message';
     }
@@ -51,13 +58,19 @@ class SeekerApplicationQueueItem {
     required String hostName,
     required String hostUserId,
     Map<String, dynamic>? listing,
+    bool? listingIsActive,
   }) {
     final property = SeekerPropertyContext.fromListing(listing);
+    final active =
+        listingIsActive ?? SeekerApplicationPipeline.isListingActive(listing);
 
     return SeekerApplicationQueueItem(
       application: application,
       propertyTitle: propertyTitle,
-      statusLabel: SeekerApplicationPipeline.workspaceStatusDisplay(application),
+      statusLabel: SeekerApplicationPipeline.workspaceStatusDisplay(
+        application,
+        listingIsActive: active,
+      ),
       appliedLabel:
           'Applied ${SeekerApplicationPipeline.formatAppliedDate(application.createdAt)}',
       activityPreview: SeekerApplicationPipeline.activityPreview(application),
@@ -66,8 +79,11 @@ class SeekerApplicationQueueItem {
       locationLabel: property.locationLabel,
       rentLabel: property.rentLabel,
       propertyKindLabel: property.propertyKindLabel,
-      unreadCount: SeekerApplicationPipeline.unreadCount(application),
+      unreadCount: active
+          ? SeekerApplicationPipeline.unreadCount(application)
+          : 0,
       lastFromHost: SeekerApplicationPipeline.lastMessageFromHost(application),
+      listingIsActive: active,
     );
   }
 }

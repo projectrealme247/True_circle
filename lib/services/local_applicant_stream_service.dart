@@ -7,7 +7,8 @@ import '../utils/profile_data.dart';
 import 'applicant_stream_payload_builder.dart';
 import 'listing_applications_service.dart';
 
-/// Builds host applicant streams from local [ListingApplicationsService] rows.
+/// Builds host applicant streams from [ListingApplicationsService] rows
+/// (remote-first when authenticated; local/demo fallback).
 abstract final class LocalApplicantStreamService {
   static Future<List<Map<String, dynamic>>> rowsForListing(String listingId) {
     return ListingApplicationsService.forListing(listingId);

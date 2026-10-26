@@ -13,10 +13,12 @@ import '../services/application_conversation_service.dart';
 import '../services/application_service.dart';
 import '../services/auth_service.dart';
 import '../services/listings_storage_service.dart';
+import '../services/listings_supabase_service.dart';
 import '../theme/app_typography.dart';
 import '../theme/home_marketplace_theme.dart';
 import '../utils/listing_data.dart';
 import '../utils/profile_data.dart';
+import '../utils/seeker_application_pipeline.dart';
 import '../widgets/seeker_applications/seeker_application_pane.dart';
 import '../widgets/seeker_applications/seeker_application_queue_item.dart';
 
@@ -129,6 +131,7 @@ class _ApplicationConversationScreenState
   String? _loadError;
   ApplicationConversation? _conversation;
   Map<String, dynamic>? _seekerListing;
+  bool _seekerListingResolved = false;
 
   ApplicationParticipantRole get _role =>
       widget.args?.viewerRole ?? ApplicationParticipantRole.applicant;
@@ -189,10 +192,24 @@ class _ApplicationConversationScreenState
 
   Future<void> _loadSeekerListing() async {
     final listingId = widget.args?.listingId ?? '';
-    if (listingId.isEmpty) return;
-    final listing = await ListingsStorageService.getById(listingId);
-    if (!mounted || listing == null) return;
-    setState(() => _seekerListing = listing);
+    if (listingId.isEmpty) {
+      if (mounted) setState(() => _seekerListingResolved = true);
+      return;
+    }
+    Map<String, dynamic>? listing =
+        await ListingsStorageService.getById(listingId);
+    if (listing == null) {
+      try {
+        listing = await ListingsSupabaseService.fetchListingById(listingId);
+      } catch (_) {
+        listing = null;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _seekerListing = listing;
+      _seekerListingResolved = true;
+    });
   }
 
   @override
@@ -299,12 +316,17 @@ class _ApplicationConversationScreenState
     final hostName = widget.args?.peerName.isNotEmpty == true
         ? widget.args!.peerName
         : 'Host';
+    final listingActive = !_seekerListingResolved ||
+        SeekerApplicationPipeline.isListingActive(_seekerListing);
     return SeekerApplicationQueueItem.fromApplication(
       application: application,
-      propertyTitle: listingTitle.isNotEmpty ? listingTitle : 'Application',
+      propertyTitle: listingTitle.isNotEmpty
+          ? listingTitle
+          : (listingActive ? 'Application' : 'Listing unavailable'),
       hostName: hostName,
       hostUserId: widget.args?.hostUserId ?? '',
       listing: _seekerListing,
+      listingIsActive: listingActive,
     );
   }
 

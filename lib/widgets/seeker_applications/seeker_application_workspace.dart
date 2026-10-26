@@ -32,6 +32,7 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
   String? _selectedApplicationId;
   _SeekerNarrowPane _narrowPane = _SeekerNarrowPane.pipeline;
   bool _rejectedExpanded = false;
+  bool _archivedExpanded = false;
 
   @override
   void initState() {
@@ -48,8 +49,13 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
   }
 
   void _syncFromItems({bool preserveSelection = false}) {
+    final activeById = <String, bool>{
+      for (final item in widget.items) item.applicationId: item.listingIsActive,
+    };
     _buckets = SeekerApplicationPipeline.bucket(
       [for (final item in widget.items) item.application],
+      isListingActiveFor: (application) =>
+          activeById[application.id] ?? true,
     );
     final previousSection = preserveSelection ? _selectedSection : null;
     final previousId = preserveSelection ? _selectedApplicationId : null;
@@ -57,6 +63,9 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
     _selectedSection = previousSection ?? _buckets.defaultSection();
     if (_selectedSection == SeekerPipelineSection.rejected) {
       _rejectedExpanded = true;
+    }
+    if (_selectedSection == SeekerPipelineSection.archived) {
+      _archivedExpanded = true;
     }
 
     final filtered = _filteredItems();
@@ -73,6 +82,10 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
   List<SeekerApplicationQueueItem> _filteredItems() {
     if (_selectedSection == SeekerPipelineSection.rejected &&
         !_rejectedExpanded) {
+      return const [];
+    }
+    if (_selectedSection == SeekerPipelineSection.archived &&
+        !_archivedExpanded) {
       return const [];
     }
     final ids = {
@@ -99,6 +112,9 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
       if (section == SeekerPipelineSection.rejected) {
         _rejectedExpanded = true;
       }
+      if (section == SeekerPipelineSection.archived) {
+        _archivedExpanded = true;
+      }
       final filtered = _filteredItems();
       _selectedApplicationId =
           filtered.isNotEmpty ? filtered.first.applicationId : null;
@@ -114,7 +130,7 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
       if (expanded) {
         _selectedSection = SeekerPipelineSection.rejected;
       } else if (_selectedSection == SeekerPipelineSection.rejected) {
-        _selectedSection = _defaultNonRejectedSection();
+        _selectedSection = _defaultPrimarySection();
       }
       final filtered = _filteredItems();
       _selectedApplicationId =
@@ -122,7 +138,21 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
     });
   }
 
-  SeekerPipelineSection _defaultNonRejectedSection() {
+  void _setArchivedExpanded(bool expanded) {
+    setState(() {
+      _archivedExpanded = expanded;
+      if (expanded) {
+        _selectedSection = SeekerPipelineSection.archived;
+      } else if (_selectedSection == SeekerPipelineSection.archived) {
+        _selectedSection = _defaultPrimarySection();
+      }
+      final filtered = _filteredItems();
+      _selectedApplicationId =
+          filtered.isNotEmpty ? filtered.first.applicationId : null;
+    });
+  }
+
+  SeekerPipelineSection _defaultPrimarySection() {
     if (_buckets.countFor(SeekerPipelineSection.inProgress) > 0) {
       return SeekerPipelineSection.inProgress;
     }
@@ -154,6 +184,18 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
     });
   }
 
+  Widget _pipelineColumn() {
+    return SeekerPipelineColumn(
+      buckets: _buckets,
+      selected: _selectedSection,
+      onSelected: _selectSection,
+      rejectedExpanded: _rejectedExpanded,
+      onRejectedExpandedChanged: _setRejectedExpanded,
+      archivedExpanded: _archivedExpanded,
+      onArchivedExpandedChanged: _setArchivedExpanded,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
@@ -179,13 +221,7 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SeekerPipelineColumn(
-                      buckets: _buckets,
-                      selected: _selectedSection,
-                      onSelected: _selectSection,
-                      rejectedExpanded: _rejectedExpanded,
-                      onRejectedExpandedChanged: _setRejectedExpanded,
-                    ),
+                    _pipelineColumn(),
                     SeekerApplicationQueue(
                       items: _filteredItems(),
                       selectedId: _selectedApplicationId,
@@ -234,13 +270,7 @@ class _SeekerApplicationWorkspaceState extends State<SeekerApplicationWorkspace>
           ),
         Expanded(
           child: switch (_narrowPane) {
-            _SeekerNarrowPane.pipeline => SeekerPipelineColumn(
-                buckets: _buckets,
-                selected: _selectedSection,
-                onSelected: _selectSection,
-                rejectedExpanded: _rejectedExpanded,
-                onRejectedExpandedChanged: _setRejectedExpanded,
-              ),
+            _SeekerNarrowPane.pipeline => _pipelineColumn(),
             _SeekerNarrowPane.queue => SeekerApplicationQueue(
                 items: _filteredItems(),
                 selectedId: _selectedApplicationId,

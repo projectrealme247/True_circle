@@ -139,6 +139,7 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
   Future<void> _send() async {
     final current = item;
     if (current == null) return;
+    if (current.isArchived) return;
     if (!SeekerApplicationPipeline.isConversationUnlocked(current.application)) {
       return;
     }
@@ -183,7 +184,7 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
 
   Future<void> _acceptViewing() async {
     final current = item;
-    if (current == null || _accepting) return;
+    if (current == null || _accepting || current.isArchived) return;
     final status = SeekerApplicationPipeline.status(current.application);
     if (status != ApplicantApplicationStatus.viewingInvitationSent) return;
 
@@ -237,6 +238,7 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
     }
 
     final current = item!;
+    final archived = current.isArchived;
     final messages = _conversation?.messages ?? const [];
     final unlocked =
         SeekerApplicationPipeline.isConversationUnlocked(current.application);
@@ -248,7 +250,7 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
             status == ApplicantApplicationStatus.viewingScheduled);
 
     return Container(
-      color: HomeMarketplaceTheme.canvas,
+      color: archived ? const Color(0xFFF3F4F6) : HomeMarketplaceTheme.canvas,
       child: _loading
           ? const Center(
               child: CircularProgressIndicator(
@@ -258,9 +260,17 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (archived)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(18, 16, 18, 0),
+                    child: _ArchivedListingBanner(),
+                  ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
-                  child: _PropertySummarySection(item: current),
+                  padding: EdgeInsets.fromLTRB(18, archived ? 12 : 16, 18, 12),
+                  child: _PropertySummarySection(
+                    item: current,
+                    muted: archived,
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
@@ -272,12 +282,17 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
                         style: AppTypography.sectionMeta().copyWith(
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.8,
+                          color: archived
+                              ? HomeMarketplaceTheme.textMuted
+                              : null,
                         ),
                       ),
                       const SizedBox(height: 8),
                       DecoratedBox(
                         decoration: BoxDecoration(
-                          color: HomeMarketplaceTheme.surface,
+                          color: archived
+                              ? const Color(0xFFE5E7EB)
+                              : HomeMarketplaceTheme.surface,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: HomeMarketplaceTheme.border),
                         ),
@@ -287,6 +302,9 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
                             _pitchOrFallback,
                             style: AppTypography.detail().copyWith(
                               height: 1.4,
+                              color: archived
+                                  ? HomeMarketplaceTheme.textSecondary
+                                  : null,
                             ),
                           ),
                         ),
@@ -295,10 +313,13 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
                         const SizedBox(height: 16),
                         _ViewingInvitationCard(
                           invitation: invitation,
-                          awaitingAccept: status ==
-                              ApplicantApplicationStatus.viewingInvitationSent,
+                          awaitingAccept: !archived &&
+                              status ==
+                                  ApplicantApplicationStatus
+                                      .viewingInvitationSent,
                           accepting: _accepting,
                           onAccept: _acceptViewing,
+                          muted: archived,
                         ),
                       ],
                     ],
@@ -312,6 +333,7 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
                     messageController: _controller,
                     sending: _sending,
                     unlocked: unlocked,
+                    readOnly: archived,
                     loadError: _loadError,
                     onRetryLoad: () {
                       setState(() {
@@ -329,24 +351,63 @@ class _SeekerApplicationPaneState extends State<SeekerApplicationPane> {
   }
 }
 
+class _ArchivedListingBanner extends StatelessWidget {
+  const _ArchivedListingBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE5E7EB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomeMarketplaceTheme.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This listing is no longer available.',
+              style: AppTypography.detail().copyWith(
+                fontWeight: FontWeight.w700,
+                color: HomeMarketplaceTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Conversation archived.',
+              style: AppTypography.detail().copyWith(
+                color: HomeMarketplaceTheme.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ViewingInvitationCard extends StatelessWidget {
   const _ViewingInvitationCard({
     required this.invitation,
     required this.awaitingAccept,
     required this.accepting,
     required this.onAccept,
+    this.muted = false,
   });
 
   final ViewingInvitation invitation;
   final bool awaitingAccept;
   final bool accepting;
   final VoidCallback onAccept;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: HomeMarketplaceTheme.surface,
+        color: muted ? const Color(0xFFE5E7EB) : HomeMarketplaceTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: HomeMarketplaceTheme.border),
       ),
@@ -358,22 +419,38 @@ class _ViewingInvitationCard extends StatelessWidget {
             Text(
               awaitingAccept
                   ? '📨 Viewing Invitation'
-                  : '📅 Viewing Scheduled',
+                  : muted
+                      ? '📅 Viewing (archived)'
+                      : '📅 Viewing Scheduled',
               style: core.AppTypography.withEmojiFallback(
                 AppTypography.sectionMeta().copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
+                  color: muted ? HomeMarketplaceTheme.textMuted : null,
                 ),
               ),
             ),
             const SizedBox(height: 10),
-            Text('Date: ${invitation.dateLabel}', style: AppTypography.detail()),
+            Text(
+              'Date: ${invitation.dateLabel}',
+              style: AppTypography.detail().copyWith(
+                color: muted ? HomeMarketplaceTheme.textSecondary : null,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('Time: ${invitation.timeLabel}', style: AppTypography.detail()),
+            Text(
+              'Time: ${invitation.timeLabel}',
+              style: AppTypography.detail().copyWith(
+                color: muted ? HomeMarketplaceTheme.textSecondary : null,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               'Location: ${invitation.location}',
-              style: AppTypography.detail().copyWith(height: 1.35),
+              style: AppTypography.detail().copyWith(
+                height: 1.35,
+                color: muted ? HomeMarketplaceTheme.textSecondary : null,
+              ),
             ),
             if (awaitingAccept) ...[
               const SizedBox(height: 12),
@@ -390,7 +467,7 @@ class _ViewingInvitationCard extends StatelessWidget {
                       : const Text('Accept Viewing'),
                 ),
               ),
-            ] else ...[
+            ] else if (!muted) ...[
               const SizedBox(height: 10),
               Text(
                 '✅ Viewing Accepted',
@@ -410,12 +487,22 @@ class _ViewingInvitationCard extends StatelessWidget {
 }
 
 class _PropertySummarySection extends StatelessWidget {
-  const _PropertySummarySection({required this.item});
+  const _PropertySummarySection({
+    required this.item,
+    this.muted = false,
+  });
 
   final SeekerApplicationQueueItem item;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
+    final titleColor =
+        muted ? HomeMarketplaceTheme.textMuted : HomeMarketplaceTheme.textPrimary;
+    final secondaryColor = muted
+        ? HomeMarketplaceTheme.textMuted
+        : HomeMarketplaceTheme.textSecondary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -423,14 +510,17 @@ class _PropertySummarySection extends StatelessWidget {
           item.propertyTitle,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: AppTypography.sectionTitle().copyWith(fontSize: 20),
+          style: AppTypography.sectionTitle().copyWith(
+            fontSize: 20,
+            color: titleColor,
+          ),
         ),
         if (item.locationLabel.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text(
             '📍 ${item.locationLabel}',
             style: AppTypography.detail().copyWith(
-              color: HomeMarketplaceTheme.textSecondary,
+              color: secondaryColor,
               height: 1.35,
             ),
           ),
@@ -441,6 +531,7 @@ class _PropertySummarySection extends StatelessWidget {
             '💰 ${item.rentLabel}',
             style: AppTypography.detail().copyWith(
               fontWeight: FontWeight.w600,
+              color: titleColor,
               height: 1.35,
             ),
           ),
@@ -451,7 +542,7 @@ class _PropertySummarySection extends StatelessWidget {
             item.propertyKindLabel,
             style: core.AppTypography.withEmojiFallback(
               AppTypography.detail().copyWith(
-                color: HomeMarketplaceTheme.textSecondary,
+                color: secondaryColor,
               ),
             ),
           ),
@@ -459,7 +550,9 @@ class _PropertySummarySection extends StatelessWidget {
         const SizedBox(height: 10),
         DecoratedBox(
           decoration: BoxDecoration(
-            color: HomeMarketplaceTheme.accentSurface.withValues(alpha: 0.35),
+            color: muted
+                ? const Color(0xFFE5E7EB)
+                : HomeMarketplaceTheme.accentSurface.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: HomeMarketplaceTheme.border),
           ),
@@ -470,6 +563,7 @@ class _PropertySummarySection extends StatelessWidget {
               style: core.AppTypography.withEmojiFallback(
                 AppTypography.detail().copyWith(
                   fontWeight: FontWeight.w700,
+                  color: secondaryColor,
                 ),
               ),
             ),

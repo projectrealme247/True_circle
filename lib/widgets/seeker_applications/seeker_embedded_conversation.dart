@@ -19,6 +19,7 @@ class SeekerEmbeddedConversation extends StatelessWidget {
     required this.sending,
     required this.onSend,
     this.unlocked = true,
+    this.readOnly = false,
     this.loadError,
     this.onRetryLoad,
   });
@@ -29,6 +30,10 @@ class SeekerEmbeddedConversation extends StatelessWidget {
   final bool sending;
   final VoidCallback onSend;
   final bool unlocked;
+
+  /// When true, message history stays visible but the composer is hidden.
+  /// Prefer this over [unlocked]=false for archived listings.
+  final bool readOnly;
   final String? loadError;
   final VoidCallback? onRetryLoad;
 
@@ -82,23 +87,8 @@ class SeekerEmbeddedConversation extends StatelessWidget {
                         ),
                       ),
                     )
-                  : !unlocked || messages.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          unlocked
-                              ? 'No messages yet.'
-                              : 'Waiting for the host to message you or send a viewing invitation.',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.detail().copyWith(
-                            color: HomeMarketplaceTheme.textSecondary,
-                            height: 1.45,
-                          ),
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
+                  : messages.isNotEmpty
+                  ? ListView.builder(
                       controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                       itemCount: messages.length,
@@ -116,12 +106,29 @@ class SeekerEmbeddedConversation extends StatelessWidget {
                           timeline: isTimeline,
                         );
                       },
+                    )
+                  : Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          readOnly
+                              ? 'No messages in this conversation.'
+                              : unlocked
+                                  ? 'No messages yet.'
+                                  : 'Waiting for the host to message you or send a viewing invitation.',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.detail().copyWith(
+                            color: HomeMarketplaceTheme.textSecondary,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
                     ),
             ),
           ),
         ),
-        if (unlocked) const Divider(height: 1),
-        if (unlocked)
+        if (unlocked && !readOnly) const Divider(height: 1),
+        if (unlocked && !readOnly)
           SafeArea(
             top: false,
             child: Padding(

@@ -41,6 +41,7 @@ import '../utils/dublin_macro_search.dart';
 import '../utils/profile_data.dart';
 import '../utils/profile_progress.dart';
 import '../utils/viewer_profile.dart';
+import '../utils/seeker_application_pipeline.dart';
 import '../utils/seeker_strong_match_counter.dart';
 import '../widgets/active_mode/active_mode_switch.dart';
 import '../widgets/property_card.dart';
@@ -315,6 +316,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (userId.isEmpty) return 0;
     var n = 0;
     for (final application in applicationService.getUserApplications(userId)) {
+      if (!SeekerApplicationPipeline.isListingActive(
+        _listingForApplication(application),
+      )) {
+        continue;
+      }
       final status = ApplicantApplicationStatus.parseOrDefault(
         applicationService.rowById(application.id)?['status']?.toString(),
       );

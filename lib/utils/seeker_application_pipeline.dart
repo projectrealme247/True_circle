@@ -9,6 +9,7 @@ enum SeekerPipelineSection {
   inProgress,
   waitingForHost,
   rejected,
+  archived,
 }
 
 extension SeekerPipelineSectionX on SeekerPipelineSection {
@@ -16,10 +17,12 @@ extension SeekerPipelineSectionX on SeekerPipelineSection {
         SeekerPipelineSection.inProgress => '💬 In Progress',
         SeekerPipelineSection.waitingForHost => '⏳ Waiting for Host',
         SeekerPipelineSection.rejected => '❌ Rejected Applications',
+        SeekerPipelineSection.archived => '📦 Archived',
       };
 
   bool get collapsedByDefault =>
-      this == SeekerPipelineSection.rejected;
+      this == SeekerPipelineSection.rejected ||
+      this == SeekerPipelineSection.archived;
 }
 
 class SeekerPipelineBuckets {
@@ -28,12 +31,14 @@ class SeekerPipelineBuckets {
     required this.active,
     required this.waiting,
     required this.closed,
+    required this.archived,
   });
 
   final List<ListingApplication> actionNeeded;
   final List<ListingApplication> active;
   final List<ListingApplication> waiting;
   final List<ListingApplication> closed;
+  final List<ListingApplication> archived;
 
   List<ListingApplication> forSection(SeekerPipelineSection section) =>
       switch (section) {
@@ -43,6 +48,7 @@ class SeekerPipelineBuckets {
           ],
         SeekerPipelineSection.waitingForHost => waiting,
         SeekerPipelineSection.rejected => closed,
+        SeekerPipelineSection.archived => archived,
       };
 
   int countFor(SeekerPipelineSection section) => forSection(section).length;
@@ -52,20 +58,47 @@ class SeekerPipelineBuckets {
       return SeekerPipelineSection.inProgress;
     }
     if (waiting.isNotEmpty) return SeekerPipelineSection.waitingForHost;
-    return SeekerPipelineSection.rejected;
+    if (closed.isNotEmpty) return SeekerPipelineSection.rejected;
+    if (archived.isNotEmpty) return SeekerPipelineSection.archived;
+    return SeekerPipelineSection.inProgress;
   }
 }
 
 abstract final class SeekerApplicationPipeline {
   SeekerApplicationPipeline._();
 
-  static SeekerPipelineBuckets bucket(List<ListingApplication> applications) {
+  /// Whether a listing map represents a live marketplace listing.
+  ///
+  /// Active Explore rows are already `is_active = true`. A missing map means
+  /// the listing is inactive/unavailable. An explicit `is_active: false` also
+  /// counts as inactive (no schema change — field already on listings).
+  static bool isListingActive(Map<String, dynamic>? listing) {
+    if (listing == null) return false;
+    final raw = listing['is_active'];
+    if (raw is bool) return raw;
+    if (raw == null) return true;
+    final token = raw.toString().trim().toLowerCase();
+    if (token.isEmpty) return true;
+    return token != 'false' && token != '0';
+  }
+
+  static SeekerPipelineBuckets bucket(
+    List<ListingApplication> applications, {
+    bool Function(ListingApplication application)? isListingActiveFor,
+  }) {
     final actionNeeded = <ListingApplication>[];
     final active = <ListingApplication>[];
     final waiting = <ListingApplication>[];
     final closed = <ListingApplication>[];
+    final archived = <ListingApplication>[];
 
     for (final application in applications) {
+      final listingActive = isListingActiveFor?.call(application) ?? true;
+      if (!listingActive) {
+        archived.add(application);
+        continue;
+      }
+
       if (isClosed(application)) {
         closed.add(application);
         continue;
@@ -88,6 +121,7 @@ abstract final class SeekerApplicationPipeline {
       active: active,
       waiting: waiting,
       closed: closed,
+      archived: archived,
     );
   }
 
@@ -131,7 +165,12 @@ abstract final class SeekerApplicationPipeline {
   static String statusDisplay(ListingApplication application) =>
       workspaceStatusDisplay(application);
 
-  static String workspaceStatusDisplay(ListingApplication application) {
+  static String workspaceStatusDisplay(
+    ListingApplication application, {
+    bool listingIsActive = true,
+  }) {
+    if (!listingIsActive) return '📦 Archived';
+
     if (isClosed(application)) {
       final token = statusRaw(application).trim().toLowerCase();
       if (token == 'withdrawn') return '❌ Rejected';
