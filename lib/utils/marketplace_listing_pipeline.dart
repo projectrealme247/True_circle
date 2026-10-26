@@ -1,24 +1,11 @@
 import 'package:flutter/foundation.dart';
 
-import '../debug/debug_session_log.dart';
 import 'listing_data.dart';
 import 'listing_match_engine.dart';
 import 'listing_search_intent.dart';
 import 'target_search_areas.dart';
 import 'viewer_profile.dart';
 import 'weighted_listing_matcher.dart';
-
-const _p0TrackId = '6ab066eb-2750-42ce-a5c1-dee8cdf2b28c';
-
-bool _p0IdInMaps(Iterable<Map<String, dynamic>> items) =>
-    items.any((item) => item['id']?.toString() == _p0TrackId);
-
-void _p0TrackLog(String stage, bool present, [String extra = '']) {
-  print(
-    '[P0 Track] $stage: ${present ? 'Present' : 'Missing'}'
-    '${extra.isEmpty ? '' : ' $extra'}',
-  );
-}
 
 /// Output of the unified marketplace pipeline (parse → filter → rank → display).
 class MarketplaceListingPipelineResult {
@@ -115,26 +102,6 @@ abstract final class MarketplaceListingPipeline {
       searchFilters: scopedFilters,
     );
 
-    // #region agent log
-    debugSessionLog(
-      location: 'marketplace_listing_pipeline.dart:runWithFilters',
-      message: 'pipeline stage counts',
-      hypothesisId: 'A,E',
-      data: {
-        'tower': towerPropertyType,
-        'pipelineQuery': normalized,
-        'filterOccupant': filters.occupantType,
-        'filterGender': filters.genderPreference,
-        'filterBudgetMax': filters.budgetMax,
-        'afterTower': result.afterTower.length,
-        'afterFilters': result.afterFilters.length,
-        'ranked': result.ranked.length,
-        'searchIntentOccupant': result.requestedIntent.occupant,
-        'hasStrongFilters': result.requestedIntent.hasStrongFilters,
-      },
-    );
-    // #endregion
-
     final resolution = scopedFilters.resolvedAreaSearch;
     var filtered = result.afterFilters;
     if (!resolution.isAllDublin) {
@@ -171,20 +138,6 @@ abstract final class MarketplaceListingPipeline {
       filtersWereRelaxed: result.filtersWereRelaxed,
       weightedCriteria: weightedCriteria,
     );
-    _p0TrackLog(
-      'afterAreaFilter',
-      _p0IdInMaps(filtered),
-      'isAllDublin=${resolution.isAllDublin}',
-    );
-    _p0TrackLog('afterHardExclusion', _p0IdInMaps(weightedPool));
-    _p0TrackLog(
-      'afterRanking',
-      rankOutcome.ranked.any(
-        (s) => s.listing['id']?.toString() == _p0TrackId,
-      ),
-      'requiresOnboarding=${rankOutcome.requiresOnboarding} '
-      'rankedCount=${rankOutcome.ranked.length}',
-    );
 
     return MarketplaceListingPipelineResult(
       requestedIntent: result.requestedIntent,
@@ -213,21 +166,6 @@ abstract final class MarketplaceListingPipeline {
         // Marketplace Separation V1: Rent / Share / Buy inventories never mix.
         if (ListingData.listingType(item) == towerPropertyType) item,
     ];
-    Map<String, dynamic>? tracked;
-    for (final item in allListings) {
-      if (item['id']?.toString() == _p0TrackId) {
-        tracked = item;
-        break;
-      }
-    }
-    _p0TrackLog(
-      'afterTower',
-      _p0IdInMaps(afterTower),
-      tracked == null
-          ? 'not in pipeline input tower=$towerPropertyType'
-          : 'listingType=${ListingData.listingType(tracked)} '
-              'expected=$towerPropertyType',
-    );
 
     final requestedIntent =
         searchIntent ?? ListingSearchIntent.parseQuery(searchQuery);
@@ -236,11 +174,6 @@ abstract final class MarketplaceListingPipeline {
       afterTower,
       searchQuery,
       intent: requestedIntent,
-    );
-    _p0TrackLog(
-      'afterIntentFilters',
-      _p0IdInMaps(filterOutcome.listings),
-      'query="$searchQuery"',
     );
 
     final criteria = weightedCriteria ??
@@ -266,7 +199,6 @@ abstract final class MarketplaceListingPipeline {
       filters: activeFilters,
       towerPropertyType: towerPropertyType,
     );
-    _p0TrackLog('afterHardExclusion(run)', _p0IdInMaps(pool));
 
     final searchIntentForRanking = requestedIntent.hasStructuredFilters
         ? requestedIntent

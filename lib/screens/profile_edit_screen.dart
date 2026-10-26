@@ -6,7 +6,6 @@ import '../config/market/dublin_commuter_hubs.dart';
 import '../config/market/dublin_districts.dart';
 import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
-import '../debug/agent_log.dart';
 import '../services/auth_service.dart';
 import '../services/profile_state_notifier.dart';
 import '../services/commute_scoring_service.dart';
@@ -1199,15 +1198,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Widget _buildPassportPreviewPane() {
-    // #region agent log
-    agentLog(
-      'H4',
-      'profile_edit_screen.dart:_buildPassportPreviewPane',
-      'passport preview pane build',
-      {'currentPage': _currentPage},
-    );
-    // #endregion
-
     final session = _passportPreviewSession();
     final snapshot = ContextualPassportSnapshot.fromSession(session);
     // Fill the right Row cell completely — border height == left column height.
@@ -2767,15 +2757,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Widget _buildSeekerPage(int page) {
-    // #region agent log
-    agentLog(
-      page == 0 ? 'H3' : (page == 1 ? 'H2' : 'H5'),
-      'profile_edit_screen.dart:_buildSeekerPage',
-      'seeker page build',
-      {'page': page, 'shared': _isSharedTrack},
-    );
-    // #endregion
-
     // Step 1 is one seamless Basics screen for both tracks.
     if (page == 0) {
       return SeekerOnboardingBasicsScreen(
