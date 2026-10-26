@@ -13,12 +13,14 @@ const tallaghtLon = -6.3575;
 
 void main() {
   group('Hollywoodrath proximity pipeline (Phase 1, no Overpass)', () {
-    test('structured fallback is outside 2.5 km radius for all curated POIs', () {
+    test('seeded catalog gives structured fallback at Hollywoodrath', () {
       final structured = StructuredAmenitiesFallbackService.resolve(
         latitude: hollywoodrathLat,
         longitude: hollywoodrathLon,
       );
-      expect(structured, isNull);
+      expect(structured, isNotNull);
+      expect(structured!.isEmpty, isFalse);
+      expect(structured.supermarketName, isNotNull);
     });
 
     test('Tallaght structured fallback is populated', () {
@@ -62,12 +64,12 @@ void main() {
       }
     });
 
-    test('catalog lifestyle tags are empty beyond 3 km catalog radius', () async {
+    test('seeded catalog gives lifestyle tags at Hollywoodrath', () async {
       final catalog = await NeighborhoodAmenitiesService.resolve(
         latitude: hollywoodrathLat,
         longitude: hollywoodrathLon,
       );
-      expect(catalog, isEmpty);
+      expect(catalog, isNotEmpty);
     });
 
     test('Path B transit is null locally; nearest exceeds 20 min Phase 1 gate', () {
@@ -92,17 +94,17 @@ void main() {
       expect(chips, isEmpty);
     });
 
-    test('display builder produces zero visible chips when all sources empty', () async {
+    test('display builder shows chips from Phase 1 alone (no Overpass)', () async {
       final catalog = await NeighborhoodAmenitiesService.resolve(
         latitude: hollywoodrathLat,
         longitude: hollywoodrathLon,
       );
       final merged = mergeAmenityTags(catalog, const []);
-      expect(merged, isEmpty);
+      expect(merged, isNotEmpty);
 
       final input = ProximityDisplayInput(lifestyleTags: merged);
       final chips = ProximityDisplayBuilder.build(input);
-      expect(chips, isEmpty);
+      expect(chips, isNotEmpty);
     });
   });
 }

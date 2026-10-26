@@ -15,7 +15,10 @@ class OverpassSeedClient {
   static const userAgent =
       'TrueCircle-POI-Seeder/1.0 (+https://github.com/truecircle; one-time manual seed)';
 
-  static const requestTimeout = Duration(seconds: 45);
+  /// Server-side `[timeout:N]` for offline seeding; live app keeps its own.
+  static const seedQueryTimeoutSeconds = 90;
+
+  static const requestTimeout = Duration(seconds: seedQueryTimeoutSeconds + 15);
 
   static const endpoints = [
     'https://overpass.private.coffee/api/interpreter',
@@ -33,7 +36,10 @@ class OverpassSeedClient {
   }) async {
     final latStr = lat.toStringAsFixed(6);
     final lonStr = lon.toStringAsFixed(6);
-    final query = buildFullOverpassQuery(latStr, lonStr);
+    final query = buildFullOverpassQuery(latStr, lonStr).replaceFirst(
+      RegExp(r'\[timeout:\d+\]'),
+      '[timeout:$seedQueryTimeoutSeconds]',
+    );
     Object? lastError;
 
     for (final endpoint in endpoints) {
@@ -50,8 +56,9 @@ class OverpassSeedClient {
             break;
           }
           if (elements.isEmpty) {
-            onLog?.call('  → empty response from $endpoint');
-            break;
+            // Genuine (e.g. Dublin Bay cells); runtime errors throw above.
+            onLog?.call('  → 0 elements from $endpoint');
+            return const [];
           }
           onLog?.call('  → ${elements.length} raw elements');
           return extractPoiCatalogFromOverpassElements(elements);
@@ -60,8 +67,10 @@ class OverpassSeedClient {
           onLog?.call('  → failed: $e');
           final retryable = e is HttpException &&
               (e.message.contains('504') ||
+                  e.message.contains('502') ||
                   e.message.contains('429') ||
-                  e.message.contains('timeout'));
+                  e.message.contains('timeout') ||
+                  e.message.contains('runtime error'));
           if (!retryable || attempt == 1) break;
         }
       }
@@ -97,6 +106,10 @@ class OverpassSeedClient {
 
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) return null;
+    final remark = decoded['remark'];
+    if (remark is String && remark.contains('runtime error')) {
+      throw HttpException('Overpass $remark', uri: uri);
+    }
     final elements = decoded['elements'];
     if (elements is! List) return null;
     return elements;

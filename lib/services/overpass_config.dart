@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+// Pure Dart (no Flutter imports): also used by the CLI seeder in tool/.
 
 /// Central Overpass timeout and diagnostics configuration.
 ///
@@ -35,7 +35,8 @@ abstract final class OverpassConfig {
     int? elementCount,
   }) {
     final host = Uri.tryParse(endpoint)?.host ?? endpoint;
-    debugPrint(
+    // ignore: avoid_print
+    print(
       'Overpass fetch: query=${queryType.label} '
       'durationMs=${duration.inMilliseconds} '
       'elements=${elementCount ?? 'n/a'} '

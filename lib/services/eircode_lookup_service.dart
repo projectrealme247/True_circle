@@ -341,16 +341,11 @@ abstract final class EircodeLookupService {
     );
   }
 
+  /// Builds a display label when no Eircode is available.
+  ///
+  /// Prefers structured Nominatim fields (house + road + area). Never returns a
+  /// house-number-only label such as `"22"` from a truncated `display_name`.
   static String _displayLabelWithoutEircode(Map<String, String> fields) {
-    final displayName = fields['display_name']?.trim() ?? '';
-    if (displayName.isNotEmpty) {
-      final comma = displayName.indexOf(',');
-      if (comma > 0) {
-        return displayName.substring(0, comma).trim();
-      }
-      return displayName;
-    }
-
     final parts = <String>[];
     if (IrishAddressFormat.hasStreetLine(fields)) {
       final hn = fields['house_number']?.trim() ?? '';
@@ -361,8 +356,39 @@ abstract final class EircodeLookupService {
     if (area != null && area.isNotEmpty) parts.add(area);
     final county = fields['county']?.trim() ?? '';
     if (county.isNotEmpty) parts.add(county);
-    return parts.join(', ');
+    if (parts.isNotEmpty) {
+      return IrishAddressFormat.sanitizeCommaSeparatedLabel(parts.join(', '));
+    }
+
+    final displayName = fields['display_name']?.trim() ?? '';
+    if (displayName.isEmpty) return '';
+
+    final cleaned =
+        IrishAddressFormat.sanitizeCommaSeparatedLabel(displayName);
+    if (cleaned.isEmpty) return '';
+
+    final segments = cleaned
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false);
+    if (segments.isEmpty) return '';
+
+    if (_isHouseNumberOnlyLabel(segments.first)) {
+      if (segments.length < 2) return '';
+      // "22, Hollywoodrath Avenue, Hollywoodrath, ..." → street + locality.
+      final street = '${segments[0]} ${segments[1]}';
+      final locality = segments.length > 2 ? segments[2] : '';
+      final label = locality.isNotEmpty ? '$street, $locality' : street;
+      return IrishAddressFormat.sanitizeCommaSeparatedLabel(label);
+    }
+
+    return segments.first;
   }
+
+  /// True for bare door numbers such as `22` or `15A` (not `22 Main Street`).
+  static bool _isHouseNumberOnlyLabel(String value) =>
+      RegExp(r'^\d+[A-Za-z]?$').hasMatch(value.trim());
 
   static IrishAddressSuggestion _minimalSuggestion({
     required String normalized,

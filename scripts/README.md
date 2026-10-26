@@ -62,6 +62,15 @@ dart run tool/seed_dublin_pois.dart --full --region=dublin
 
 
 
+**Preferred (no Overpass):** seed offline from the Geofabrik extract. Takes ~20s and avoids Overpass timeouts / 429s / networks that block Overpass hosts.
+
+```powershell
+Invoke-WebRequest https://download.geofabrik.de/europe/ireland-and-northern-ireland-latest.osm.pbf -OutFile "$env:TEMP\ireland.osm.pbf"
+dart run tool/seed_pois_from_pbf.dart --pbf="$env:TEMP\ireland.osm.pbf" --region=dublin
+```
+
+The Overpass full sweep (`--full`) resumes from `.dart_tool/poi_seed_checkpoint_<region>.json` and retries failed cells; it only writes the catalog once every cell succeeds.
+
 No API key required. Transit stays on `DublinTransitNetwork`; live Overpass remains Phase 2 secondary enrichment.
 
 

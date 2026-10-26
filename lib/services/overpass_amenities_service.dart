@@ -112,8 +112,8 @@ class NearbyAmenities {
       collegeSchool == null &&
       gpClinic == null;
 
-  /// True when Overpass enrichment includes schools and/or lifestyle POIs.
-  /// Thin transport+grocery-only snapshots are not enrichment-complete.
+  /// True when the snapshot includes schools and/or lifestyle POIs.
+  /// Completion and caching use [isEmpty], not this flag.
   bool get hasEnrichmentCoverage =>
       lifestyleTags.isNotEmpty ||
       primarySchool != null ||
@@ -185,8 +185,7 @@ abstract final class OverpassAmenitiesService {
   }) async {
     final cellKey = ProximityResolutionCache.keyFor(latitude, longitude);
     final cached = ProximityResolutionCache.getAmenities(cellKey);
-    // Skip thin cached snapshots (transport/grocery only) so lifestyle can refill.
-    if (cached != null && cached.hasEnrichmentCoverage) return cached;
+    if (cached != null && !cached.isEmpty) return cached;
 
     NearbyAmenities? merged;
     final fromOverpass = await impl.fetchNearbyAmenities(latitude, longitude);
@@ -203,7 +202,7 @@ abstract final class OverpassAmenitiesService {
       longitude: longitude,
     );
     merged = NearbyAmenities.merge(merged, fallback);
-    if (merged != null && merged.hasEnrichmentCoverage) {
+    if (merged != null && !merged.isEmpty) {
       ProximityResolutionCache.putAmenities(cellKey, merged);
     }
     return merged?.isEmpty == false ? merged : null;

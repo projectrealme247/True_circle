@@ -4,6 +4,10 @@ import '../lib/data/poi_catalog_kind.dart';
 import 'overpass_seed_client.dart';
 import 'poi_catalog_writer.dart';
 import 'region_seed_config.dart';
+import 'seed_checkpoint.dart';
+
+const _maxSweepPasses = 4;
+const _retryPassCooldown = Duration(seconds: 60);
 
 /// One-time OpenStreetMap/Overpass POI seeding for metro catalogs.
 ///
@@ -86,19 +90,59 @@ Future<void> main(List<String> args) async {
     } else {
       stdout.writeln('\n--- FULL SWEEP: ${estimate.cellCount} cells ---');
       final cells = buildSeedGrid(region);
-      var cellIndex = 0;
-      for (final cell in cells) {
-        cellIndex++;
-        stdout.writeln(
-          'Cell $cellIndex/${cells.length} @ '
-          '${cell.lat.toStringAsFixed(4)},${cell.lon.toStringAsFixed(4)}',
-        );
-        final items = await client.fetchCell(lat: cell.lat, lon: cell.lon);
-        collected.addAll(items);
-        await Future<void>.delayed(
-          Duration(milliseconds: region.requestDelayMs),
-        );
+      final checkpoint = SeedCheckpoint.forRegion(region.id);
+      final done = await checkpoint.load();
+      if (done.isNotEmpty) {
+        stdout.writeln('Resuming: ${done.length} cells already in ${checkpoint.path}');
       }
+
+      var pending = [
+        for (var i = 0; i < cells.length; i++)
+          if (!done.containsKey(i)) i,
+      ];
+      for (var pass = 1; pass <= _maxSweepPasses && pending.isNotEmpty; pass++) {
+        if (pass > 1) {
+          stdout.writeln(
+            '\n--- RETRY PASS $pass: ${pending.length} failed cells '
+            '(cooling down ${_retryPassCooldown.inSeconds}s) ---',
+          );
+          await Future<void>.delayed(_retryPassCooldown);
+        }
+        final failed = <int>[];
+        for (final index in pending) {
+          final cell = cells[index];
+          stdout.writeln(
+            'Cell ${index + 1}/${cells.length} @ '
+            '${cell.lat.toStringAsFixed(4)},${cell.lon.toStringAsFixed(4)}',
+          );
+          try {
+            final items = await client.fetchCell(lat: cell.lat, lon: cell.lon);
+            done[index] = items;
+            await checkpoint.save(done);
+            stdout.writeln('  → ${items.length} POIs');
+          } catch (e) {
+            failed.add(index);
+            stdout.writeln('  → FAILED (will retry): $e');
+          }
+          await Future<void>.delayed(
+            Duration(milliseconds: region.requestDelayMs),
+          );
+        }
+        pending = failed;
+      }
+
+      for (final items in done.values) {
+        collected.addAll(items);
+      }
+      if (pending.isNotEmpty) {
+        stderr.writeln(
+          '\n${pending.length} cells still failing after $_maxSweepPasses passes. '
+          'Catalog NOT written. Re-run the same command to resume from '
+          '${checkpoint.path}.',
+        );
+        exit(2);
+      }
+      await checkpoint.delete();
     }
   } finally {
     client.close();
