@@ -10,7 +10,6 @@ import '../navigation/home_primary_destination.dart';
 import '../navigation/navigate_after_identity.dart';
 import '../router/app_router.dart';
 
-import '../navigation/space_gateway_navigation.dart';
 import '../services/active_mode_service.dart';
 import '../data/dublin_mock_data.dart';
 import '../services/auth_service.dart';
@@ -178,24 +177,36 @@ class _HomeScreenState extends State<HomeScreen> {
     appRouter.pushReplacement('/');
   }
 
-  Future<void> _openSignIn({String? authRedirectPath}) async {
+  /// Opens Auth as an overlay. When [authRedirectPath] or [onAuthenticated]
+  /// is set, resumes that intent and skips [navigateAfterAuth].
+  /// Header Sign In (no intent) stays on Explore.
+  Future<void> _openSignIn({
+    String? authRedirectPath,
+    VoidCallback? onAuthenticated,
+  }) async {
     final signedIn = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (context) => const AuthScreen()),
     );
     if (!mounted) return;
-    if (signedIn == true) {
-      await AuthService.reloadProfileFromStorage();
-      if (!mounted) return;
-      setState(() {
-        _pipelineResult = null;
-      });
-      if (authRedirectPath != null && authRedirectPath.isNotEmpty) {
-        context.go(Uri.decodeComponent(authRedirectPath));
-      } else {
-        await navigateAfterAuth(context);
-      }
+    if (signedIn != true) return;
+
+    await AuthService.reloadProfileFromStorage();
+    if (!mounted) return;
+    setState(() {
+      _pipelineResult = null;
+    });
+
+    if (onAuthenticated != null) {
+      onAuthenticated();
+      return;
     }
+    if (authRedirectPath != null && authRedirectPath.isNotEmpty) {
+      context.go(Uri.decodeComponent(authRedirectPath));
+      return;
+    }
+    // No pending intent — remain on marketplace Explore.
+    unawaited(_loadListingsFromStorage());
   }
 
   void _ensureValidTowerSelection() {
@@ -1111,10 +1122,28 @@ class _HomeScreenState extends State<HomeScreen> {
             elevation: 0,
             onTap: (index) {
               if (_selectedTab.index == index) return;
+              final tab = _HomeTab.values[index];
+              final signedIn = AuthService.isSignedIn(
+                profileStateNotifier.session ?? AuthScreen.currentUserSession,
+              );
+              // Save / Message (Applications) / host Listings require auth.
+              if (!signedIn && tab != _HomeTab.explore) {
+                _openSignIn(
+                  onAuthenticated: () {
+                    if (!mounted) return;
+                    setState(() => _selectedTab = tab);
+                    if (tab == _HomeTab.applications) {
+                      unawaited(_refreshApplicationMetrics());
+                    }
+                    _closeSuggestions();
+                  },
+                );
+                return;
+              }
               setState(() {
-                _selectedTab = _HomeTab.values[index];
+                _selectedTab = tab;
               });
-              if (_HomeTab.values[index] == _HomeTab.applications) {
+              if (tab == _HomeTab.applications) {
                 unawaited(_refreshApplicationMetrics());
               }
               _closeSuggestions();

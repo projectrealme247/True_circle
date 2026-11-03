@@ -92,13 +92,39 @@ abstract final class QaTestAuthService {
       email: account.email,
       password: signInPassword,
     );
-    final identity = authenticatedIdentity(account.email);
-    final storedSlot = await ProfileStorageService.loadSlot(account.slotKey);
+    await hydrateAfterAuthenticatedSignIn(account.email);
+  }
+
+  /// After a normal email/password sign-in in debug, apply QA slot defaults
+  /// when the email matches a known [QaTestAccount]. No-op otherwise.
+  static Future<bool> hydrateAfterAuthenticatedSignIn(String email) async {
+    rejectUnlessDebug(kDebugMode);
+    final normalized = email.trim().toLowerCase();
+    QaTestAccount? match;
+    for (final account in QaTestAccount.values) {
+      if (account.email.toLowerCase() == normalized) {
+        match = account;
+        break;
+      }
+    }
+    if (match == null) return false;
+
+    final identity = authenticatedIdentity(match.email);
+    final storedSlot = await ProfileStorageService.loadSlot(match.slotKey);
     final session = {
-      ...mergeAccountSession(account, storedSlot),
+      ...mergeAccountSession(match, storedSlot),
       ...identity,
     };
-    await _persistSession(account, session);
+    await _persistSession(match, session);
+    return true;
+  }
+
+  static QaTestAccount? accountForEmail(String email) {
+    final normalized = email.trim().toLowerCase();
+    for (final account in QaTestAccount.values) {
+      if (account.email.toLowerCase() == normalized) return account;
+    }
+    return null;
   }
 
   @visibleForTesting

@@ -12,7 +12,6 @@ import '../navigation/navigate_after_identity.dart';
 import '../navigation/space_gateway_navigation.dart';
 import '../router/app_routes.dart';
 import '../services/auth_service.dart';
-import '../services/demo_auth_service.dart';
 import '../services/qa_test_auth_service.dart';
 import '../services/user_session_store.dart';
 import '../utils/listing_data.dart';
@@ -44,6 +43,7 @@ class _AuthScreenState extends State<AuthScreen> {
   int _signUpStep = 1;
   bool _showAddMore = false;
   bool _authLoading = false;
+  bool _showQaTestAccounts = false;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -418,9 +418,13 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _authLoading = true);
     try {
       await AuthService.signInWithEmail(email: email, password: password);
+      if (kDebugMode && QaTestAuthService.isEnabled) {
+        await QaTestAuthService.hydrateAfterAuthenticatedSignIn(email);
+      }
       if (!mounted) return;
       _showNotification('Signed in successfully.');
       if (context.canPop()) {
+        // Overlay path — caller resumes pending intent.
         context.pop(true);
       } else {
         await navigateAfterAuth(context);
@@ -433,63 +437,11 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Future<void> _enterAsQaAccount(QaTestAccount account) async {
-    if (_authLoading) return;
-    setState(() => _authLoading = true);
-    final router = GoRouter.of(context);
-    try {
-      await QaTestAuthService.enter(account);
-      final location = account.isLandlord
-          ? '/landlord-dashboard'
-          : kQaSeekerWelcomeRoute;
-      _dismissPushedAuthThenGo(router, location);
-    } catch (e) {
-      if (!mounted) return;
-      _showNotification('Could not enter ${account.id}: $e');
-    } finally {
-      if (mounted) setState(() => _authLoading = false);
-    }
-  }
-
-  /// Pop a Sign-in overlay without triggering [_openSignIn]'s post-pop
-  /// [navigateAfterAuth], then [GoRouter.go]. Do not require [mounted] for
-  /// [go] — [enter] already refreshed the session and may have unmounted us.
-  void _dismissPushedAuthThenGo(GoRouter router, String location) {
-    final navigator = Navigator.maybeOf(context);
-    if (navigator != null && navigator.canPop()) {
-      navigator.pop();
-    }
-    router.go(location);
-  }
-
-  Future<void> _enterAsNewSeeker() async {
-    if (_authLoading) return;
-    setState(() => _authLoading = true);
-    final router = GoRouter.of(context);
-    try {
-      await DemoAuthService.enterAsNewSeeker();
-      router.go('/profile/edit');
-    } catch (e) {
-      if (!mounted) return;
-      _showNotification('Could not start new seeker flow: $e');
-    } finally {
-      if (mounted) setState(() => _authLoading = false);
-    }
-  }
-
-  Future<void> _enterAsNewLandlord() async {
-    if (_authLoading) return;
-    setState(() => _authLoading = true);
-    final router = GoRouter.of(context);
-    try {
-      await DemoAuthService.enterAsNewLandlord();
-      router.go('/add-listing');
-    } catch (e) {
-      if (!mounted) return;
-      _showNotification('Could not start new landlord flow: $e');
-    } finally {
-      if (mounted) setState(() => _authLoading = false);
-    }
+  void _fillQaEmail(String email) {
+    setState(() {
+      _emailController.text = email;
+      _emailController.selection = TextSelection.collapsed(offset: email.length);
+    });
   }
 
   Future<void> _executeSignUpAccountStep() async {
@@ -644,12 +596,9 @@ class _AuthScreenState extends State<AuthScreen> {
     return _spacedColumn(
       gap: _AuthLayout.spaceY4,
       children: [
-        const TrueCircleLogo(height: 96, width: null),
-        Text(
-          _showEmailLogin ? 'Sign in to TrueCircle' : 'Try TrueCircle',
-          textAlign: TextAlign.center,
-          style: _AuthPalette.pageTitle,
-        ),
+        _buildAuthEntryHeader(),
+        _buildGoogleSignInPlaceholder(),
+        _buildAuthOrDivider(),
         _buildInput(
           _emailController,
           label: 'Email',
@@ -669,46 +618,165 @@ class _AuthScreenState extends State<AuthScreen> {
           onPressed: _authLoading ? null : _executeSignIn,
         ),
         _buildLegalPlaceholder(),
-        if (kDebugMode) ...[
-          const Divider(),
-          const Text(
-            'DEV ONLY',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-          ),
-          _buildDemoEntrySection(compact: true),
-        ],
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'New here? ',
-              style: TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
-            ),
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: () => setState(() {
-                  _isLoginMode = false;
-                  _signUpStep = 1;
-                  _showAddMore = false;
-                }),
-                child: const Text(
-                  'Create an account',
-                  style: TextStyle(
-                    color: _AuthPalette.primary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+        if (kDebugMode && QaTestAuthService.isEnabled)
+          _buildQaTestAccountsExpander(),
       ],
     );
   }
 
+  /// Logo + mode title + equal-weight Sign In / Create Account control.
+  Widget _buildAuthEntryHeader() {
+    final title = !_showEmailLogin
+        ? 'Try TrueCircle'
+        : _isLoginMode
+            ? 'Sign in to continue'
+            : 'Create your account';
+    return _spacedColumn(
+      gap: 12,
+      children: [
+        const Center(child: TrueCircleLogo(height: 88, width: null)),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: _AuthPalette.pageTitle,
+        ),
+        _buildAuthModeSegment(),
+      ],
+    );
+  }
+
+  Widget _buildAuthModeSegment() {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: _AuthPalette.surfaceMuted,
+        borderRadius: BorderRadius.circular(_AuthPalette.radiusXl),
+        border: Border.all(color: _AuthPalette.borderSoft),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildAuthModeSegmentTab(
+              label: 'Sign In',
+              selected: _isLoginMode,
+              onTap: () {
+                if (_isLoginMode) return;
+                setState(() {
+                  _isLoginMode = true;
+                  _showQaTestAccounts = false;
+                });
+              },
+            ),
+          ),
+          Expanded(
+            child: _buildAuthModeSegmentTab(
+              label: 'Create Account',
+              selected: !_isLoginMode,
+              onTap: () {
+                if (!_isLoginMode) return;
+                setState(() {
+                  _isLoginMode = false;
+                  _signUpStep = 1;
+                  _showAddMore = false;
+                  _showQaTestAccounts = false;
+                });
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAuthModeSegmentTab({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected ? _AuthPalette.surface : Colors.transparent,
+      borderRadius: BorderRadius.circular(_AuthPalette.radiusXl - 2),
+      elevation: selected ? 1 : 0,
+      shadowColor: const Color(0x14000000),
+      child: InkWell(
+        onTap: _authLoading ? null : onTap,
+        borderRadius: BorderRadius.circular(_AuthPalette.radiusXl - 2),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected
+                  ? _AuthPalette.textPrimary
+                  : _AuthPalette.textSecondary,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Visual reservation for future Google OAuth — not wired.
+  Widget _buildGoogleSignInPlaceholder() {
+    return SizedBox(
+      width: double.infinity,
+      height: _AuthLayout.buttonHeight,
+      child: OutlinedButton(
+        onPressed: null,
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(
+            _AuthPalette.textPrimary.withValues(alpha: 0.55),
+          ),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: _AuthPalette.borderSoft.withValues(alpha: 0.9)),
+          ),
+          backgroundColor: const WidgetStatePropertyAll(_AuthPalette.surface),
+          minimumSize: const WidgetStatePropertyAll(
+            Size(double.infinity, _AuthLayout.buttonHeight),
+          ),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(_AuthPalette.radiusXl),
+            ),
+          ),
+        ),
+        child: const Text(
+          'Continue with Google',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            letterSpacing: 0.1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAuthOrDivider() {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: _AuthPalette.borderSoft)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'or',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: _AuthPalette.textSecondary.withValues(alpha: 0.9),
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(color: _AuthPalette.borderSoft)),
+      ],
+    );
+  }
 
   Widget _buildLegalPlaceholder() {
     const linkStyle = TextStyle(
@@ -895,6 +963,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return _spacedColumn(
       gap: _AuthLayout.spaceY6,
       children: [
+        _buildAuthEntryHeader(),
         _buildSignUpStepIndicator(),
         switch (_signUpStep) {
           1 => _buildWizardStep1(),
@@ -1037,9 +1106,10 @@ class _AuthScreenState extends State<AuthScreen> {
     return _spacedColumn(
       gap: _AuthLayout.spaceY6,
       children: [
-        _buildStepHeading(
-          title: 'Create your account',
-          subtitle: 'Email and password to get started.',
+        const Text(
+          'Email and password to get started.',
+          textAlign: TextAlign.center,
+          style: _AuthPalette.helper,
         ),
         _buildFieldGroupCard(
           title: 'Credentials',
@@ -1061,85 +1131,69 @@ class _AuthScreenState extends State<AuthScreen> {
           label: _authLoading ? 'Creating account…' : 'Continue',
           onPressed: _authLoading ? null : _executeSignUpAccountStep,
         ),
-        if (kDebugMode) ...[
-          const SizedBox(height: 4),
-          const Text(
-            'Or try a demo without signing up',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _AuthPalette.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          _buildDemoEntrySection(compact: true),
-        ],
-        Center(
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => setState(() => _isLoginMode = true),
-              child: const Text(
-                'Already have an account? Sign in',
-                style:
-                    TextStyle(color: _AuthPalette.textSecondary, fontSize: 13),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
 
-  Widget _buildDemoEntrySection({required bool compact}) {
+  /// Debug-only: collapsed QA emails; tap fills the email field.
+  Widget _buildQaTestAccountsExpander() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!compact) const SizedBox(height: 4),
-        const Text(
-          'QA ACCOUNTS',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-        ),
-        const SizedBox(height: 8),
-        for (final account in QaTestAccount.values) ...[
-          _buildSecondaryButton(
-            label: _authLoading ? 'Loading…' : account.buttonLabel,
-            onPressed:
-                _authLoading ? null : () => _enterAsQaAccount(account),
-            height: compact ? 46 : 52,
-          ),
-          const SizedBox(height: 8),
-        ],
-        const Text(
-          'FIRST TIME USER',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
-        ),
-        const SizedBox(height: 8),
-        _buildSecondaryButton(
-          label: _authLoading ? 'Loading…' : 'New Landlord',
-          onPressed: _authLoading ? null : _enterAsNewLandlord,
-          height: compact ? 46 : 52,
-        ),
-        const SizedBox(height: 10),
-        _buildSecondaryButton(
-          label: _authLoading ? 'Loading…' : 'New Seeker',
-          onPressed: _authLoading ? null : _enterAsNewSeeker,
-          height: compact ? 46 : 52,
-        ),
-        if (kDebugMode && QaTestAuthService.isEnabled)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              'QA buttons sign in to Supabase with the shared test password.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _AuthPalette.textSecondary,
-                fontSize: 11,
-                height: 1.35,
+        Center(
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => setState(
+                () => _showQaTestAccounts = !_showQaTestAccounts,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Test Accounts',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _AuthPalette.textSecondary.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  Icon(
+                    _showQaTestAccounts
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 18,
+                    color: _AuthPalette.textSecondary.withValues(alpha: 0.85),
+                  ),
+                ],
               ),
             ),
           ),
+        ),
+        if (_showQaTestAccounts) ...[
+          const SizedBox(height: 8),
+          for (final account in QaTestAccount.values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap:
+                      _authLoading ? null : () => _fillQaEmail(account.email),
+                  child: Text(
+                    account.email,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: _AuthPalette.textSecondary,
+                      fontSize: 12,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Color(0xFF9CA3AF),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -1696,64 +1750,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildSecondaryButton({
-    required String label,
-    required VoidCallback? onPressed,
-    double height = _AuthLayout.buttonHeight,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: ButtonStyle(
-          foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled)) {
-              return _AuthPalette.textSecondary.withValues(alpha: 0.55);
-            }
-            return _AuthPalette.textPrimary;
-          }),
-          backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.pressed)) {
-              return _AuthPalette.surfaceMuted;
-            }
-            if (states.contains(WidgetState.hovered)) {
-              return _AuthPalette.inputSurface;
-            }
-            return _AuthPalette.surface;
-          }),
-          side: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled)) {
-              return BorderSide(
-                color: _AuthPalette.borderSoft.withValues(alpha: 0.6),
-              );
-            }
-            return const BorderSide(color: _AuthPalette.borderSoft);
-          }),
-          overlayColor: WidgetStatePropertyAll(
-            _AuthPalette.textPrimary.withValues(alpha: 0.06),
-          ),
-          minimumSize: WidgetStatePropertyAll(Size(double.infinity, height)),
-          padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          ),
-          shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(_AuthPalette.radiusXl),
-            ),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-            letterSpacing: 0.1,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 abstract final class _AuthLayout {

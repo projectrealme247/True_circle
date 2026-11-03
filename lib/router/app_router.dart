@@ -83,10 +83,8 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.home,
       name: 'home',
       builder: (context, state) {
-        // Unauthenticated entry: single Try TrueCircle demo auth screen.
-        if (!_isSignedIn()) {
-          return const AuthScreen();
-        }
+        // Public marketplace for signed-in and signed-out users.
+        // Auth is action-gated via AuthScreen overlays, not startup.
         return HomeScreen(
           key: ValueKey(state.uri.queryParameters['refresh'] ?? 'home'),
         );

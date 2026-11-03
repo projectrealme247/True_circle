@@ -184,10 +184,15 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     Map<String, dynamic> item, {
     required String personalNote,
   }) async {
-    final session = AuthScreen.currentUserSession;
-    if (session == null) {
-      _promptSignIn();
-      return;
+    var session = AuthScreen.currentUserSession;
+    if (session == null || !AuthService.isSignedIn(session)) {
+      final ok = await _signInForIntent(
+        promptTitle: 'Sign in to apply',
+        promptBody: 'Create or sign in to your account to continue.',
+      );
+      if (!ok || !mounted) return;
+      session = AuthScreen.currentUserSession;
+      if (session == null) return;
     }
     if (!TrustService.canContact()) {
       _handleContactHost(
@@ -264,19 +269,29 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   Future<void> _handleApply(Map<String, dynamic> item) async {
-    final session = AuthScreen.currentUserSession;
-    if (session == null) {
-      _promptSignIn();
-      return;
+    var session = AuthScreen.currentUserSession;
+    if (session == null || !AuthService.isSignedIn(session)) {
+      final ok = await _signInForIntent(
+        promptTitle: 'Sign in to apply',
+        promptBody: 'Create or sign in to your account to continue.',
+      );
+      if (!ok || !mounted) return;
+      session = AuthScreen.currentUserSession;
+      if (session == null) return;
     }
     await _submitApplication(item, personalNote: '');
   }
 
   Future<void> _handleStartReplacement(Map<String, dynamic> item) async {
-    final session = AuthScreen.currentUserSession;
-    if (session == null) {
-      _promptSignIn();
-      return;
+    var session = AuthScreen.currentUserSession;
+    if (session == null || !AuthService.isSignedIn(session)) {
+      final ok = await _signInForIntent(
+        promptTitle: 'Sign in to continue',
+        promptBody: 'Create or sign in to your account to continue.',
+      );
+      if (!ok || !mounted) return;
+      session = AuthScreen.currentUserSession;
+      if (session == null) return;
     }
     final workflow = await ReplacementWorkflowService.startDraft(
       listingId: widget.listingId,
@@ -440,12 +455,18 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     );
   }
 
-  void _handlePitch(Map<String, dynamic> item) {
+  Future<void> _handlePitch(Map<String, dynamic> item) async {
     if (_applicationLoadError != null || _applicationStateLabel != null) return;
-    final session = AuthScreen.currentUserSession;
-    if (session == null) {
-      _showSignInBottomSheet();
-      return;
+    var session = AuthScreen.currentUserSession;
+    if (session == null || !AuthService.isSignedIn(session)) {
+      final ok = await _signInForIntent(
+        promptTitle: 'Sign in to pitch your story',
+        promptBody:
+            'Hosts respond to complete profiles with a personal introduction.',
+      );
+      if (!ok || !mounted) return;
+      session = AuthScreen.currentUserSession;
+      if (session == null) return;
     }
     if (!TrustService.canContact()) {
       _handleContactHost(
@@ -463,6 +484,70 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       session: session,
       onSubmit: (note) => _submitApplication(item, personalNote: note),
     );
+  }
+
+  /// Auth overlay for listing actions. On success stays on this listing
+  /// and returns true so the caller can resume the pending intent.
+  Future<bool> _signInForIntent({
+    required String promptTitle,
+    required String promptBody,
+  }) async {
+    final proceed = await showModalBottomSheet<bool>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.favorite_outline,
+                size: 44, color: AppColors.accent),
+            const SizedBox(height: 16),
+            Text(
+              promptTitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: ListingDetailTokens.charcoal,
+                letterSpacing: -0.4,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              promptBody,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: AppButtonStyles.primaryFilled,
+                child: const Text('Continue to sign in'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (proceed != true || !mounted) return false;
+
+    final signedIn = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => const AuthScreen()),
+    );
+    if (!mounted || signedIn != true) return false;
+    await AuthService.reloadProfileFromStorage();
+    return AuthService.isSignedIn(AuthScreen.currentUserSession);
   }
 
   List<String> _preferenceFitLabels(
@@ -513,81 +598,6 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         ),
       ],
     ];
-  }
-
-  void _showSignInBottomSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.favorite_outline,
-                size: 44, color: AppColors.accent),
-            const SizedBox(height: 16),
-            const Text(
-              'Sign in to pitch your story',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: ListingDetailTokens.charcoal,
-                letterSpacing: -0.4,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Hosts respond to complete profiles with a personal introduction.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.45,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: FilledButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  context.go('/profile/edit');
-                },
-                style: AppButtonStyles.primaryFilled,
-                child: const Text('Continue to sign in'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _promptSignIn() {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Please sign in to proceed.',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-          backgroundColor: AppColors.accent,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          action: SnackBarAction(
-            label: 'Sign in',
-            textColor: Colors.white,
-            onPressed: () => context.go('/profile/edit'),
-          ),
-        ),
-      );
   }
 
   void _handleContactHost({

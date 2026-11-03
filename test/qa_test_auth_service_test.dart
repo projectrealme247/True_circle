@@ -64,6 +64,18 @@ void main() {
     expect(crossed['budget_max'], 2800);
   });
 
+  test('accountForEmail matches known QA addresses', () {
+    expect(
+      QaTestAuthService.accountForEmail('host.independent@test.truecircle.ie'),
+      QaTestAccount.landlordIndependent,
+    );
+    expect(
+      QaTestAuthService.accountForEmail('  Seeker.Shared@test.truecircle.ie '),
+      QaTestAccount.seekerShared,
+    );
+    expect(QaTestAuthService.accountForEmail('other@example.com'), isNull);
+  });
+
   test('QA sessions disable mock host listings', () {
     expect(
       QaTestAuthService.allowMockHostListings(
