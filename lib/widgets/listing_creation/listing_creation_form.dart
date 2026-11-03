@@ -5943,7 +5943,9 @@ class ListingCreationFormState extends State<ListingCreationForm> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final sideBySide = constraints.maxWidth >= 560;
-        final mapHeight = sideBySide ? 400.0 : 260.0;
+        // Wide was 400; reduced to 260 so address/area/eircode sit closer to the fold.
+        // Narrow stays 260.
+        final mapHeight = 260.0;
 
         final mapField = LocationPinField(
           pinLat: _resolvedLatitude,
