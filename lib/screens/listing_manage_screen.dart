@@ -13,6 +13,7 @@ import '../utils/numeric_bounds.dart';
 import '../utils/profile_data.dart';
 import '../utils/shared_space_compatibility_scorer.dart';
 import '../widgets/tenant_profile_card.dart';
+import '../widgets/truecircle_logo.dart';
 
 class ListingManageScreen extends StatefulWidget {
   const ListingManageScreen({super.key, required this.listingId});
@@ -99,9 +100,10 @@ class _ListingManageScreenState extends State<ListingManageScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.canPop() ? context.pop() : context.go('/'),
         ),
-        title: Text(
-          'Manage listing',
-          style: AppTypography.sectionTitle().copyWith(fontSize: 18),
+        titleSpacing: 12,
+        title: const Align(
+          alignment: Alignment.centerLeft,
+          child: TrueCircleHomeLogoButton(markSize: 26),
         ),
       ),
       body: _loading

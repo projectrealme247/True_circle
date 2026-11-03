@@ -47,30 +47,7 @@ class LandlordDashboardTopNav extends StatelessWidget
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Row(
                 children: [
-                  InkWell(
-                    onTap: () => context.go('/'),
-                    borderRadius: BorderRadius.circular(8),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TrueCircleLogo.appBarMark(size: 28),
-                          SizedBox(width: 10),
-                          Text(
-                            'TrueCircle',
-                            style: TextStyle(
-                              fontFamily: 'PlusJakartaSans',
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.4,
-                              color: LandlordDashboardTheme.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  const TrueCircleHomeLogoButton(markSize: 28),
                   if (leadingNav != null) ...[
                     const SizedBox(width: 24),
                     Flexible(
