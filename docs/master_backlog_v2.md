@@ -12,6 +12,40 @@
 - Location / proximity workflow remains frozen (do not reopen)
 - Do not restore trust-tier ranking / JL–G–S / In Your Circle
 
+**Last updated:** 2026-10-26 — post-launch product backlog added below.
+
+---
+
+## Current backlog (2026-10-26)
+
+Priorities after launch-readiness work. Does not replace the historical P0–P4 tables below.
+
+### P1
+
+| Item | Notes |
+|------|-------|
+| Mobile host dashboard improvements | Host UX on small screens |
+| Area-first location display | Prefer area labels over address-first presentation |
+| Host-side archived listing UX | Archive / inactive listing management for hosts |
+| Manage listing page home/logo navigation | Consistent home/logo nav on manage-listing surfaces |
+| Hollywoodrath / Hollystown local POI coverage | Local catalog gaps for those areas |
+
+### P2
+
+| Item | Notes |
+|------|-------|
+| Ireland-wide POI catalog strategy | Beyond Dublin seed coverage |
+| Automated OSM refresh process | Repeatable refresh / rebuild pipeline |
+| Supabase `poi_catalog` architecture | Remote catalog storage and serving model |
+
+### P3
+
+| Item | Notes |
+|------|-------|
+| Trust-tier model | **Requires explicit approval** — conflicts with trust simplification (do not reopen without product sign-off) |
+| Reviews expansion | Broader review / endorsement surfaces |
+| Circle ranking enhancements | **Requires explicit approval** — conflicts with removed In Your Circle ranking |
+
 ---
 
 ## P0 — Launch blockers
