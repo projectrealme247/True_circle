@@ -20,6 +20,7 @@ import '../screens/pre_arrival_contact_screen.dart';
 import '../screens/university_email_verify_screen.dart';
 import '../screens/open_banking_verify_screen.dart';
 import '../screens/open_banking_callback_screen.dart';
+import '../screens/legal_document_screen.dart';
 import '../models/onboarding_user_role.dart';
 import '../services/auth_service.dart';
 import 'app_routes.dart';
@@ -221,6 +222,16 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/auth/open-banking/callback',
       builder: (context, state) => OpenBankingCallbackScreen(uri: state.uri),
+    ),
+    GoRoute(
+      path: AppRoutes.terms,
+      name: 'terms',
+      builder: (context, state) => LegalDocumentScreen.terms(),
+    ),
+    GoRoute(
+      path: AppRoutes.privacy,
+      name: 'privacy',
+      builder: (context, state) => LegalDocumentScreen.privacy(),
     ),
   ],
   errorBuilder: (context, state) => Scaffold(

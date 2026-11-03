@@ -6,6 +6,8 @@ import 'app_router.dart';
 /// Named route paths for TrueCircle navigation.
 abstract final class AppRoutes {
   static const home = '/';
+  static const terms = '/terms';
+  static const privacy = '/privacy';
 
   /// Hard-resets Explore tab, collapses modals, and re-routes to a fresh home shell.
   static void navigateHome(BuildContext context) {

@@ -10,6 +10,7 @@ import '../config/market/market_config.dart';
 import '../core/theme/app_theme.dart';
 import '../navigation/navigate_after_identity.dart';
 import '../navigation/space_gateway_navigation.dart';
+import '../router/app_routes.dart';
 import '../services/auth_service.dart';
 import '../services/demo_auth_service.dart';
 import '../services/qa_test_auth_service.dart';
@@ -667,6 +668,7 @@ class _AuthScreenState extends State<AuthScreen> {
           label: _authLoading ? 'Signing in…' : 'Sign in',
           onPressed: _authLoading ? null : _executeSignIn,
         ),
+        _buildLegalPlaceholder(),
         if (kDebugMode) ...[
           const Divider(),
           const Text(
@@ -704,6 +706,54 @@ class _AuthScreenState extends State<AuthScreen> {
           ],
         ),
       ],
+    );
+  }
+
+
+  Widget _buildLegalPlaceholder() {
+    const linkStyle = TextStyle(
+      color: _AuthPalette.textSecondary,
+      fontSize: 12,
+      height: 1.4,
+      decoration: TextDecoration.underline,
+      decorationColor: Color(0xFF9CA3AF),
+      fontWeight: FontWeight.w500,
+    );
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(
+          color: _AuthPalette.textSecondary.withValues(alpha: 0.95),
+          fontSize: 12,
+          height: 1.4,
+        ),
+        children: [
+          const TextSpan(text: 'By continuing you agree to our '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => context.push(AppRoutes.terms),
+                child: const Text('Terms & Conditions', style: linkStyle),
+              ),
+            ),
+          ),
+          const TextSpan(text: ' and '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => context.push(AppRoutes.privacy),
+                child: const Text('Privacy Policy', style: linkStyle),
+              ),
+            ),
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
     );
   }
 
