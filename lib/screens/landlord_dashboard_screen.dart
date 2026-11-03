@@ -715,15 +715,13 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     final listingId = listing['id']?.toString() ?? '';
     if (listingId.isEmpty) return;
 
-    final title = ListingData.title(listing).trim();
-    final label = title.isEmpty ? 'this listing' : '"$title"';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete this listing?'),
-        content: Text(
-          'Delete $label? It will be removed from your dashboard and the '
-          'marketplace. This cannot be undone.',
+        title: const Text('Deactivate this listing?'),
+        content: const Text(
+          'This listing will no longer appear in the marketplace.\n'
+          'Existing applications and conversations will be archived.',
         ),
         actions: [
           TextButton(
@@ -735,7 +733,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
               backgroundColor: LandlordDashboardTheme.declineInk,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete Listing'),
+            child: const Text('Deactivate Listing'),
           ),
         ],
       ),
@@ -746,7 +744,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     if (!AuthService.isAuthenticated) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please sign in to delete a listing.'),
+          content: Text('Please sign in to deactivate a listing.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -776,7 +774,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Listing deleted'),
+          content: Text('Listing deactivated'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -785,7 +783,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
       setState(() => _actionLoadingId = null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not delete listing: $e'),
+          content: Text('Could not deactivate listing: $e'),
           behavior: SnackBarBehavior.floating,
         ),
       );

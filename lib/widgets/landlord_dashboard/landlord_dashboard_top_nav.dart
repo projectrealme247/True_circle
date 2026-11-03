@@ -110,7 +110,7 @@ class LandlordDashboardTopNav extends StatelessWidget
                   if (onDeleteListing != null) ...[
                     const SizedBox(width: 4),
                     _NavLink(
-                      label: 'Delete Listing',
+                      label: 'Deactivate Listing',
                       selected: false,
                       onTap: onDeleteListing!,
                       color: LandlordDashboardTheme.declineInk,
